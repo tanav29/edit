@@ -2,7 +2,18 @@ export type Message = {
   id?: string
   role: "user" | "assistant"
   content: string
-  toolExecution?: ToolExecution
+  toolCalls?: ToolCallInfo[]
+}
+
+export type ToolCallInfo = {
+  id: string
+  name: string
+  args: Record<string, unknown>
+  status: "executing" | "completed" | "error" | "rejected"
+  result?: string
+  error?: string
+  duration?: number // milliseconds
+  diff?: string // unified diff for file edit tools
 }
 
 export type ToolExecution = {
