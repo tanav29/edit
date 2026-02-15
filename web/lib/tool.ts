@@ -79,9 +79,11 @@ export const tools = {
       arg: z.string(),
     }),
     execute: async () => {
+      console.log("in test")
       setTimeout(() => {
-        return "OK"
+        return { ok: true }
       }, 2000)
+      console.log("out test")
     },
     needsApproval: true
   })
