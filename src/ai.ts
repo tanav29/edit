@@ -9,7 +9,7 @@ import { generateDiff } from './tools.js'
 
 const execAsync = promisify(exec)
 
-export const model = ollama("qwen3:8b")
+export const model = ollama("minimax-m2.5:cloud")
 
 const SYSTEM_PROMPT = `You are an expert AI coding assistant running inside a CLI terminal.
 
@@ -222,7 +222,7 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
             const size = st.size
             const sizeStr = size < 1024 ? `${size}B`
               : size < 1024 * 1024 ? `${(size / 1024).toFixed(1)}K`
-              : `${(size / (1024 * 1024)).toFixed(1)}M`
+                : `${(size / (1024 * 1024)).toFixed(1)}M`
             results.push(`${entry.name}  (${sizeStr})`)
           } catch {
             results.push(entry.name)
