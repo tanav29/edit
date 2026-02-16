@@ -18,17 +18,34 @@ export function createTools(cwd: string) {
         command: z.string().describe("Command to run. Add multiple commands with &&."),
       }),
       execute: async ({ command }) => {
-        if (cwd.trim() == "") return "ERR: no working dir"
-        const { stdout, stderr } = await execAsync(command, {
-          timeout: 2000,
-          maxBuffer: 1024 * 1024 * 5,
-          cwd,
-        })
-        const out = stdout.trim()
-        const err = stderr.trim()
-        let result = out || '(no output)'
-        if (err) result += `\nstderr: ${err}`
-        return result
+        if (!cwd || cwd.trim() === "") {
+          return { stdout: "ERR: no working dir" };
+        }
+        try {
+          const proc = Bun.spawn({
+            cmd: ["bash", "-lc", command], // important
+            cwd,
+            stdout: "pipe",
+            stderr: "pipe",
+          });
+
+          // timeout killer
+          const timer = setTimeout(() => {
+            proc.kill();
+          }, 2000);
+
+          const out = await new Response(proc.stdout).text();
+          const err = await new Response(proc.stderr).text();
+
+          clearTimeout(timer);
+
+          let result = out || "(no output)";
+          if (err) result += `\nstderr:\n${err}`;
+
+          return { stdout: result };
+        } catch (e: any) {
+          return { stdout: `ERR: ${e.message}` };
+        }
       },
       needsApproval: true
     }),

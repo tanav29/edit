@@ -119,18 +119,34 @@
 }
 
 @keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes pulse-dot {
-  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-  40% { opacity: 1; transform: scale(1); }
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
 
 .animate-message-in {
@@ -145,9 +161,15 @@
 .thinking-dot {
   animation: pulse-dot 1.4s infinite ease-in-out both;
 }
-.thinking-dot:nth-child(1) { animation-delay: 0s; }
-.thinking-dot:nth-child(2) { animation-delay: 0.16s; }
-.thinking-dot:nth-child(3) { animation-delay: 0.32s; }
+.thinking-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+.thinking-dot:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.thinking-dot:nth-child(3) {
+  animation-delay: 0.32s;
+}
 
 /* ── Streamdown prose styling ─────────────────────────────── */
 .chat-markdown {
@@ -164,13 +186,13 @@
 }
 
 .chat-markdown pre {
-  background: oklch(0.1 0.005 260);
-  border: 1px solid oklch(0.22 0.01 260);
-  border-radius: 8px;
-  padding: 0.85em 1em;
+  /* background: oklch(0.1 0.005 260); */
+  /* border: 1px solid oklch(0.22 0.01 260); */
+  /* border-radius: 8px; */
+  /* padding: 0.85em 1em; */
   overflow-x: auto;
-  font-size: 0.85em;
-  margin: 0.75em 0;
+  /* font-size: 0.85em; */
+  /* margin: 0.75em 0; */
 }
 
 .chat-markdown code:not(pre code) {
@@ -181,7 +203,9 @@
   color: oklch(0.8 0.1 250);
 }
 
-.chat-markdown ul, .chat-markdown ol {
+.chat-markdown ul,
+.chat-markdown ol {
+  list-style-type: circle;
   padding-left: 1.5em;
   margin: 0.5em 0;
 }
@@ -197,7 +221,9 @@
   color: oklch(0.7 0.01 260);
 }
 
-.chat-markdown h1, .chat-markdown h2, .chat-markdown h3 {
+.chat-markdown h1,
+.chat-markdown h2,
+.chat-markdown h3 {
   font-weight: 600;
   margin-top: 1em;
   margin-bottom: 0.5em;
@@ -213,34 +239,6 @@
   color: oklch(0.8 0.15 250);
 }
 
-/* ── Input glow effect ────────────────────────────────────── */
-.input-glow {
-  position: relative;
-}
-
-.input-glow::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: 14px;
-  padding: 1px;
-  background: linear-gradient(
-    135deg,
-    oklch(0.5 0.15 250 / 0.4),
-    oklch(0.4 0.1 280 / 0.2),
-    oklch(0.5 0.15 250 / 0.4)
-  );
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask-composite: exclude;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.input-glow:focus-within::before {
-  opacity: 1;
-}
-
 /* ── Tool approval card ───────────────────────────────────── */
 .tool-card {
   background: oklch(0.16 0.008 260);
@@ -250,7 +248,11 @@
 
 /* ── Gradient text ────────────────────────────────────────── */
 .gradient-text {
-  background: linear-gradient(135deg, oklch(0.7 0.15 250), oklch(0.65 0.12 280));
+  background: linear-gradient(
+    135deg,
+    oklch(0.7 0.15 250),
+    oklch(0.65 0.12 280)
+  );
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
