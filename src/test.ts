@@ -1,12 +1,15 @@
-import { number } from "zod"
+import { exec } from "node:child_process"
+import { promisify } from "node:util"
 
-const file = Bun.file("/home/thetanav/TODO.md")
+const execAsync = promisify(exec)
 
-console.log(file)
-const content = await file.text()
-const allLines = content.split('\n')
-const startLine = 1
-const endLine = Math.min(allLines.length, startLine + 5 - 1)
-const selectedLines = allLines.slice(startLine - 1, endLine)
-const numbered = selectedLines.map((line, i) => `${startLine + i}: ${line}`)
-console.log(`Lines ${startLine}-${endLine} of ${allLines.length}\n${numbered.join('\n')}`)
+const { stdout, stderr } = await execAsync("cd .. && ls", {
+  timeout: 2000,
+  maxBuffer: 1024 * 1024 * 5,
+  cwd: "/home/thetanav/Code/project",
+})
+const out = stdout.trim()
+const err = stderr.trim()
+let result = out || '(no output)'
+if (err) result += `\nstderr: ${err}`
+console.log(result)

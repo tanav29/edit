@@ -9,14 +9,17 @@ import { mermaid } from "@streamdown/mermaid";
 import { math } from "@streamdown/math";
 import { cjk } from "@streamdown/cjk";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   ArrowUp,
   Bot,
   Brain,
   Bug,
   Check,
+  ChevronDown,
   CircleX,
   File,
+  Folder,
   Link,
   Loader2,
   Sparkles,
@@ -26,6 +29,7 @@ import {
 
 export default function Page() {
   const [input, setInput] = useState("");
+  const [path, setPath] = useState("home/thetanav/Code/minis/");
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -33,7 +37,7 @@ export default function Page() {
     transport: new DefaultChatTransport({
       api: "/api/chat",
       body: {
-        path: "home/thetanav"
+        path
       }
     }),
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
@@ -112,7 +116,17 @@ export default function Page() {
 
       {/* Input area */}
       <div className="bg-background">
-        <div className="max-w-2xl mx-auto p-4 pt-0">
+        <div className="max-w-2xl mx-auto p-4 pt-0 space-y-2">
+          <div className="flex items-center gap-2 px-2">
+            <Folder className="size-4 text-muted-foreground shrink-0" />
+            <Input
+              type="text"
+              value={path}
+              onChange={(e) => setPath(e.target.value)}
+              placeholder="Enter working directory path..."
+              className="h-8 text-xs bg-card border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
+          </div>
           <div className="flex justify-center items-end gap-2 bg-card border rounded-xl focus-within:border-muted-foreground/50 p-2 transition-colors">
             <textarea
               ref={textareaRef}
@@ -231,9 +245,9 @@ function AssistantMessage({
                     className="flex items-center gap-2 text-xs text-muted-foreground/90 py-1"
                   >
                     {part.state === "streaming" ? (
-                      <Loader2 className="size-3 animate-spin text-primary/60" />
+                      <Loader2 className="size-3 animate-spin" />
                     ) : (
-                      <Brain className="size-3 text-primary/60" />
+                      <Brain className="size-3" />
                     )}
                     <span>Thinking</span>
                   </div>
@@ -292,7 +306,7 @@ function ToolPart({
   addToolApprovalResponse: (response: { id: string; approved: boolean }) => void;
 }) {
   const toolName = part.type.replace("tool-", "");
-
+  console.log(part.output!)
   if (part.state === "approval-requested") {
     return (
       <div className="tool-card rounded-xl p-3.5 space-y-3 animate-fade-in">
@@ -356,35 +370,44 @@ function ToolPart({
 
   // Compact inline display for resolved tool calls
   return (
-    <div className="flex items-center gap-2 text-xs py-0.5 animate-fade-in">
-      {part.state == "output-available" || part.state == "output-denied" || part.state == "approval-responded" || part.state == "output-error" ? (
-        <>
-          {part.state === "output-error" && (
-            <Bug className="size-3 text-destructive/70" />
-          )}
-          {part.state === "output-denied" && (
-            <CircleX className="size-3 text-muted-foreground/50" />
-          )}
-          {part.state === "output-available" && (
-            <Check className="size-3 text-emerald-400/70" />
-          )}
-          {part.state === "approval-responded" && !part.approval.approved && (
-            <CircleX className="size-3 text-muted-foreground/50" />
-          )}
-        </>
-      ) : (
-        <Loader2 className="size-3 animate-spin text-primary/50" />
-      )}
-      {part.title && (
-        <span className="text-muted-foreground/90">{part.title}</span>
-      )}
-      {(() => {
-        const input = part.input;
-        if (input && typeof input === 'object' && 'filePath' in input && typeof (input as { filePath: unknown }).filePath === 'string') {
-          return <span className="text-muted-foreground/90">{(input as { filePath: string }).filePath}</span>;
-        }
-        return null;
-      })()}
-    </div>
+    <details>
+      <summary className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90">
+        {part.state == "output-available" || part.state == "output-denied" || part.state == "approval-responded" || part.state == "output-error" ? (
+          <>
+            {part.state === "output-error" && (
+              <Bug className="size-3" />
+            )}
+            {part.state === "output-denied" && (
+              <CircleX className="size-3" />
+            )}
+            {part.state === "output-available" && (
+              <Check className="size-3" />
+            )}
+            {part.state === "approval-responded" && !part.approval.approved && (
+              <CircleX className="size-3" />
+            )}
+          </>
+        ) : (
+          <Loader2 className="size-3 animate-spin" />
+        )}
+        {part.title && (
+          <span>{part.title}</span>
+        )}
+        {(() => {
+          const input = part.input;
+          if (input && typeof input === 'object' && 'filePath' in input && typeof (input as { filePath: unknown }).filePath === 'string') {
+            return <span className="text-muted-foreground/90">{(input as { filePath: string }).filePath}</span>;
+          }
+          if (input && typeof input === 'object' && 'command' in input && typeof (input as { command: unknown }).command === 'string') {
+            return <span className="text-muted-foreground/90">{(input as { command: string }).command}</span>;
+          }
+          return null;
+        })()}
+        <ChevronDown className="size-3" />
+      </summary>
+      <div className="text-xs max-h-48 overflow-y-auto overflow-x-hidden wrap-break-word rounded-lg p-3.5 tool-card animate-fade-in mt-2">
+        {part.output! && <pre>{JSON.stringify(part.output, null, 2)}</pre>}
+      </div>
+    </details>
   );
 }
