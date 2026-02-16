@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type ToolUIPart } from "ai";
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses, type ToolUIPart } from "ai";
 import { useEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
@@ -29,10 +29,14 @@ export default function Page() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { messages, sendMessage, status, addToolApprovalResponse } = useChat({
+  const { messages, sendMessage, status, addToolApprovalResponse, stop } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
+      body: {
+        path: "home/thetanav"
+      }
     }),
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
   });
 
   const isActive = status === "streaming" || status === "submitted";
@@ -107,41 +111,38 @@ export default function Page() {
       </div>
 
       {/* Input area */}
-      <div className="border-t border-border/50 bg-background/80 backdrop-blur-xl">
-        <div className="max-w-2xl mx-auto p-4">
-          <div className="input-glow rounded-xl">
-            <div className="flex items-end gap-2 bg-card border border-border/60 rounded-xl p-3 transition-colors">
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                placeholder="Send a message..."
-                rows={1}
-                className="flex-1 bg-transparent resize-none outline-none text-sm leading-relaxed placeholder:text-muted-foreground/60 max-h-[200px] py-1"
-              />
+      <div className="bg-background">
+        <div className="max-w-2xl mx-auto p-4 pt-0">
+          <div className="flex justify-center items-end gap-2 bg-card border rounded-xl focus-within:border-muted-foreground/50 p-2 transition-colors">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="Send a message..."
+              rows={2}
+              className="ml-1 flex-1 bg-transparent resize-none outline-none text-sm leading-relaxed placeholder:text-muted-foreground max-h-[200px]"
+            />
+            <div className="h-full items-end flex">
               <Button
                 size="icon-sm"
-                onClick={handleSend}
-                disabled={!input.trim() || isActive}
+                onClick={isActive ? stop : handleSend}
+                disabled={!isActive && !input.trim()}
                 className="rounded-lg shrink-0 transition-all duration-200 disabled:opacity-30"
               >
                 {isActive ? (
-                  <Loader2 className="size-4 animate-spin" />
+                  <CircleX className="size-4" />
                 ) : (
                   <ArrowUp className="size-4" />
                 )}
               </Button>
             </div>
           </div>
-          <p className="text-[11px] text-muted-foreground/40 text-center mt-2.5 select-none">
-            Powered by Ollama &middot; qwen3:8b
-          </p>
         </div>
       </div>
     </div>
@@ -202,12 +203,7 @@ function AssistantMessage({
 }) {
   return (
     <div className="py-2">
-      <div className="flex items-start gap-3 max-w-full">
-        <div className="shrink-0 mt-0.5">
-          <div className="size-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-            <Bot className="size-3.5 text-primary" />
-          </div>
-        </div>
+      <div className="flex items-start max-w-full">
         <div className="min-w-0 flex-1 space-y-2">
           {parts.map((part, partIndex) => {
             const key =
@@ -232,14 +228,14 @@ function AssistantMessage({
                 return (
                   <div
                     key={key}
-                    className="flex items-center gap-2 text-xs text-muted-foreground/70 py-1"
+                    className="flex items-center gap-2 text-xs text-muted-foreground/90 py-1"
                   >
                     {part.state === "streaming" ? (
                       <Loader2 className="size-3 animate-spin text-primary/60" />
                     ) : (
                       <Brain className="size-3 text-primary/60" />
                     )}
-                    <span className="italic">Thinking...</span>
+                    <span>Thinking</span>
                   </div>
                 );
 
@@ -295,12 +291,6 @@ function ToolPart({
   part: ToolUIPart;
   addToolApprovalResponse: (response: { id: string; approved: boolean }) => void;
 }) {
-  const isLoading =
-    part.state !== "output-error" &&
-    part.state !== "output-available" &&
-    part.state !== "output-denied" &&
-    part.state !== "approval-requested";
-
   const toolName = part.type.replace("tool-", "");
 
   if (part.state === "approval-requested") {
@@ -319,7 +309,7 @@ function ToolPart({
         </div>
 
         {part.input != null && (
-          <div className="bg-background/60 rounded-lg p-2.5 border border-border/30">
+          <div className="bg-background/60 rounded-lg p-2.5 border border-border/30 max-h-48 overflow-auto">
             {Object.entries(part.input as Record<string, unknown>).map(([k, v]) => (
               <div key={k} className="text-xs mb-1 last:mb-0">
                 <span className="text-muted-foreground font-mono">{k}:</span>{" "}
@@ -344,7 +334,6 @@ function ToolPart({
             }}
             className="rounded-lg text-xs"
           >
-            <Check className="size-3" />
             Approve
           </Button>
           <Button
@@ -358,7 +347,6 @@ function ToolPart({
             }}
             className="rounded-lg text-xs"
           >
-            <CircleX className="size-3" />
             Decline
           </Button>
         </div>
@@ -369,9 +357,7 @@ function ToolPart({
   // Compact inline display for resolved tool calls
   return (
     <div className="flex items-center gap-2 text-xs py-0.5 animate-fade-in">
-      {isLoading ? (
-        <Loader2 className="size-3 animate-spin text-primary/50" />
-      ) : (
+      {part.state == "output-available" || part.state == "output-denied" || part.state == "approval-responded" || part.state == "output-error" ? (
         <>
           {part.state === "output-error" && (
             <Bug className="size-3 text-destructive/70" />
@@ -382,12 +368,23 @@ function ToolPart({
           {part.state === "output-available" && (
             <Check className="size-3 text-emerald-400/70" />
           )}
+          {part.state === "approval-responded" && !part.approval.approved && (
+            <CircleX className="size-3 text-muted-foreground/50" />
+          )}
         </>
+      ) : (
+        <Loader2 className="size-3 animate-spin text-primary/50" />
       )}
-      <span className="text-muted-foreground/60 font-mono">{toolName}</span>
       {part.title && (
-        <span className="text-muted-foreground/40">{part.title}</span>
+        <span className="text-muted-foreground/90">{part.title}</span>
       )}
+      {(() => {
+        const input = part.input;
+        if (input && typeof input === 'object' && 'filePath' in input && typeof (input as { filePath: unknown }).filePath === 'string') {
+          return <span className="text-muted-foreground/90">{(input as { filePath: string }).filePath}</span>;
+        }
+        return null;
+      })()}
     </div>
   );
 }

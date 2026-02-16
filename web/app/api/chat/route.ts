@@ -3,14 +3,17 @@ import { convertToModelMessages, smoothStream, stepCountIs, streamText, type UIM
 import { ollama } from 'ollama-ai-provider-v2';
 
 export async function POST(req: Request) {
-  const { messages }: { messages: UIMessage[] } = await req.json();
+  const { messages, path }: { messages: UIMessage[], path: string } = await req.json();
 
   const result = streamText({
     model: ollama("qwen3:8b"),
-    system: 'You are a helpful assistant.',
+    system: `You are a powerful assistant that deep think before sending a token.
+    
+The base path is ${path} for agentic !!STRICTLY!!.`,
     messages: await convertToModelMessages(messages),
     tools,
-    stopWhen: stepCountIs(10),
+    stopWhen: stepCountIs(20),
+    maxRetries: 3,
     experimental_transform: smoothStream(),
   });
 

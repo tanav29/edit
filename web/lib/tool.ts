@@ -1,9 +1,15 @@
 import { tool } from "ai"
 import { exec } from "node:child_process"
 import { promisify } from "node:util"
+import { tavily } from "@tavily/core"
+
 import z from "zod"
 
 const execAsync = promisify(exec)
+
+const tavilyClient = tavily({
+  apiKey: process.env.TAVILY_API_KEY
+})
 
 export const tools = {
   "bash": tool({
@@ -39,18 +45,19 @@ export const tools = {
       limit: z.number().default(20).describe("How much lines to read (default 50)."),
     }),
     execute: async ({ filePath, offset, limit }) => {
+      console.log(filePath, offset, limit)
       const file = Bun.file(filePath)
+      console.log(file)
       if (!await file.exists()) return `File not found: ${filePath}`
       const content = await file.text()
       const allLines = content.split('\n')
       const startLine = Math.max(1, offset ?? 1)
-      const maxLines = limit ?? 200
-      const endLine = Math.min(allLines.length, startLine + maxLines - 1)
+      const endLine = Math.min(allLines.length, startLine + limit - 1)
       const selectedLines = allLines.slice(startLine - 1, endLine)
       const numbered = selectedLines.map((line, i) => `${startLine + i}: ${line}`)
       return `[${filePath}] Lines ${startLine}-${endLine} of ${allLines.length}\n${numbered.join('\n')}`
     },
-    needsApproval: true
+    // needsApproval: true
   }),
 
   "write": tool({
@@ -72,6 +79,24 @@ export const tools = {
     needsApproval: true
   }),
 
+  "web-search": tool({
+    title: "Web Search",
+    description: "Search the web for information. Will return the content of the page as well.",
+    inputSchema: z.object({
+      prompt: z.string().describe("The prompt to search the web for"),
+    }),
+    execute: async ({ prompt }) => {
+      const { results } = await tavilyClient.search(prompt, {
+        maxResults: 3
+      })
+      return results.map(result => ({
+        title: result.title,
+        url: result.url,
+        content: result.content.slice(0, 200),
+      }))
+    }
+  }),
+
   "test": tool({
     title: "Test",
     description: "test tool to check if the tool are working",
@@ -79,12 +104,10 @@ export const tools = {
       arg: z.string(),
     }),
     execute: async () => {
-      console.log("in test")
       setTimeout(() => {
         return { ok: true }
       }, 2000)
-      console.log("out test")
     },
     needsApproval: true
-  })
+  }),
 }
