@@ -29,7 +29,7 @@ import {
   Link,
   Loader2,
   Sparkles,
-  Terminal,
+  Terminal as TerIcon,
   User,
   CommandIcon,
   PenLine,
@@ -41,6 +41,16 @@ import {
 } from "lucide-react";
 import { FileTree } from "@/components/file-tree";
 import { EditsPanel, type EditInfo } from "@/components/edits-panel";
+import {
+  Terminal,
+  TerminalActions,
+  TerminalClearButton,
+  TerminalContent,
+  TerminalCopyButton,
+  TerminalHeader,
+  TerminalStatus,
+  TerminalTitle,
+} from "@/components/ai-elements/terminal";
 
 export default function Page() {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -165,10 +175,12 @@ function ChatView({
             if (seenIds.has(toolCallId)) return;
 
             const input = part.input as { filePath?: string } | undefined;
-            const output = part.output as {
-              filePath?: string;
-              action?: string;
-            } | undefined;
+            const output = part.output as
+              | {
+                  filePath?: string;
+                  action?: string;
+                }
+              | undefined;
 
             const filePath = output?.filePath || input?.filePath;
             if (filePath) {
@@ -529,7 +541,7 @@ function ToolPart({
       <div className="tool-card rounded-xl p-3.5 space-y-3 animate-fade-in">
         <div className="flex items-center gap-2">
           <div className="size-6 rounded-md bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-            <Terminal className="size-3 text-amber-400" />
+            <TerIcon className="size-3 text-amber-400" />
           </div>
           <span className="text-xs font-medium text-foreground/90">
             {toolName}
@@ -599,7 +611,7 @@ function ToolPart({
             {part.state === "output-available" && (
               <>
                 {toolName == "read" && <BookSearch className="size-3" />}
-                {toolName == "bash" && <Terminal className="size-3" />}
+                {toolName == "bash" && <TerIcon className="size-3" />}
                 {toolName == "write" && <PenLine className="size-3" />}
                 {toolName == "web-search" && <Globe className="size-3" />}
               </>
@@ -655,9 +667,7 @@ function ToolPart({
                 : out.action === "edited"
                   ? `${String(out.editCount)} edit(s)`
                   : "written";
-            return (
-              <span className="text-emerald-500/80 ml-1">{label}</span>
-            );
+            return <span className="text-emerald-500/80 ml-1">{label}</span>;
           }
           // Show compact range for read tool
           if (
@@ -677,7 +687,7 @@ function ToolPart({
           return null;
         })()}
       </summary>
-      <div className="text-xs max-h-72 overflow-y-auto overflow-x-hidden wrap-break-word rounded-lg p-3.5 tool-card animate-fade-in mt-2">
+      <div className="text-xs max-h-72 overflow-y-auto overflow-x-hidden wrap-break-word animate-fade-in mt-2">
         <ToolOutput toolName={toolName} output={part.output} />
       </div>
     </details>
@@ -708,7 +718,7 @@ function ToolOutput({
   // Read tool: show file content with line numbers
   if (toolName === "read" && data.content) {
     return (
-      <div className="space-y-2">
+      <div className="space-y-2 tool-card rounded-lg p-3.5">
         <div className="flex items-center gap-3 text-muted-foreground/70 text-[10px] pb-1 border-b border-border/30">
           <span>{String(data.filePath)}</span>
           <span>
@@ -737,7 +747,7 @@ function ToolOutput({
       : [];
 
     return (
-      <div className="space-y-2">
+      <div className="space-y-2 tool-card rounded-lg p-3.5">
         <div className="flex items-center gap-2 text-[10px] pb-1 border-b border-border/30">
           <span
             className={
@@ -778,16 +788,42 @@ function ToolOutput({
         )}
         {data.previousLineCount !== undefined && (
           <div className="text-muted-foreground/50 text-[10px]">
-            {String(data.previousLineCount)} &rarr;{" "}
-            {String(data.newLineCount)} lines
+            {String(data.previousLineCount)} &rarr; {String(data.newLineCount)}{" "}
+            lines
           </div>
         )}
       </div>
     );
   }
 
+  if (toolName === "bash" && data.stdout) {
+    console.log("Bash output:", data.stdout);
+    return (
+      <Terminal
+        autoScroll={false}
+        isStreaming={false}
+        onClear={() => {}}
+        output={String(data.stdout)}>
+        <TerminalHeader>
+          <TerminalTitle>{String(data.path)}</TerminalTitle>
+          <div className="flex items-center gap-1">
+            <TerminalStatus />
+            <TerminalActions>
+              <TerminalCopyButton onCopy={() => {}} />
+            </TerminalActions>
+          </div>
+        </TerminalHeader>
+        <TerminalContent />
+      </Terminal>
+    );
+  }
+
   // Default: JSON dump
-  return <pre>{JSON.stringify(output, null, 2)}</pre>;
+  return (
+    <pre className="tool-card rounded-lg p-3.5">
+      {JSON.stringify(output, null, 2)}
+    </pre>
+  );
 }
 
 function formatFileSize(bytes: number): string {

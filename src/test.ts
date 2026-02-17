@@ -1,11 +1,15 @@
-import { exec } from "node:child_process"
-import { promisify } from "node:util"
-
-const execAsync = promisify(exec)
-
-const cwd = "/home/thetanav/Code/minis"
+const cwd = "/home/thetanav/Code/minis";
 async function main() {
-
+  const proc = Bun.spawn({
+    cmd: ["ls", "-la"], // important
+    cwd,
+  });
+  console.log(await proc.stdout.text());
+  //   console.log(
+  //     await proc.stdout
+  //       .getReader()
+  //       .read()
+  //       .then(({ value }) => new TextDecoder().decode(value)),
+  //   );
 }
-
-console.log(await main())
+main();

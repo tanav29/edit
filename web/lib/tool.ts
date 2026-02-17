@@ -4,13 +4,47 @@ import { resolve, extname } from "path";
 import z from "zod";
 
 const BINARY_EXTENSIONS = new Set([
-  ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".svg",
-  ".mp3", ".mp4", ".wav", ".avi", ".mov", ".mkv", ".flac",
-  ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar",
-  ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
-  ".exe", ".dll", ".so", ".dylib", ".bin", ".dat",
-  ".woff", ".woff2", ".ttf", ".eot", ".otf",
-  ".sqlite", ".db",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".bmp",
+  ".ico",
+  ".webp",
+  ".svg",
+  ".mp3",
+  ".mp4",
+  ".wav",
+  ".avi",
+  ".mov",
+  ".mkv",
+  ".flac",
+  ".zip",
+  ".tar",
+  ".gz",
+  ".bz2",
+  ".7z",
+  ".rar",
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".ppt",
+  ".pptx",
+  ".exe",
+  ".dll",
+  ".so",
+  ".dylib",
+  ".bin",
+  ".dat",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".eot",
+  ".otf",
+  ".sqlite",
+  ".db",
 ]);
 const tavilyClient = tavily({
   apiKey: process.env.TAVILY_API_KEY,
@@ -34,8 +68,6 @@ export function createTools(cwd: string) {
           const proc = Bun.spawn({
             cmd: ["bash", "-lc", command], // important
             cwd,
-            stdout: "pipe",
-            stderr: "pipe",
           });
 
           // timeout killer
@@ -43,15 +75,18 @@ export function createTools(cwd: string) {
             proc.kill();
           }, 2000);
 
-          const out = await new Response(proc.stdout).text();
-          const err = await new Response(proc.stderr).text();
+          const out = await proc.stdout
+            .getReader()
+            .read()
+            .then(({ value }) => new TextDecoder().decode(value));
+          // const err = proc.stderr.getReader().read().then(({ value }) => new TextDecoder().decode(value));
 
           clearTimeout(timer);
 
-          let result = out || "(no output)";
-          if (err) result += `\nstderr:\n${err}`;
+          // let result = out || "(no output)";
+          // if (err) result += `\nstderr:\n${err}`;
 
-          return { stdout: result };
+          return { stdout: out, path: cwd };
         } catch (e: any) {
           return { stdout: `ERR: ${e.message}` };
         }
