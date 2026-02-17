@@ -3,6 +3,34 @@ import { tavily } from "@tavily/core";
 import { resolve, extname } from "path";
 import z from "zod";
 
+// Patterns to ignore to avoid massive context
+export const DEFAULT_IGNORE_PATTERNS = [
+  "node_modules",
+  ".git",
+  ".next",
+  "dist",
+  "build",
+  "coverage",
+  ".cache",
+  ".turbo",
+  ".vercel",
+  ".output",
+  "*.lock",
+  "package-lock.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "bun.lockb",
+  ".DS_Store",
+  "*.log",
+  ".env*",
+  "!.env.example",
+  ".vscode",
+  ".idea",
+  "*.min.js",
+  "*.min.css",
+  "*.map",
+];
+
 const BINARY_EXTENSIONS = new Set([
   ".png",
   ".jpg",
@@ -120,6 +148,25 @@ Returns line-numbered content and file metadata (total lines, file size).`,
       execute: async ({ filePath, offset, limit }) => {
         try {
           const resolved = resolve(cwd, filePath);
+
+          // Check if file is in an ignored directory
+          const isIgnored = DEFAULT_IGNORE_PATTERNS.some((ignorePattern) => {
+            if (ignorePattern.includes("*")) {
+              const regex = new RegExp(
+                "^" + ignorePattern.replace(/\./g, "\\.").replace(/\*\*/g, ".*").replace(/\*/g, "[^/]*") + "$"
+              );
+              return regex.test(resolved) || resolved.split("/").some((part) => regex.test(part));
+            }
+            return resolved.includes(`/${ignorePattern}/`) || resolved.includes(`/${ignorePattern}`);
+          });
+
+          if (isIgnored) {
+            return {
+              error: `Cannot read file in ignored directory: ${resolved}`,
+              filePath: resolved,
+            };
+          }
+
           const file = Bun.file(resolved);
 
           if (!(await file.exists())) {
@@ -346,7 +393,7 @@ Always read the file first before editing to get accurate line numbers.`,
 
     glob: tool({
       title: "Glob",
-      description: `Search for files matching a glob pattern in ${cwd}. Uses Bun's native glob implementation for fast file pattern matching. Supports standard glob patterns like "**/*.ts", "src/**/*.js", etc.`,
+      description: `Search for files matching a glob pattern in ${cwd}. Uses Bun's native glob implementation for fast file pattern matching. Supports standard glob patterns like "**/*.ts", "src/**/*.js", etc. Automatically excludes: ${DEFAULT_IGNORE_PATTERNS.join(", ")}`,
       inputSchema: z.object({
         pattern: z
           .string()
@@ -367,14 +414,43 @@ Always read the file first before editing to get accurate line numbers.`,
           const results: string[] = [];
 
           for await (const file of glob.scan(searchPath)) {
-            results.push(file);
+            // Skip ignored patterns
+            const shouldIgnore = DEFAULT_IGNORE_PATTERNS.some((ignorePattern) => {
+              if (ignorePattern.includes("*")) {
+                // Simple glob matching for patterns with wildcards
+                const regex = new RegExp(
+                  "^" + ignorePattern.replace(/\./g, "\\.").replace(/\*\*/g, ".*").replace(/\*/g, "[^/]*") + "$"
+                );
+                return regex.test(file) || file.split("/").some((part) => regex.test(part));
+              }
+              return file.includes(`/${ignorePattern}/`) || file.startsWith(`${ignorePattern}/`);
+            });
+
+            if (!shouldIgnore) {
+              results.push(file);
+            }
           }
+
+          // Sort by modification time, most recent first
+          const filesWithStats = await Promise.all(
+            results.map(async (file) => {
+              try {
+                const stat = await Bun.file(resolve(searchPath, file)).stat();
+                return { file, mtime: stat.mtime.getTime() };
+              } catch {
+                return { file, mtime: 0 };
+              }
+            })
+          );
+
+          filesWithStats.sort((a, b) => b.mtime - a.mtime);
+          const sortedFiles = filesWithStats.map((f) => f.file);
 
           return {
             pattern,
             cwd: searchPath,
-            count: results.length,
-            files: results,
+            count: sortedFiles.length,
+            files: sortedFiles,
           };
         } catch (e: unknown) {
           return {
