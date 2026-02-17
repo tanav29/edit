@@ -154,17 +154,34 @@ function ChatView({
 
   // Track edits from tool calls
   useEffect(() => {
+    const seenIds = new Set(edits.map((e) => e.id));
     const newEdits: EditInfo[] = [];
     messages.forEach((message) => {
       if (message.role === "assistant") {
         message.parts.forEach((part: any) => {
           if (part.type === "tool-write" && part.state === "output-available") {
+            const toolCallId =
+              part.toolCallId || `${Date.now()}-${Math.random()}`;
+            if (seenIds.has(toolCallId)) return;
+
             const input = part.input as { filePath?: string } | undefined;
-            if (input?.filePath) {
+            const output = part.output as {
+              filePath?: string;
+              action?: string;
+            } | undefined;
+
+            const filePath = output?.filePath || input?.filePath;
+            if (filePath) {
+              const action = output?.action;
               newEdits.push({
-                id: part.toolCallId || `${Date.now()}-${Math.random()}`,
-                path: input.filePath,
-                type: "modify",
+                id: toolCallId,
+                path: filePath,
+                type:
+                  action === "created"
+                    ? "create"
+                    : action === "overwritten"
+                      ? "modify"
+                      : "modify",
                 timestamp: new Date(),
               });
             }
@@ -623,10 +640,158 @@ function ToolPart({
           }
           return null;
         })()}
+        {(() => {
+          // Show compact status for write tool
+          if (
+            part.state === "output-available" &&
+            toolName === "write" &&
+            part.output &&
+            typeof part.output === "object"
+          ) {
+            const out = part.output as Record<string, unknown>;
+            const label =
+              out.action === "created"
+                ? "created"
+                : out.action === "edited"
+                  ? `${String(out.editCount)} edit(s)`
+                  : "written";
+            return (
+              <span className="text-emerald-500/80 ml-1">{label}</span>
+            );
+          }
+          // Show compact range for read tool
+          if (
+            part.state === "output-available" &&
+            toolName === "read" &&
+            part.output &&
+            typeof part.output === "object" &&
+            "range" in (part.output as Record<string, unknown>)
+          ) {
+            const out = part.output as Record<string, unknown>;
+            return (
+              <span className="text-muted-foreground/60 ml-1">
+                lines {String(out.range)} of {String(out.totalLines)}
+              </span>
+            );
+          }
+          return null;
+        })()}
       </summary>
-      <div className="text-xs max-h-48 overflow-y-auto overflow-x-hidden wrap-break-word rounded-lg p-3.5 tool-card animate-fade-in mt-2">
-        {part.output! && <pre>{JSON.stringify(part.output, null, 2)}</pre>}
+      <div className="text-xs max-h-72 overflow-y-auto overflow-x-hidden wrap-break-word rounded-lg p-3.5 tool-card animate-fade-in mt-2">
+        <ToolOutput toolName={toolName} output={part.output} />
       </div>
     </details>
   );
+}
+
+/* ── Formatted tool output ────────────────────────────────── */
+function ToolOutput({
+  toolName,
+  output,
+}: {
+  toolName: string;
+  output: unknown;
+}) {
+  if (!output) return null;
+
+  const data = output as Record<string, unknown>;
+
+  // Error display for any tool
+  if (data.error) {
+    return (
+      <div className="text-red-400 font-mono whitespace-pre-wrap">
+        {String(data.error)}
+      </div>
+    );
+  }
+
+  // Read tool: show file content with line numbers
+  if (toolName === "read" && data.content) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-3 text-muted-foreground/70 text-[10px] pb-1 border-b border-border/30">
+          <span>{String(data.filePath)}</span>
+          <span>
+            {String(data.range)} of {String(data.totalLines)} lines
+          </span>
+          {data.size != null && (
+            <span>{formatFileSize(Number(data.size))}</span>
+          )}
+        </div>
+        <pre className="font-mono text-foreground/90 whitespace-pre-wrap leading-relaxed">
+          {String(data.content)}
+        </pre>
+        {data.hint != null && (
+          <div className="text-muted-foreground/60 text-[10px] pt-1 border-t border-border/30 italic">
+            {String(data.hint)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Write tool: show edit summary
+  if (toolName === "write") {
+    const editsArr = Array.isArray(data.edits)
+      ? (data.edits as Array<Record<string, unknown>>)
+      : [];
+
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-[10px] pb-1 border-b border-border/30">
+          <span
+            className={
+              data.action === "created"
+                ? "text-emerald-400"
+                : data.action === "edited"
+                  ? "text-amber-400"
+                  : "text-blue-400"
+            }>
+            {String(data.action ?? "").toUpperCase()}
+          </span>
+          <span className="text-muted-foreground/70">
+            {String(data.filePath)}
+          </span>
+        </div>
+        {editsArr.map((edit, i) => (
+          <div
+            key={i}
+            className="flex items-center gap-2 text-[10px] text-muted-foreground/80">
+            <span className="font-mono">L{String(edit.range)}</span>
+            <span className="text-red-400/70">
+              -{String(edit.linesRemoved)}
+            </span>
+            <span className="text-emerald-400/70">
+              +{String(edit.linesAdded)}
+            </span>
+            {edit.description != null && (
+              <span className="text-muted-foreground/50 ml-1">
+                {String(edit.description)}
+              </span>
+            )}
+          </div>
+        ))}
+        {data.message != null && (
+          <div className="text-muted-foreground/60 text-[10px]">
+            {String(data.message)}
+          </div>
+        )}
+        {data.previousLineCount !== undefined && (
+          <div className="text-muted-foreground/50 text-[10px]">
+            {String(data.previousLineCount)} &rarr;{" "}
+            {String(data.newLineCount)} lines
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Default: JSON dump
+  return <pre>{JSON.stringify(output, null, 2)}</pre>;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }

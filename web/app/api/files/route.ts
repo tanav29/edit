@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readdir, stat } from "fs/promises";
 import { join } from "path";
+import { readdir } from "fs/promises";
 
 interface FileNode {
   name: string;
@@ -22,31 +22,30 @@ const IGNORED_PATTERNS = [
 ];
 
 async function scanDirectory(dirPath: string): Promise<FileNode[]> {
-  const entries = await readdir(dirPath);
+  const entries = await readdir(dirPath, { withFileTypes: true });
   const nodes: FileNode[] = [];
 
   for (const entry of entries) {
-    if (IGNORED_PATTERNS.some((pattern) => entry.includes(pattern))) {
+    if (IGNORED_PATTERNS.some((pattern) => entry.name.includes(pattern))) {
       continue;
     }
 
-    const fullPath = join(dirPath, entry);
-    const stats = await stat(fullPath);
+    const fullPath = join(dirPath, entry.name);
+    const isDir = entry.isDirectory();
 
     const node: FileNode = {
-      name: entry,
+      name: entry.name,
       path: fullPath,
-      type: stats.isDirectory() ? "directory" : "file",
+      type: isDir ? "directory" : "file",
     };
 
-    if (stats.isDirectory()) {
-      node.children = []; // Empty initially, loaded on demand
+    if (isDir) {
+      node.children = [];
     }
 
     nodes.push(node);
   }
 
-  // Sort: directories first, then files, both alphabetically
   return nodes.sort((a, b) => {
     if (a.type === b.type) {
       return a.name.localeCompare(b.name);
@@ -58,30 +57,31 @@ async function scanDirectory(dirPath: string): Promise<FileNode[]> {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const path = searchParams.get("path");
+    const reqPath = searchParams.get("path");
 
-    if (!path) {
+    if (!reqPath) {
       return NextResponse.json(
         { error: "Path parameter is required" },
         { status: 400 }
       );
     }
 
-    const stats = await stat(path);
-    
-    if (stats.isFile()) {
+    // Check if it's a file using Bun.file (fast, no stat syscall)
+    const file = Bun.file(reqPath);
+    if (await file.exists()) {
       return NextResponse.json({
-        name: path.split("/").pop() || "",
-        path,
+        name: reqPath.split("/").pop() || "",
+        path: reqPath,
         type: "file",
       });
     }
 
-    const children = await scanDirectory(path);
+    // Otherwise treat as directory
+    const children = await scanDirectory(reqPath);
     
     return NextResponse.json({
-      name: path.split("/").pop() || "",
-      path,
+      name: reqPath.split("/").pop() || "",
+      path: reqPath,
       type: "directory",
       children,
     });
