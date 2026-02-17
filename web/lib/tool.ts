@@ -343,5 +343,45 @@ Always read the file first before editing to get accurate line numbers.`,
       },
       needsApproval: true,
     }),
+
+    glob: tool({
+      title: "Glob",
+      description: `Search for files matching a glob pattern in ${cwd}. Uses Bun's native glob implementation for fast file pattern matching. Supports standard glob patterns like "**/*.ts", "src/**/*.js", etc.`,
+      inputSchema: z.object({
+        pattern: z
+          .string()
+          .describe('Glob pattern to match files (e.g., "**/*.ts", "src/**/*.js")'),
+        cwd: z
+          .string()
+          .optional()
+          .describe(`Working directory to search in (default: ${cwd})`),
+      }),
+      execute: async ({ pattern, cwd: searchCwd }) => {
+        try {
+          const searchPath = searchCwd || cwd;
+          if (!searchPath || searchPath.trim() === "") {
+            return { error: "No working directory specified" };
+          }
+
+          const glob = new Bun.Glob(pattern);
+          const results: string[] = [];
+
+          for await (const file of glob.scan(searchPath)) {
+            results.push(file);
+          }
+
+          return {
+            pattern,
+            cwd: searchPath,
+            count: results.length,
+            files: results,
+          };
+        } catch (e: unknown) {
+          return {
+            error: `Failed to glob files: ${e instanceof Error ? e.message : String(e)}`,
+          };
+        }
+      },
+    }),
   };
 }
