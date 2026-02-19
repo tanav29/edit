@@ -1,59 +1,90 @@
-# Claude Code Clone
+# Edit
 
-A modular CLI chat application built with Bun, Ink, and Ollama AI.
+An AI-powered coding assistant with a web interface for interactive code editing.
 
-## Installation
+![Screenshot](screenshot.png)
+
+## Features
+
+- **Visual File Tree** - Browse and navigate your project files
+- **Interactive Chat** - Natural language coding assistant with streaming responses
+- **File Operations** - Read, write, and edit files with AI assistance
+- **Web Search** - Search the web for documentation and solutions
+- **Approval System** - Review destructive operations before they execute
+- **Edit History** - Track all changes made during the session
+
+## Getting Started
+
+### Prerequisites
+
+- [Bun](https://bun.sh) (recommended) or Node.js
+- [Ollama](https://ollama.ai) running locally with your preferred model
+
+### Installation
 
 ```bash
+# Clone the repository
+git clone <repo-url>
+cd edit
+
+# Install dependencies
 bun install
+
+# Start the development server
+bun run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) and select a workspace directory to begin.
+
+### Optional: Web Search
+
+To enable web search functionality, add a Tavily API key:
+
+```bash
+# Create .env.local
+echo "TAVILY_API_KEY=your_api_key_here" > .env.local
 ```
 
 ## Usage
 
-```bash
-bun run start
-# or
-bun run src/index.ts
-```
-
-Type your messages and get streaming AI responses!
+1. **Select a workspace** - Choose the directory you want to work in
+2. **Chat with the AI** - Ask questions, request edits, or get help debugging
+3. **Review changes** - Approve file modifications before they're applied
+4. **Browse files** - Click files in the tree to view their contents
 
 ## Project Structure
 
 ```
-src/
-├── index.ts          # Application entry point
-├── types.ts          # TypeScript type definitions
-├── ai.ts             # AI integration and chat logic
-├── hooks/
-│   └── useChat.ts    # Custom hook for chat functionality
-└── ui/
-    ├── view.tsx      # Main UI component
-    └── components/
-        ├── index.ts      # Component exports
-        ├── MessageList.tsx   # Message display component
-        └── MessageInput.tsx  # Input component
+├── app/                    # Next.js app router
+│   ├── api/chat/route.ts  # AI chat API endpoint
+│   ├── layout.tsx         # Root layout
+│   └── page.tsx           # Main interface
+├── components/            # React components
+│   ├── ai-elements/      # AI-specific UI (terminal, shimmer)
+│   ├── ui/               # shadcn/ui components
+│   ├── edits-panel.tsx   # Edit history sidebar
+│   └── file-tree.tsx     # File explorer
+├── lib/                   # Utilities and tools
+│   ├── tool.ts           # AI tool definitions
+│   └── utils.ts          # Helper functions
+└── public/               # Static assets
 ```
 
-## Architecture
+## Tech Stack
 
-- **Separation of Concerns**: UI, AI logic, and state management are properly separated
-- **Modular Components**: Reusable UI components for maintainability
-- **Custom Hooks**: Business logic encapsulated in hooks for reusability
-- **Type Safety**: Full TypeScript support with proper type definitions
+- **Next.js 15** - React framework with App Router
+- **Bun** - Fast JavaScript runtime and package manager
+- **AI SDK** - Streaming AI responses with tool support
+- **Ollama** - Local LLM integration
+- **Tailwind CSS** - Utility-first styling
+- **shadcn/ui** - Accessible UI components
 
-## Key Features
+## TODO
 
-- Real-time streaming AI responses
-- Clean CLI interface with Ink
-- Modular architecture for easy extension
-- Error handling and loading states
+- [ ] Vercel Sandbox deployment
+- [ ] Show file diffs before applying edits
+- [ ] AI-assisted git commits
 
-## Dependencies
+## License
 
-- **Bun**: Fast JavaScript runtime
-- **Ink**: React for CLI applications
-- **Ollama AI**: Local AI model integration
-- **AI SDK**: Streaming AI responses
-
-This project was created using `bun init` in bun v1.3.5. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+MIT
