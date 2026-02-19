@@ -16,7 +16,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowUp,
-  ArrowLeft,
   Bot,
   Brain,
   Bug,
@@ -31,13 +30,15 @@ import {
   Sparkles,
   Terminal as TerIcon,
   User,
-  CommandIcon,
   PenLine,
-  BookOpenCheck,
   Globe,
   BookSearch,
   PanelLeft,
   PanelRight,
+  Plus,
+  Trash2,
+  MessageSquare,
+  Hash,
 } from "lucide-react";
 import { FileTree } from "@/components/file-tree";
 import { EditsPanel, type EditInfo } from "@/components/edits-panel";
@@ -51,6 +52,7 @@ import {
   TerminalStatus,
   TerminalTitle,
 } from "@/components/ai-elements/terminal";
+import { useChatStore, type ChatSession } from "@/lib/chat-store";
 
 export default function Page() {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -71,7 +73,6 @@ export default function Page() {
   );
 }
 
-/* ── Path Selector View ───────────────────────────────────── */
 function PathSelector({
   path,
   onPathChange,
@@ -131,7 +132,6 @@ function PathSelector({
   );
 }
 
-/* ── Chat View ────────────────────────────────────────────── */
 function ChatView({
   path,
   onChangePath,
@@ -144,9 +144,22 @@ function ChatView({
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
   const [showLeftPanel, setShowLeftPanel] = useState(true);
   const [showRightPanel, setShowRightPanel] = useState(true);
+  const [showChatList, setShowChatList] = useState(true);
   const [edits, setEdits] = useState<EditInfo[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const {
+    sessions,
+    currentSession,
+    createSession,
+    selectSession,
+    deleteSession,
+    addMessage,
+    clearCurrentSession,
+  } = useChatStore();
+
+  const pathSessions = sessions.filter((s) => s.path === currentPath);
 
   const { messages, sendMessage, status, addToolApprovalResponse, stop } =
     useChat({
@@ -162,7 +175,30 @@ function ChatView({
 
   const isActive = status === "streaming" || status === "submitted";
 
-  // Track edits from tool calls
+  useEffect(() => {
+    if (messages.length > 0 && currentSession) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.role === "user") {
+        addMessage({
+          id: `msg-${Date.now()}`,
+          role: "user",
+          content: lastMessage.parts.filter((p: any) => p.type === "text").map((p: any) => p.text).join(""),
+          timestamp: Date.now(),
+        });
+      } else if (lastMessage.role === "assistant") {
+        const textContent = lastMessage.parts.filter((p: any) => p.type === "text").map((p: any) => p.text).join("");
+        if (textContent) {
+          addMessage({
+            id: `msg-${Date.now()}`,
+            role: "assistant",
+            content: textContent,
+            timestamp: Date.now(),
+          });
+        }
+      }
+    }
+  }, [messages]);
+
   useEffect(() => {
     const seenIds = new Set(edits.map((e) => e.id));
     const newEdits: EditInfo[] = [];
@@ -222,6 +258,11 @@ function ChatView({
 
   const handleSend = () => {
     if (!input.trim() || isActive) return;
+    
+    if (!currentSession) {
+      createSession(currentPath);
+    }
+    
     sendMessage({
       parts: [{ type: "text", text: input.trim() }],
     });
@@ -231,22 +272,101 @@ function ChatView({
     }
   };
 
+  const handleNewChat = () => {
+    clearCurrentSession();
+  };
+
+  const getProjectName = (sessionPath: string) => {
+    const parts = sessionPath.split("/");
+    return parts[parts.length - 1] || sessionPath;
+  };
+
   return (
     <div className="flex h-screen">
-      {/* Left Panel - File Tree */}
+      {showChatList && (
+        <div className="w-56 border-r flex flex-col bg-card/50">
+          <div className="flex items-center justify-between p-3 border-b">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Chats
+            </span>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={handleNewChat}
+              className="size-6"
+              title="New chat"
+            >
+              <Plus className="size-3.5" />
+            </Button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {pathSessions.length === 0 ? (
+              <div className="text-xs text-muted-foreground/70 p-2 text-center">
+                No chats yet
+              </div>
+            ) : (
+              pathSessions.map((session) => (
+                <button
+                  key={session.id}
+                  onClick={() => selectSession(session.id)}
+                  className={`w-full flex items-center gap-2 p-2 rounded-md text-left transition-colors ${
+                    currentSession?.id === session.id
+                      ? "bg-accent"
+                      : "hover:bg-accent/50"
+                  }`}
+                >
+                  <MessageSquare className="size-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs truncate flex-1">{session.name}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteSession(session.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 hover:text-destructive"
+                  >
+                    <Trash2 className="size-3" />
+                  </button>
+                </button>
+              ))
+            )}
+          </div>
+          <div className="p-2 border-t">
+            <button
+              onClick={onChangePath}
+              className="w-full flex items-center gap-2 p-2 rounded-md hover:bg-accent/50 text-left text-xs text-muted-foreground"
+            >
+              <Folder className="size-3.5" />
+              <span className="truncate">{getProjectName(currentPath)}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {showLeftPanel && (
         <div className="w-64 border-r flex flex-col bg-card/50">
           <div className="flex items-center justify-between p-3 border-b">
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Files
             </span>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => setShowLeftPanel(false)}
-              className="size-6">
-              <PanelLeft className="size-3.5" />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setShowChatList(!showChatList)}
+                className="size-6"
+                title={showChatList ? "Hide chats" : "Show chats"}
+              >
+                <MessageSquare className="size-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setShowLeftPanel(false)}
+                className="size-6"
+              >
+                <PanelLeft className="size-3.5" />
+              </Button>
+            </div>
           </div>
           <div className="flex-1 overflow-hidden">
             <FileTree
@@ -258,17 +378,27 @@ function ChatView({
         </div>
       )}
 
-      {/* Center Panel - Chat */}
       <div className="flex-1 flex flex-col min-w-0 relative">
-        {/* Panel toggle buttons */}
-        <div className="absolute top-3 left-3 z-10">
+        <div className="absolute top-3 left-3 z-10 flex gap-1">
           {!showLeftPanel && (
             <Button
               variant="ghost"
               size="icon-sm"
               onClick={() => setShowLeftPanel(true)}
-              className="size-8 bg-background/80 backdrop-blur-sm border shadow-sm">
+              className="size-8 bg-background/80 backdrop-blur-sm border shadow-sm"
+            >
               <PanelLeft className="size-4" />
+            </Button>
+          )}
+          {!showChatList && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setShowChatList(true)}
+              className="size-8 bg-background/80 backdrop-blur-sm border shadow-sm"
+              title="Show chats"
+            >
+              <MessageSquare className="size-4" />
             </Button>
           )}
         </div>
@@ -278,13 +408,13 @@ function ChatView({
               variant="ghost"
               size="icon-sm"
               onClick={() => setShowRightPanel(true)}
-              className="size-8 bg-background/80 backdrop-blur-sm border shadow-sm">
+              className="size-8 bg-background/80 backdrop-blur-sm border shadow-sm"
+            >
               <PanelRight className="size-4" />
             </Button>
           )}
         </div>
 
-        {/* Messages area */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6">
           {messages.length === 0 ? (
             <EmptyState />
@@ -294,7 +424,8 @@ function ChatView({
                 <div
                   key={index}
                   className="animate-message-in"
-                  style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}>
+                  style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
+                >
                   {message.role === "user" ? (
                     <UserMessage parts={message.parts} />
                   ) : (
@@ -319,7 +450,6 @@ function ChatView({
           )}
         </div>
 
-        {/* Input area */}
         <div className="bg-background">
           <div className="max-w-2xl mx-auto p-4 pt-0 space-y-2">
             <div className="flex justify-center items-end gap-2 bg-card border rounded-xl focus-within:border-muted-foreground/50 p-2 transition-colors">
@@ -327,7 +457,7 @@ function ChatView({
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
+                onKeyDown={(e: React.KeyboardEvent) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     handleSend();
@@ -342,7 +472,8 @@ function ChatView({
                   size="icon-sm"
                   onClick={isActive ? stop : handleSend}
                   disabled={!isActive && !input.trim()}
-                  className="rounded-lg shrink-0 transition-all duration-200 disabled:opacity-30">
+                  className="rounded-lg shrink-0 transition-all duration-200 disabled:opacity-30"
+                >
                   {isActive ? (
                     <CircleX className="size-4" />
                   ) : (
@@ -355,7 +486,6 @@ function ChatView({
         </div>
       </div>
 
-      {/* Right Panel - Edits & Info */}
       {showRightPanel && (
         <div className="w-72 border-l flex flex-col bg-card/50">
           <div className="flex items-center justify-start p-3 border-b">
@@ -363,7 +493,8 @@ function ChatView({
               variant="ghost"
               size="icon-xs"
               onClick={() => setShowRightPanel(false)}
-              className="size-6">
+              className="size-6"
+            >
               <PanelRight className="size-3.5" />
             </Button>
           </div>
@@ -372,7 +503,7 @@ function ChatView({
               currentPath={currentPath}
               modelName="minimax-m2.5:cloud"
               edits={edits}
-              onEditClick={(edit) => setSelectedFile(edit.path)}
+              onEditClick={(edit: EditInfo) => setSelectedFile(edit.path)}
             />
           </div>
         </div>
@@ -381,7 +512,6 @@ function ChatView({
   );
 }
 
-/* ── Empty state ──────────────────────────────────────────── */
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-4 animate-fade-in">
@@ -404,7 +534,6 @@ function EmptyState() {
   );
 }
 
-/* ── User message ─────────────────────────────────────────── */
 function UserMessage({ parts }: { parts: readonly any[] }) {
   return (
     <div className="flex justify-end py-2">
@@ -415,7 +544,8 @@ function UserMessage({ parts }: { parts: readonly any[] }) {
               return (
                 <p
                   key={i}
-                  className="text-sm leading-relaxed whitespace-pre-wrap">
+                  className="text-sm leading-relaxed whitespace-pre-wrap"
+                >
                   {part.text}
                 </p>
               );
@@ -428,7 +558,6 @@ function UserMessage({ parts }: { parts: readonly any[] }) {
   );
 }
 
-/* ── Assistant message ────────────────────────────────────── */
 function AssistantMessage({
   parts,
   addToolApprovalResponse,
@@ -459,7 +588,8 @@ function AssistantMessage({
                       plugins={{ code, mermaid, math, cjk }}
                       shikiTheme={["github-light", "github-dark"]}
                       mermaid={{ config: { theme: "dark" } }}
-                      isAnimating={part.state === "streaming"}>
+                      isAnimating={part.state === "streaming"}
+                    >
                       {part.text}
                     </Streamdown>
                   </div>
@@ -469,7 +599,8 @@ function AssistantMessage({
                 return (
                   <div
                     key={key}
-                    className="flex items-center gap-2 text-xs text-muted-foreground/90 py-1">
+                    className="flex items-center gap-2 text-xs text-muted-foreground/90 py-1"
+                  >
                     {part.state === "streaming" ? (
                       <Loader2 className="size-3 animate-spin" />
                     ) : (
@@ -483,7 +614,8 @@ function AssistantMessage({
                 return (
                   <div
                     key={key}
-                    className="inline-flex items-center gap-1.5 text-xs bg-card border border-border/50 rounded-md px-2 py-1 text-muted-foreground">
+                    className="inline-flex items-center gap-1.5 text-xs bg-card border border-border/50 rounded-md px-2 py-1 text-muted-foreground"
+                  >
                     <File className="size-3" />
                     <span className="font-mono">{part.filename}</span>
                   </div>
@@ -496,7 +628,8 @@ function AssistantMessage({
                     href={part.url}
                     className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
                     target="_blank"
-                    rel="noopener noreferrer">
+                    rel="noopener noreferrer"
+                  >
                     <Link className="size-3" />
                     <span className="underline underline-offset-2">
                       {part.title}
@@ -523,7 +656,6 @@ function AssistantMessage({
   );
 }
 
-/* ── Tool part ────────────────────────────────────────────── */
 function ToolPart({
   part,
   addToolApprovalResponse,
@@ -577,7 +709,8 @@ function ToolPart({
                 approved: true,
               });
             }}
-            className="rounded-lg text-xs">
+            className="rounded-lg text-xs"
+          >
             Approve
           </Button>
           <Button
@@ -589,7 +722,8 @@ function ToolPart({
                 approved: false,
               });
             }}
-            className="rounded-lg text-xs">
+            className="rounded-lg text-xs"
+          >
             Decline
           </Button>
         </div>
@@ -597,7 +731,6 @@ function ToolPart({
     );
   }
 
-  // Compact inline display for resolved tool calls
   return (
     <details>
       <summary className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90 select-none cursor-pointer">
@@ -653,7 +786,6 @@ function ToolPart({
           return null;
         })()}
         {(() => {
-          // Show compact status for write tool
           if (
             part.state === "output-available" &&
             toolName === "write" &&
@@ -669,7 +801,6 @@ function ToolPart({
                   : "written";
             return <span className="text-emerald-500/80 ml-1">{label}</span>;
           }
-          // Show compact range for read tool
           if (
             part.state === "output-available" &&
             toolName === "read" &&
@@ -694,7 +825,6 @@ function ToolPart({
   );
 }
 
-/* ── Formatted tool output ────────────────────────────────── */
 function ToolOutput({
   toolName,
   output,
@@ -706,7 +836,6 @@ function ToolOutput({
 
   const data = output as Record<string, unknown>;
 
-  // Error display for any tool
   if (data.error) {
     return (
       <div className="text-red-400 font-mono whitespace-pre-wrap">
@@ -715,7 +844,6 @@ function ToolOutput({
     );
   }
 
-  // Read tool: show file content with line numbers
   if (toolName === "read" && data.content) {
     return (
       <div className="space-y-2 tool-card rounded-lg p-3.5">
@@ -740,7 +868,6 @@ function ToolOutput({
     );
   }
 
-  // Write tool: show edit summary
   if (toolName === "write") {
     const editsArr = Array.isArray(data.edits)
       ? (data.edits as Array<Record<string, unknown>>)
@@ -756,7 +883,8 @@ function ToolOutput({
                 : data.action === "edited"
                   ? "text-amber-400"
                   : "text-blue-400"
-            }>
+            }
+          >
             {String(data.action ?? "").toUpperCase()}
           </span>
           <span className="text-muted-foreground/70">
@@ -766,7 +894,8 @@ function ToolOutput({
         {editsArr.map((edit, i) => (
           <div
             key={i}
-            className="flex items-center gap-2 text-[10px] text-muted-foreground/80">
+            className="flex items-center gap-2 text-[10px] text-muted-foreground/80"
+          >
             <span className="font-mono">L{String(edit.range)}</span>
             <span className="text-red-400/70">
               -{String(edit.linesRemoved)}
@@ -803,7 +932,8 @@ function ToolOutput({
         autoScroll={false}
         isStreaming={false}
         onClear={() => {}}
-        output={String(data.stdout)}>
+        output={String(data.stdout)}
+      >
         <TerminalHeader>
           <TerminalTitle>{String(data.path)}</TerminalTitle>
           <div className="flex items-center gap-1">
@@ -818,7 +948,6 @@ function ToolOutput({
     );
   }
 
-  // Default: JSON dump
   return (
     <pre className="tool-card rounded-lg p-3.5">
       {JSON.stringify(output, null, 2)}
