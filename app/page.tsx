@@ -4,59 +4,30 @@ import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
-  type ToolUIPart,
 } from "ai";
 import { useEffect, useRef, useState } from "react";
-import { Streamdown } from "streamdown";
-import { code } from "@streamdown/code";
-import { mermaid } from "@streamdown/mermaid";
-import { math } from "@streamdown/math";
-import { cjk } from "@streamdown/cjk";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowUp,
-  Bot,
-  Brain,
-  Bug,
-  Check,
-  ChevronDown,
   CircleX,
-  File,
   Folder,
   FolderOpen,
-  Link,
-  Loader2,
   Sparkles,
-  Terminal as TerIcon,
-  User,
-  PenLine,
-  Globe,
-  BookSearch,
   PanelLeft,
   PanelRight,
   Plus,
   Trash2,
   MessageSquare,
-  Hash,
 } from "lucide-react";
 import { FileTree } from "@/components/file-tree";
 import { EditsPanel, type EditInfo } from "@/components/edits-panel";
-import {
-  Terminal,
-  TerminalActions,
-  TerminalClearButton,
-  TerminalContent,
-  TerminalCopyButton,
-  TerminalHeader,
-  TerminalStatus,
-  TerminalTitle,
-} from "@/components/ai-elements/terminal";
-import { useChatStore, type ChatSession } from "@/lib/chat-store";
+import { useChatStore } from "@/lib/chat-store";
+import MessageUI from "@/components/message";
 
 export default function Page() {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const [tempPath, setTempPath] = useState("/home/thetanav/Code/project/edit");
+  const [tempPath, setTempPath] = useState("/home/thetanav/Code/minis");
 
   if (selectedPath === null) {
     return (
@@ -143,8 +114,8 @@ function ChatView({
   const [currentPath, setCurrentPath] = useState(path);
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
   const [showLeftPanel, setShowLeftPanel] = useState(true);
-  const [showRightPanel, setShowRightPanel] = useState(true);
-  const [showChatList, setShowChatList] = useState(true);
+  const [showRightPanel, setShowRightPanel] = useState(false);
+  const [showChatList, setShowChatList] = useState(false);
   const [edits, setEdits] = useState<EditInfo[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -182,11 +153,17 @@ function ChatView({
         addMessage({
           id: `msg-${Date.now()}`,
           role: "user",
-          content: lastMessage.parts.filter((p: any) => p.type === "text").map((p: any) => p.text).join(""),
+          content: lastMessage.parts
+            .filter((p: any) => p.type === "text")
+            .map((p: any) => p.text)
+            .join(""),
           timestamp: Date.now(),
         });
       } else if (lastMessage.role === "assistant") {
-        const textContent = lastMessage.parts.filter((p: any) => p.type === "text").map((p: any) => p.text).join("");
+        const textContent = lastMessage.parts
+          .filter((p: any) => p.type === "text")
+          .map((p: any) => p.text)
+          .join("");
         if (textContent) {
           addMessage({
             id: `msg-${Date.now()}`,
@@ -258,11 +235,11 @@ function ChatView({
 
   const handleSend = () => {
     if (!input.trim() || isActive) return;
-    
+
     if (!currentSession) {
       createSession(currentPath);
     }
-    
+
     sendMessage({
       parts: [{ type: "text", text: input.trim() }],
     });
@@ -294,8 +271,7 @@ function ChatView({
               size="icon-xs"
               onClick={handleNewChat}
               className="size-6"
-              title="New chat"
-            >
+              title="New chat">
               <Plus className="size-3.5" />
             </Button>
           </div>
@@ -313,17 +289,17 @@ function ChatView({
                     currentSession?.id === session.id
                       ? "bg-accent"
                       : "hover:bg-accent/50"
-                  }`}
-                >
+                  }`}>
                   <MessageSquare className="size-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-xs truncate flex-1">{session.name}</span>
+                  <span className="text-xs truncate flex-1">
+                    {session.name}
+                  </span>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteSession(session.id);
                     }}
-                    className="opacity-0 group-hover:opacity-100 hover:text-destructive"
-                  >
+                    className="opacity-0 group-hover:opacity-100 hover:text-destructive">
                     <Trash2 className="size-3" />
                   </button>
                 </button>
@@ -333,8 +309,7 @@ function ChatView({
           <div className="p-2 border-t">
             <button
               onClick={onChangePath}
-              className="w-full flex items-center gap-2 p-2 rounded-md hover:bg-accent/50 text-left text-xs text-muted-foreground"
-            >
+              className="w-full flex items-center gap-2 p-2 rounded-md hover:bg-accent/50 text-left text-xs text-muted-foreground">
               <Folder className="size-3.5" />
               <span className="truncate">{getProjectName(currentPath)}</span>
             </button>
@@ -354,16 +329,14 @@ function ChatView({
                 size="icon-xs"
                 onClick={() => setShowChatList(!showChatList)}
                 className="size-6"
-                title={showChatList ? "Hide chats" : "Show chats"}
-              >
+                title={showChatList ? "Hide chats" : "Show chats"}>
                 <MessageSquare className="size-3.5" />
               </Button>
               <Button
                 variant="ghost"
                 size="icon-xs"
                 onClick={() => setShowLeftPanel(false)}
-                className="size-6"
-              >
+                className="size-6">
                 <PanelLeft className="size-3.5" />
               </Button>
             </div>
@@ -385,8 +358,7 @@ function ChatView({
               variant="ghost"
               size="icon-sm"
               onClick={() => setShowLeftPanel(true)}
-              className="size-8 bg-background/80 backdrop-blur-sm border shadow-sm"
-            >
+              className="size-8 bg-background/80 backdrop-blur-sm border shadow-sm">
               <PanelLeft className="size-4" />
             </Button>
           )}
@@ -396,8 +368,7 @@ function ChatView({
               size="icon-sm"
               onClick={() => setShowChatList(true)}
               className="size-8 bg-background/80 backdrop-blur-sm border shadow-sm"
-              title="Show chats"
-            >
+              title="Show chats">
               <MessageSquare className="size-4" />
             </Button>
           )}
@@ -408,8 +379,7 @@ function ChatView({
               variant="ghost"
               size="icon-sm"
               onClick={() => setShowRightPanel(true)}
-              className="size-8 bg-background/80 backdrop-blur-sm border shadow-sm"
-            >
+              className="size-8 bg-background/80 backdrop-blur-sm border shadow-sm">
               <PanelRight className="size-4" />
             </Button>
           )}
@@ -424,15 +394,20 @@ function ChatView({
                 <div
                   key={index}
                   className="animate-message-in"
-                  style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
-                >
+                  style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}>
                   {message.role === "user" ? (
                     <UserMessage parts={message.parts} />
                   ) : (
-                    <AssistantMessage
-                      parts={message.parts}
-                      addToolApprovalResponse={addToolApprovalResponse}
-                    />
+                    <div className="py-2">
+                      <div className="flex items-start max-w-full">
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <MessageUI
+                            parts={message.parts}
+                            addToolApprovalResponse={addToolApprovalResponse}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               ))}
@@ -472,8 +447,7 @@ function ChatView({
                   size="icon-sm"
                   onClick={isActive ? stop : handleSend}
                   disabled={!isActive && !input.trim()}
-                  className="rounded-lg shrink-0 transition-all duration-200 disabled:opacity-30"
-                >
+                  className="rounded-lg shrink-0 transition-all duration-200 disabled:opacity-30">
                   {isActive ? (
                     <CircleX className="size-4" />
                   ) : (
@@ -493,8 +467,7 @@ function ChatView({
               variant="ghost"
               size="icon-xs"
               onClick={() => setShowRightPanel(false)}
-              className="size-6"
-            >
+              className="size-6">
               <PanelRight className="size-3.5" />
             </Button>
           </div>
@@ -544,8 +517,7 @@ function UserMessage({ parts }: { parts: readonly any[] }) {
               return (
                 <p
                   key={i}
-                  className="text-sm leading-relaxed whitespace-pre-wrap"
-                >
+                  className="text-sm leading-relaxed whitespace-pre-wrap">
                   {part.text}
                 </p>
               );
@@ -556,407 +528,4 @@ function UserMessage({ parts }: { parts: readonly any[] }) {
       </div>
     </div>
   );
-}
-
-function AssistantMessage({
-  parts,
-  addToolApprovalResponse,
-}: {
-  parts: readonly any[];
-  addToolApprovalResponse: (response: {
-    id: string;
-    approved: boolean;
-  }) => void;
-}) {
-  return (
-    <div className="py-2">
-      <div className="flex items-start max-w-full">
-        <div className="min-w-0 flex-1 space-y-2">
-          {parts.map((part, partIndex) => {
-            const key =
-              "toolCallId" in part && part.toolCallId
-                ? part.toolCallId
-                : partIndex;
-
-            switch (part.type) {
-              case "text":
-                return (
-                  <div key={key} className="text-sm">
-                    <Streamdown
-                      className="chat-markdown"
-                      mode="static"
-                      plugins={{ code, mermaid, math, cjk }}
-                      shikiTheme={["github-light", "github-dark"]}
-                      mermaid={{ config: { theme: "dark" } }}
-                      isAnimating={part.state === "streaming"}
-                    >
-                      {part.text}
-                    </Streamdown>
-                  </div>
-                );
-
-              case "reasoning":
-                return (
-                  <div
-                    key={key}
-                    className="flex items-center gap-2 text-xs text-muted-foreground/90 py-1"
-                  >
-                    {part.state === "streaming" ? (
-                      <Loader2 className="size-3 animate-spin" />
-                    ) : (
-                      <Brain className="size-3" />
-                    )}
-                    <span>Thinking</span>
-                  </div>
-                );
-
-              case "source-document":
-                return (
-                  <div
-                    key={key}
-                    className="inline-flex items-center gap-1.5 text-xs bg-card border border-border/50 rounded-md px-2 py-1 text-muted-foreground"
-                  >
-                    <File className="size-3" />
-                    <span className="font-mono">{part.filename}</span>
-                  </div>
-                );
-
-              case "source-url":
-                return (
-                  <a
-                    key={key}
-                    href={part.url}
-                    className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <Link className="size-3" />
-                    <span className="underline underline-offset-2">
-                      {part.title}
-                    </span>
-                  </a>
-                );
-
-              default:
-                if (part.type.startsWith("tool-")) {
-                  return (
-                    <ToolPart
-                      key={key}
-                      part={part as ToolUIPart}
-                      addToolApprovalResponse={addToolApprovalResponse}
-                    />
-                  );
-                }
-                return null;
-            }
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ToolPart({
-  part,
-  addToolApprovalResponse,
-}: {
-  part: ToolUIPart;
-  addToolApprovalResponse: (response: {
-    id: string;
-    approved: boolean;
-  }) => void;
-}) {
-  const toolName = part.type.replace("tool-", "");
-
-  if (part.state === "approval-requested") {
-    return (
-      <div className="tool-card rounded-xl p-3.5 space-y-3 animate-fade-in">
-        <div className="flex items-center gap-2">
-          <div className="size-6 rounded-md bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-            <TerIcon className="size-3 text-amber-400" />
-          </div>
-          <span className="text-xs font-medium text-foreground/90">
-            {toolName}
-          </span>
-          <span className="text-[10px] text-amber-400/80 bg-amber-500/10 px-1.5 py-0.5 rounded-full">
-            needs approval
-          </span>
-        </div>
-
-        {part.input != null && (
-          <div className="bg-background/60 rounded-lg p-2.5 border border-border/30 max-h-48 overflow-auto">
-            {Object.entries(part.input as Record<string, unknown>).map(
-              ([k, v]) => (
-                <div key={k} className="text-xs mb-1 last:mb-0">
-                  <span className="text-muted-foreground font-mono">{k}:</span>{" "}
-                  <span className="text-foreground/80 font-mono">
-                    {typeof v === "object"
-                      ? JSON.stringify(v, null, 2)
-                      : String(v ?? "")}
-                  </span>
-                </div>
-              ),
-            )}
-          </div>
-        )}
-
-        <div className="flex gap-2">
-          <Button
-            size="xs"
-            onClick={() => {
-              addToolApprovalResponse({
-                id: part.approval.id,
-                approved: true,
-              });
-            }}
-            className="rounded-lg text-xs"
-          >
-            Approve
-          </Button>
-          <Button
-            size="xs"
-            variant="outline"
-            onClick={() => {
-              addToolApprovalResponse({
-                id: part.approval.id,
-                approved: false,
-              });
-            }}
-            className="rounded-lg text-xs"
-          >
-            Decline
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <details>
-      <summary className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90 select-none cursor-pointer">
-        {part.state == "output-available" ||
-        part.state == "output-denied" ||
-        part.state == "approval-responded" ||
-        part.state == "output-error" ? (
-          <>
-            {part.state === "output-error" && <Bug className="size-3" />}
-            {part.state === "output-denied" && <CircleX className="size-3" />}
-            {part.state === "output-available" && (
-              <>
-                {toolName == "read" && <BookSearch className="size-3" />}
-                {toolName == "bash" && <TerIcon className="size-3" />}
-                {toolName == "write" && <PenLine className="size-3" />}
-                {toolName == "web-search" && <Globe className="size-3" />}
-              </>
-            )}
-            {part.state === "approval-responded" && !part.approval.approved && (
-              <CircleX className="size-3" />
-            )}
-          </>
-        ) : (
-          <Loader2 className="size-3 animate-spin" />
-        )}
-        {part.title && <span>{part.title}</span>}
-        {(() => {
-          const input = part.input;
-          if (
-            input &&
-            typeof input === "object" &&
-            "filePath" in input &&
-            typeof (input as { filePath: unknown }).filePath === "string"
-          ) {
-            return (
-              <span className="text-muted-foreground/90">
-                {(input as { filePath: string }).filePath}
-              </span>
-            );
-          }
-          if (
-            input &&
-            typeof input === "object" &&
-            "command" in input &&
-            typeof (input as { command: unknown }).command === "string"
-          ) {
-            return (
-              <span className="text-muted-foreground/90">
-                {(input as { command: string }).command}
-              </span>
-            );
-          }
-          return null;
-        })()}
-        {(() => {
-          if (
-            part.state === "output-available" &&
-            toolName === "write" &&
-            part.output &&
-            typeof part.output === "object"
-          ) {
-            const out = part.output as Record<string, unknown>;
-            const label =
-              out.action === "created"
-                ? "created"
-                : out.action === "edited"
-                  ? `${String(out.editCount)} edit(s)`
-                  : "written";
-            return <span className="text-emerald-500/80 ml-1">{label}</span>;
-          }
-          if (
-            part.state === "output-available" &&
-            toolName === "read" &&
-            part.output &&
-            typeof part.output === "object" &&
-            "range" in (part.output as Record<string, unknown>)
-          ) {
-            const out = part.output as Record<string, unknown>;
-            return (
-              <span className="text-muted-foreground/60 ml-1">
-                lines {String(out.range)} of {String(out.totalLines)}
-              </span>
-            );
-          }
-          return null;
-        })()}
-      </summary>
-      <div className="text-xs max-h-72 overflow-y-auto overflow-x-hidden wrap-break-word animate-fade-in mt-2">
-        <ToolOutput toolName={toolName} output={part.output} />
-      </div>
-    </details>
-  );
-}
-
-function ToolOutput({
-  toolName,
-  output,
-}: {
-  toolName: string;
-  output: unknown;
-}) {
-  if (!output) return null;
-
-  const data = output as Record<string, unknown>;
-
-  if (data.error) {
-    return (
-      <div className="text-red-400 font-mono whitespace-pre-wrap">
-        {String(data.error)}
-      </div>
-    );
-  }
-
-  if (toolName === "read" && data.content) {
-    return (
-      <div className="space-y-2 tool-card rounded-lg p-3.5">
-        <div className="flex items-center gap-3 text-muted-foreground/70 text-[10px] pb-1 border-b border-border/30">
-          <span>{String(data.filePath)}</span>
-          <span>
-            {String(data.range)} of {String(data.totalLines)} lines
-          </span>
-          {data.size != null && (
-            <span>{formatFileSize(Number(data.size))}</span>
-          )}
-        </div>
-        <pre className="font-mono text-foreground/90 whitespace-pre-wrap leading-relaxed">
-          {String(data.content)}
-        </pre>
-        {data.hint != null && (
-          <div className="text-muted-foreground/60 text-[10px] pt-1 border-t border-border/30 italic">
-            {String(data.hint)}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (toolName === "write") {
-    const editsArr = Array.isArray(data.edits)
-      ? (data.edits as Array<Record<string, unknown>>)
-      : [];
-
-    return (
-      <div className="space-y-2 tool-card rounded-lg p-3.5">
-        <div className="flex items-center gap-2 text-[10px] pb-1 border-b border-border/30">
-          <span
-            className={
-              data.action === "created"
-                ? "text-emerald-400"
-                : data.action === "edited"
-                  ? "text-amber-400"
-                  : "text-blue-400"
-            }
-          >
-            {String(data.action ?? "").toUpperCase()}
-          </span>
-          <span className="text-muted-foreground/70">
-            {String(data.filePath)}
-          </span>
-        </div>
-        {editsArr.map((edit, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-2 text-[10px] text-muted-foreground/80"
-          >
-            <span className="font-mono">L{String(edit.range)}</span>
-            <span className="text-red-400/70">
-              -{String(edit.linesRemoved)}
-            </span>
-            <span className="text-emerald-400/70">
-              +{String(edit.linesAdded)}
-            </span>
-            {edit.description != null && (
-              <span className="text-muted-foreground/50 ml-1">
-                {String(edit.description)}
-              </span>
-            )}
-          </div>
-        ))}
-        {data.message != null && (
-          <div className="text-muted-foreground/60 text-[10px]">
-            {String(data.message)}
-          </div>
-        )}
-        {data.previousLineCount !== undefined && (
-          <div className="text-muted-foreground/50 text-[10px]">
-            {String(data.previousLineCount)} &rarr; {String(data.newLineCount)}{" "}
-            lines
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (toolName === "bash" && data.stdout) {
-    console.log("Bash output:", data.stdout);
-    return (
-      <Terminal
-        autoScroll={false}
-        isStreaming={false}
-        onClear={() => {}}
-        output={String(data.stdout)}
-      >
-        <TerminalHeader>
-          <TerminalTitle>{String(data.path)}</TerminalTitle>
-          <div className="flex items-center gap-1">
-            <TerminalStatus />
-            <TerminalActions>
-              <TerminalCopyButton onCopy={() => {}} />
-            </TerminalActions>
-          </div>
-        </TerminalHeader>
-        <TerminalContent />
-      </Terminal>
-    );
-  }
-
-  return (
-    <pre className="tool-card rounded-lg p-3.5">
-      {JSON.stringify(output, null, 2)}
-    </pre>
-  );
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }

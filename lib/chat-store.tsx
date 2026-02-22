@@ -1,77 +1,88 @@
-"use client"
+"use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useRef,
+  type ReactNode,
+} from "react";
 
 export interface ChatMessage {
-  id: string
-  role: "user" | "assistant"
-  content: string
-  timestamp: number
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number;
 }
 
 export interface ChatSession {
-  id: string
-  name: string
-  path: string
-  messages: ChatMessage[]
-  createdAt: number
-  updatedAt: number
+  id: string;
+  name: string;
+  path: string;
+  messages: ChatMessage[];
+  createdAt: number;
+  updatedAt: number;
 }
 
 interface ChatStoreContextType {
-  sessions: ChatSession[]
-  currentSession: ChatSession | null
-  createSession: (path: string, name?: string) => ChatSession
-  selectSession: (id: string) => void
-  deleteSession: (id: string) => void
-  addMessage: (message: ChatMessage) => void
-  clearCurrentSession: () => void
+  sessions: ChatSession[];
+  currentSession: ChatSession | null;
+  createSession: (path: string, name?: string) => ChatSession;
+  selectSession: (id: string) => void;
+  deleteSession: (id: string) => void;
+  addMessage: (message: ChatMessage) => void;
+  clearCurrentSession: () => void;
 }
 
-const ChatStoreContext = createContext<ChatStoreContextType | null>(null)
+const ChatStoreContext = createContext<ChatStoreContextType | null>(null);
 
 export function ChatStoreProvider({ children }: { children: ReactNode }) {
-  const [sessions, setSessions] = useState<ChatSession[]>([])
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
-  const [loaded, setLoaded] = useState(false)
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  // useEffect(() => {
+  //   async function loadSessions() {
+  //     try {
+  //       const res = await fetch("/api/history");
+  //       if (res.ok) {
+  //         const data = await res.json();
+  //         setSessions(data);
+  //         if (data.length > 0) {
+  //           setCurrentSessionId(data[0].id);
+  //         }
+  //       }
+  //     } catch (error) {
+  //       console.error("Failed to load sessions:", error);
+  //     } finally {
+  //       setLoaded(true);
+  //     }
+  //   }
+  //   loadSessions();
+  // }, []);
 
   useEffect(() => {
-    async function loadSessions() {
-      try {
-        const res = await fetch("/api/history")
-        if (res.ok) {
-          const data = await res.json()
-          setSessions(data)
-          if (data.length > 0) {
-            setCurrentSessionId(data[0].id)
-          }
-        }
-      } catch (error) {
-        console.error("Failed to load sessions:", error)
-      } finally {
-        setLoaded(true)
-      }
-    }
-    loadSessions()
-  }, [])
+    if (!loaded) return;
 
-  useEffect(() => {
-    if (!loaded) return
-    
-    const currentSession = sessions.find((s) => s.id === currentSessionId)
+    const currentSession = sessions.find((s) => s.id === currentSessionId);
     if (currentSession && currentSession.messages.length > 0) {
-      fetch("/api/history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(currentSession),
-      }).catch(console.error)
+      const timeoutId = setTimeout(() => {
+        fetch("/api/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(currentSession),
+        }).catch(console.error);
+      }, 10000);
+      return () => clearTimeout(timeoutId);
     }
-  }, [sessions, currentSessionId, loaded])
+  }, [sessions, currentSessionId, loaded]);
 
-  const currentSession = sessions.find((s) => s.id === currentSessionId) || null
+  const currentSession =
+    sessions.find((s) => s.id === currentSessionId) || null;
 
   function createSession(workspacePath: string, name?: string): ChatSession {
-    const sessionName = name || `Chat ${sessions.length + 1}`
+    const sessionName = name || `Chat ${sessions.length + 1}`;
     const newSession: ChatSession = {
       id: `session-${Date.now()}`,
       name: sessionName,
@@ -79,34 +90,34 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
       messages: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
-    }
-    setSessions((prev) => [newSession, ...prev])
-    setCurrentSessionId(newSession.id)
-    return newSession
+    };
+    setSessions((prev) => [newSession, ...prev]);
+    setCurrentSessionId(newSession.id);
+    return newSession;
   }
 
   function selectSession(id: string) {
-    setCurrentSessionId(id)
+    setCurrentSessionId(id);
   }
 
   function deleteSession(id: string) {
-    const session = sessions.find((s) => s.id === id)
+    const session = sessions.find((s) => s.id === id);
     if (session) {
       fetch("/api/history", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionPath: session.path }),
-      }).catch(console.error)
+      }).catch(console.error);
     }
-    setSessions((prev) => prev.filter((s) => s.id !== id))
+    setSessions((prev) => prev.filter((s) => s.id !== id));
     if (currentSessionId === id) {
-      const remaining = sessions.filter((s) => s.id !== id)
-      setCurrentSessionId(remaining.length > 0 ? remaining[0].id : null)
+      const remaining = sessions.filter((s) => s.id !== id);
+      setCurrentSessionId(remaining.length > 0 ? remaining[0].id : null);
     }
   }
 
   function addMessage(message: ChatMessage) {
-    if (!currentSessionId) return
+    if (!currentSessionId) return;
 
     setSessions((prev) =>
       prev.map((session) => {
@@ -115,15 +126,15 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
             ...session,
             messages: [...session.messages, message],
             updatedAt: Date.now(),
-          }
+          };
         }
-        return session
-      })
-    )
+        return session;
+      }),
+    );
   }
 
   function clearCurrentSession() {
-    if (!currentSessionId) return
+    if (!currentSessionId) return;
 
     setSessions((prev) =>
       prev.map((session) => {
@@ -132,11 +143,11 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
             ...session,
             messages: [],
             updatedAt: Date.now(),
-          }
+          };
         }
-        return session
-      })
-    )
+        return session;
+      }),
+    );
   }
 
   return (
@@ -149,17 +160,16 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         deleteSession,
         addMessage,
         clearCurrentSession,
-      }}
-    >
+      }}>
       {children}
     </ChatStoreContext.Provider>
-  )
+  );
 }
 
 export function useChatStore() {
-  const context = useContext(ChatStoreContext)
+  const context = useContext(ChatStoreContext);
   if (!context) {
-    throw new Error("useChatStore must be used within a ChatStoreProvider")
+    throw new Error("useChatStore must be used within a ChatStoreProvider");
   }
-  return context
+  return context;
 }

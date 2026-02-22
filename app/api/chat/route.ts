@@ -1,14 +1,26 @@
-import { createTools, DEFAULT_IGNORE_PATTERNS } from '@/lib/tool';
-import { convertToModelMessages, smoothStream, stepCountIs, streamText, type UIMessage } from 'ai';
-import { ollama } from 'ollama-ai-provider-v2';
+import { catalog } from "@/lib/catalog";
+import { createTools, DEFAULT_IGNORE_PATTERNS } from "@/lib/tool";
+import { pipeJsonRender } from "@json-render/core";
+import {
+  convertToModelMessages,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  smoothStream,
+  stepCountIs,
+  streamText,
+  type UIMessage,
+} from "ai";
+import { ollama } from "ollama-ai-provider-v2";
 
 export async function POST(req: Request) {
-  const { messages, path }: { messages: UIMessage[], path: string } = await req.json();
-  console.log(path)
+  const { messages, path }: { messages: UIMessage[]; path: string } =
+    await req.json();
+  console.log(path);
   const tools = createTools(path);
+  const systemPrompt = catalog.prompt();
   const result = streamText({
     model: ollama("minimax-m2.5:cloud"),
-    system: `You are a powerful coding assistant. Think carefully before acting.
+    system: `You are a powerful coding assistant/general agent. Think carefully before acting.
 
 ## Workspace
 The working directory is: ${path}
@@ -16,7 +28,7 @@ All file paths can be relative to this directory.
 
 ## Ignore Patterns (DO NOT read/edit these)
 The following patterns are automatically ignored to avoid massive context:
-${DEFAULT_IGNORE_PATTERNS.map((p: string) => `- ${p}`).join('\n')}
+${DEFAULT_IGNORE_PATTERNS.map((p: string) => `- ${p}`).join("\n")}
 
 ## Tool Usage Guidelines
 
@@ -50,7 +62,10 @@ ${DEFAULT_IGNORE_PATTERNS.map((p: string) => `- ${p}`).join('\n')}
 - Only address the specific query or task at hand.
 - When giving file paths, include line numbers (e.g., "src/index.ts:42").
 - Never output text like "Here is..." or "Based on the information..."
-- One-word answers are best when appropriate.`,
+- One-word answers are best when appropriate.
+
+## JSON RENDER
+- Catalog: ${systemPrompt}`,
     messages: await convertToModelMessages(messages),
     tools,
     stopWhen: stepCountIs(20),
@@ -58,5 +73,10 @@ ${DEFAULT_IGNORE_PATTERNS.map((p: string) => `- ${p}`).join('\n')}
     experimental_transform: smoothStream(),
   });
 
-  return result.toUIMessageStreamResponse();
+  const stream = createUIMessageStream({
+    execute: async ({ writer }) => {
+      writer.merge(pipeJsonRender(result.toUIMessageStream()));
+    },
+  });
+  return createUIMessageStreamResponse({ stream });
 }

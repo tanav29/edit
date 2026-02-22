@@ -79,13 +79,6 @@ echo "TAVILY_API_KEY=your_api_key_here" > .env.local
 - **Tailwind CSS** - Utility-first styling
 - **shadcn/ui** - Accessible UI components
 
-## TODO
-
-Done! All features implemented:
-- [x] History for chats - Chat sessions are persisted to localStorage
-- [x] Project/dir wise group chats - Chats are grouped by workspace directory
-- [x] Multiple AI chats in parallel - Multiple chat sessions can be created and switched between
-
 ## License
 
 MIT
