@@ -186,13 +186,7 @@
 }
 
 .chat-markdown pre {
-  /* background: oklch(0.1 0.005 260); */
-  /* border: 1px solid oklch(0.22 0.01 260); */
-  /* border-radius: 8px; */
-  /* padding: 0.85em 1em; */
   overflow-x: auto;
-  /* font-size: 0.85em; */
-  /* margin: 0.75em 0; */
 }
 
 .chat-markdown code:not(pre code) {

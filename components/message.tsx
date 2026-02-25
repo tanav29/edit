@@ -43,6 +43,7 @@ import { code } from "@streamdown/code";
 import { mermaid } from "@streamdown/mermaid";
 import { math } from "@streamdown/math";
 import { cjk } from "@streamdown/cjk";
+import { useChatStore } from "@/lib/chat-store";
 
 export default function MessageUI({
   parts,
@@ -54,9 +55,10 @@ export default function MessageUI({
     approved: boolean;
   }) => void;
 }) {
+  const { isGenUIEnabled } = useChatStore();
   const { spec, text, hasSpec } = useJsonRenderMessage(parts);
 
-  if (hasSpec && spec) {
+  if (isGenUIEnabled && hasSpec && spec) {
     return (
       <StateProvider initialState={{}}>
         <VisibilityProvider>

@@ -19,11 +19,13 @@ import {
   Plus,
   Trash2,
   MessageSquare,
+  Square,
 } from "lucide-react";
 import { FileTree } from "@/components/file-tree";
 import { EditsPanel, type EditInfo } from "@/components/edits-panel";
 import { useChatStore } from "@/lib/chat-store";
 import MessageUI from "@/components/message";
+import { FileViewer } from "@/components/file-viewer";
 
 export default function Page() {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -385,7 +387,16 @@ function ChatView({
           )}
         </div>
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 relative">
+          {selectedFile && (
+            <div className="absolute inset-0 z-20 p-4 bg-background/95 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
+              <FileViewer
+                filePath={selectedFile}
+                onClose={() => setSelectedFile(undefined)}
+              />
+            </div>
+          )}
+
           {messages.length === 0 ? (
             <EmptyState />
           ) : (
@@ -426,7 +437,7 @@ function ChatView({
         </div>
 
         <div className="bg-background">
-          <div className="max-w-2xl mx-auto p-4 pt-0 space-y-2">
+          <div className="max-w-2xl mx-auto pt-0 pb-4 space-y-2">
             <div className="flex justify-center items-end gap-2 bg-card border rounded-xl focus-within:border-muted-foreground/50 p-2 transition-colors">
               <textarea
                 ref={textareaRef}
@@ -447,9 +458,9 @@ function ChatView({
                   size="icon-sm"
                   onClick={isActive ? stop : handleSend}
                   disabled={!isActive && !input.trim()}
-                  className="rounded-lg shrink-0 transition-all duration-200 disabled:opacity-30">
+                  className="rounded-lg shrink-0 transition-all duration-200 disabled:opacity-30 cursor-pointer">
                   {isActive ? (
-                    <CircleX className="size-4" />
+                    <Square className="size-3 fill-current" />
                   ) : (
                     <ArrowUp className="size-4" />
                   )}

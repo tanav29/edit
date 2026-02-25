@@ -65,7 +65,8 @@ ${DEFAULT_IGNORE_PATTERNS.map((p: string) => `- ${p}`).join("\n")}
 - One-word answers are best when appropriate.
 
 ## JSON RENDER
-- Catalog: ${systemPrompt}`,
+- Catalog: ${systemPrompt}
+- Dont create a new json file for json render`,
     messages: await convertToModelMessages(messages),
     tools,
     stopWhen: stepCountIs(20),

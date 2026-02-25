@@ -33,6 +33,8 @@ interface ChatStoreContextType {
   deleteSession: (id: string) => void;
   addMessage: (message: ChatMessage) => void;
   clearCurrentSession: () => void;
+  isGenUIEnabled: boolean;
+  setIsGenUIEnabled: (enabled: boolean) => void;
 }
 
 const ChatStoreContext = createContext<ChatStoreContextType | null>(null);
@@ -41,6 +43,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [isGenUIEnabled, setIsGenUIEnabled] = useState(true);
 
   // useEffect(() => {
   //   async function loadSessions() {
@@ -160,6 +163,8 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         deleteSession,
         addMessage,
         clearCurrentSession,
+        isGenUIEnabled,
+        setIsGenUIEnabled,
       }}>
       {children}
     </ChatStoreContext.Provider>
