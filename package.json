@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "bun --bun next dev",
+    "dev": "bun --bun next dev -H 0.0.0.0",
     "build": "bun --bun next build",
     "start": "bun --bun next start",
     "lint": "eslint"
@@ -27,6 +27,7 @@
     "motion": "^12.34.0",
     "next": "16.1.6",
     "ollama-ai-provider-v2": "^3.3.0",
+    "qrcode.react": "^4.2.0",
     "radix-ui": "^1.4.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

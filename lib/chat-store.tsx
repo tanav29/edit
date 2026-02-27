@@ -5,7 +5,6 @@ import {
   useContext,
   useEffect,
   useState,
-  useRef,
   type ReactNode,
 } from "react";
 
@@ -23,6 +22,8 @@ export interface ChatSession {
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
+  sessionKey?: string;
+  isRemoteEnabled?: boolean;
 }
 
 interface ChatStoreContextType {
@@ -35,6 +36,8 @@ interface ChatStoreContextType {
   clearCurrentSession: () => void;
   isGenUIEnabled: boolean;
   setIsGenUIEnabled: (enabled: boolean) => void;
+  toggleRemoteMode: (enabled: boolean) => void;
+  setMessagesForSession: (sessionId: string, messages: ChatMessage[]) => void;
 }
 
 const ChatStoreContext = createContext<ChatStoreContextType | null>(null);
@@ -45,25 +48,29 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [isGenUIEnabled, setIsGenUIEnabled] = useState(true);
 
-  // useEffect(() => {
-  //   async function loadSessions() {
-  //     try {
-  //       const res = await fetch("/api/history");
-  //       if (res.ok) {
-  //         const data = await res.json();
-  //         setSessions(data);
-  //         if (data.length > 0) {
-  //           setCurrentSessionId(data[0].id);
-  //         }
-  //       }
-  //     } catch (error) {
-  //       console.error("Failed to load sessions:", error);
-  //     } finally {
-  //       setLoaded(true);
-  //     }
-  //   }
-  //   loadSessions();
-  // }, []);
+  useEffect(() => {
+    async function loadSessions() {
+      try {
+        const res = await fetch("/api/history");
+        if (res.ok) {
+          const data = await res.json();
+          setSessions(data);
+          if (data.length > 0 && !currentSessionId) {
+            setCurrentSessionId(data[0].id);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load sessions:", error);
+      } finally {
+        setLoaded(true);
+      }
+    }
+    loadSessions();
+
+    const handleRemoteUpdate = () => loadSessions();
+    window.addEventListener('remote-update', handleRemoteUpdate);
+    return () => window.removeEventListener('remote-update', handleRemoteUpdate);
+  }, [currentSessionId]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -76,13 +83,50 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(currentSession),
         }).catch(console.error);
-      }, 10000);
+      }, 5000);
       return () => clearTimeout(timeoutId);
     }
   }, [sessions, currentSessionId, loaded]);
 
   const currentSession =
     sessions.find((s) => s.id === currentSessionId) || null;
+
+  function setMessagesForSession(sessionId: string, messages: ChatMessage[]) {
+    setSessions((prev) =>
+      prev.map((session) => {
+        if (session.id === sessionId) {
+          return {
+            ...session,
+            messages,
+            updatedAt: Date.now(),
+          };
+        }
+        return session;
+      }),
+    );
+  }
+
+  function generateSessionKey() {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  }
+
+  function toggleRemoteMode(enabled: boolean) {
+    if (!currentSessionId) return;
+
+    setSessions((prev) =>
+      prev.map((session) => {
+        if (session.id === currentSessionId) {
+          return {
+            ...session,
+            isRemoteEnabled: enabled,
+            sessionKey: enabled ? (session.sessionKey || generateSessionKey()) : session.sessionKey,
+            updatedAt: Date.now(),
+          };
+        }
+        return session;
+      }),
+    );
+  }
 
   function createSession(workspacePath: string, name?: string): ChatSession {
     const sessionName = name || `Chat ${sessions.length + 1}`;
@@ -165,6 +209,8 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         clearCurrentSession,
         isGenUIEnabled,
         setIsGenUIEnabled,
+        toggleRemoteMode,
+        setMessagesForSession,
       }}>
       {children}
     </ChatStoreContext.Provider>

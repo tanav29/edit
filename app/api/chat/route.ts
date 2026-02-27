@@ -11,19 +11,28 @@ import {
   type UIMessage,
 } from "ai";
 import { ollama } from "ollama-ai-provider-v2";
+import * as fs from "fs";
+import * as path from "path";
+
+const HISTORY_DIR = path.join(process.env.HOME || "/home/thetanav", ".edit", "history");
+
+function getHistoryFilePath(sessionPath: string): string {
+  const sanitized = sessionPath.replace(/[^a-zA-Z0-9]/g, "_");
+  return path.join(HISTORY_DIR, `${sanitized}.json`);
+}
 
 export async function POST(req: Request) {
-  const { messages, path }: { messages: UIMessage[]; path: string } =
+  const { messages, path: workspacePath }: { messages: UIMessage[]; path: string } =
     await req.json();
-  console.log(path);
-  const tools = createTools(path);
+  console.log(workspacePath);
+  const tools = createTools(workspacePath);
   const systemPrompt = catalog.prompt();
   const result = streamText({
     model: ollama("minimax-m2.5:cloud"),
     system: `You are a powerful coding assistant/general agent. Think carefully before acting.
 
 ## Workspace
-The working directory is: ${path}
+The working directory is: ${workspacePath}
 All file paths can be relative to this directory.
 
 ## Ignore Patterns (DO NOT read/edit these)
@@ -76,7 +85,11 @@ ${DEFAULT_IGNORE_PATTERNS.map((p: string) => `- ${p}`).join("\n")}
 
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
-      writer.merge(pipeJsonRender(result.toUIMessageStream()));
+      const uiStream = pipeJsonRender(result.toUIMessageStream());
+      writer.merge(uiStream);
+      
+      // We'll skip the complex collection for now and just rely on the existing 10s auto-save
+      // which is more robust for streaming
     },
   });
   return createUIMessageStreamResponse({ stream });

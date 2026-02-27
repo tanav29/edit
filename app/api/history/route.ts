@@ -29,21 +29,34 @@ function getHistoryFilePath(sessionPath: string): string {
   return path.join(HISTORY_DIR, `${sanitized}.json`)
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     ensureDir(HISTORY_DIR)
+    const { searchParams } = new URL(req.url)
+    const sessionKey = searchParams.get("key")
+
     const files = fs.readdirSync(HISTORY_DIR)
-    const sessions: ChatSession[] = []
+    const sessions: any[] = []
 
     for (const file of files) {
       if (!file.endsWith(".json")) continue
       const filePath = path.join(HISTORY_DIR, file)
       try {
         const content = fs.readFileSync(filePath, "utf-8")
-        sessions.push(JSON.parse(content))
+        const session = JSON.parse(content)
+        
+        if (sessionKey && session.sessionKey === sessionKey) {
+           return NextResponse.json(session)
+        }
+        
+        sessions.push(session)
       } catch {
         // Skip invalid files
       }
+    }
+
+    if (sessionKey) {
+      return NextResponse.json({ error: "Session not found" }, { status: 404 })
     }
 
     return NextResponse.json(sessions.sort((a, b) => b.updatedAt - a.updatedAt))

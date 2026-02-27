@@ -1,11 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { Clock, FileCode, Folder, Bot, Sparkles } from "lucide-react"
+import { Clock, FileCode, Folder, Bot, Sparkles, Globe } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { useChatStore } from "@/lib/chat-store"
 import { cn } from "@/lib/utils"
+import { RemoteToggle } from "@/components/remote-toggle"
 
 export interface EditInfo {
   id: string
@@ -19,6 +20,8 @@ interface EditsPanelProps {
   modelName: string
   edits: EditInfo[]
   onEditClick: (edit: EditInfo) => void
+  onSync?: () => void
+  isSyncing?: boolean
 }
 
 export function EditsPanel({
@@ -26,9 +29,11 @@ export function EditsPanel({
   modelName,
   edits,
   onEditClick,
+  onSync,
+  isSyncing,
 }: EditsPanelProps) {
-  const { isGenUIEnabled, setIsGenUIEnabled } = useChatStore()
-  const [activeTab, setActiveTab] = useState<"ai" | "history">("ai")
+  const { isGenUIEnabled, setIsGenUIEnabled, currentSession } = useChatStore()
+  const [activeTab, setActiveTab] = useState<"ai" | "history" | "remote">("ai")
   const pathParts = currentPath.split("/")
   const projectName = pathParts[pathParts.length - 1] || currentPath
 
@@ -45,20 +50,29 @@ export function EditsPanel({
         </div>
       </div>
 
-      <div className="flex border-b">
+      <div className="flex border-b overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveTab("ai")}
           className={cn(
-            "flex-1 py-2 text-[10px] font-medium uppercase tracking-wider transition-colors",
+            "flex-1 py-2 px-1 text-[10px] font-medium uppercase tracking-wider transition-colors min-w-[60px]",
             activeTab === "ai" ? "text-primary border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
           )}
         >
           AI
         </button>
         <button
+          onClick={() => setActiveTab("remote")}
+          className={cn(
+            "flex-1 py-2 px-1 text-[10px] font-medium uppercase tracking-wider transition-colors min-w-[60px]",
+            activeTab === "remote" ? "text-primary border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Remote
+        </button>
+        <button
           onClick={() => setActiveTab("history")}
           className={cn(
-            "flex-1 py-2 text-[10px] font-medium uppercase tracking-wider transition-colors",
+            "flex-1 py-2 px-1 text-[10px] font-medium uppercase tracking-wider transition-colors min-w-[60px]",
             activeTab === "history" ? "text-primary border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
           )}
         >
@@ -96,6 +110,8 @@ export function EditsPanel({
                 </div>
               </div>
             </div>
+          ) : activeTab === "remote" ? (
+            <RemoteToggle onSync={onSync} isSyncing={isSyncing} />
           ) : (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
