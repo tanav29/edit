@@ -3,10 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
+  ArrowRight,
   Folder,
-  FolderOpen,
   MessageSquare,
   Trash2,
 } from "lucide-react";
@@ -15,8 +14,8 @@ import { useChatStore } from "@/lib/chat-store";
 export default function HomePage() {
   const router = useRouter();
   const [tempPath, setTempPath] = useState("/home/thetanav/Code/minis");
-  const { sessions, deleteSession, selectSession } = useChatStore();
-  
+  const { sessions, deleteSession, deleteSessionsForPath, selectSession } = useChatStore();
+
   const dirSessions = sessions.filter((s) => s.path === tempPath);
 
   const handleConfirm = () => {
@@ -33,54 +32,46 @@ export default function HomePage() {
 
   const handleResumeSession = (sessionId: string) => {
     selectSession(sessionId);
-    const session = sessions.find(s => s.id === sessionId);
+    const session = sessions.find((s) => s.id === sessionId);
     if (session) {
-      router.push(`/chat?path=${encodeURIComponent(session.path)}&sessionId=${sessionId}`);
+      router.push(
+        `/chat?path=${encodeURIComponent(session.path)}&sessionId=${sessionId}`,
+      );
     }
   };
 
   return (
     <div className="flex flex-col h-screen items-center justify-center px-4">
-      <div className="w-full max-w-lg space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="flex flex-col items-center gap-4">
-          <div className="relative">
-            <div className="absolute inset-0 bg-primary/20 rounded-2xl blur-xl" />
-            <div className="relative bg-card border border-border/60 rounded-2xl p-4">
-              <FolderOpen className="size-10 text-primary" />
-            </div>
-          </div>
-          <div className="text-center space-y-1.5">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Workspace
-            </h1>
-            <p className="text-sm text-muted-foreground/70 max-w-xs mx-auto">
-              Select a directory to work in or continue a previous chat.
-            </p>
-          </div>
-        </div>
-
+      <div className="w-full max-w-lg h-108 space-y-8">
         <div className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex items-center px-3 py-3 bg-card border rounded-xl focus-within:border-primary/50 transition-colors shadow-sm">
+          <div className="flex space-x-2 items-center justify-center">
+            <div className="flex flex-1 items-center px-5 py-3 bg-card border rounded-xl focus-within:border-primary/50 transition-colors">
               <Folder className="size-5 text-muted-foreground shrink-0 mr-3" />
-              <Input
+              <input
                 type="text"
                 value={tempPath}
                 onChange={(e) => setTempPath(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="/path/to/your/project"
-                className="h-9 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-sm bg-transparent"
+                className="h-9 w-full flex-1 px-0 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-lg bg-card outline-none font-mono"
                 autoFocus
               />
             </div>
-            <Button
+            <button
               onClick={handleConfirm}
-              className="w-full h-11 rounded-xl text-sm font-medium shadow-md hover:shadow-lg transition-all active:scale-[0.98]">
-              Open Workspace
-            </Button>
+              className="h-15 w-15 bg-primary text-background outline-none border-none rounded-xl text-sm font-medium shadow-md hover:shadow-lg cursor-pointer transition-all active:scale-[0.98] flex items-center justify-center">
+              <ArrowRight className="size-5" />
+            </button>
           </div>
 
-          {dirSessions.length > 0 && (
+          {dirSessions.length <= 0 ? (
+            <div className="flex items-center gap-2 px-1">
+              <MessageSquare className="size-3.5 text-muted-foreground" />
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                No Previous Chats in this Directory
+              </span>
+            </div>
+          ) : (
             <div className="space-y-3 animate-in fade-in duration-500 delay-150">
               <div className="flex items-center gap-2 px-1">
                 <MessageSquare className="size-3.5 text-muted-foreground" />
@@ -93,8 +84,7 @@ export default function HomePage() {
                   <div
                     key={session.id}
                     className="group flex items-center gap-3 p-3 rounded-xl bg-card border hover:border-primary/30 hover:bg-accent/30 transition-all cursor-pointer"
-                    onClick={() => handleResumeSession(session.id)}
-                  >
+                    onClick={() => handleResumeSession(session.id)}>
                     <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                       <MessageSquare className="size-4 text-primary/70" />
                     </div>
@@ -103,7 +93,11 @@ export default function HomePage() {
                         {session.name}
                       </div>
                       <div className="text-[10px] text-muted-foreground">
-                        {new Date(session.updatedAt).toLocaleDateString()} at {new Date(session.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(session.updatedAt).toLocaleDateString()} at{" "}
+                        {new Date(session.updatedAt).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </div>
                     </div>
                     <Button
@@ -113,12 +107,22 @@ export default function HomePage() {
                       onClick={(e) => {
                         e.stopPropagation();
                         deleteSession(session.id);
-                      }}
-                    >
+                      }}>
                       <Trash2 className="size-4" />
                     </Button>
                   </div>
                 ))}
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => deleteSessionsForPath(tempPath)}
+                >
+                  Clear directory history
+                </Button>
               </div>
             </div>
           )}

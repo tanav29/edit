@@ -5,17 +5,18 @@ import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
 } from "ai";
-import { useEffect, useRef, useState, useMemo } from "react";
+import type { UIMessage } from "ai";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   ArrowUp,
   Folder,
-  Sparkles,
   PanelLeft,
   PanelRight,
   Plus,
   Square,
+  Code,
 } from "lucide-react";
 import { FileTree } from "@/components/file-tree";
 import { EditsPanel, type EditInfo } from "@/components/edits-panel";
@@ -34,9 +35,9 @@ export default function ChatPage() {
     currentSession,
     createSession,
     selectSession,
-    addMessage,
-    clearCurrentSession,
-    setMessagesForSession
+    setMessagesForSession,
+    saveSessionPayload,
+    isGenUIEnabled,
   } = useChatStore();
 
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
@@ -46,6 +47,12 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastSyncedSessionIdRef = useRef<string | null>(null);
+  const lastSyncedSignatureRef = useRef<string>("");
+  const pendingSignatureRef = useRef<string>("");
+  const pendingMessagesRef = useRef<
+    { id: string; role: "user" | "assistant"; content: string; timestamp: number }[]
+  >([]);
 
   // Initialize session if not already set or if it's a new path
   useEffect(() => {
@@ -55,7 +62,7 @@ export default function ChatPage() {
       }
     } else if (path && (!currentSession || currentSession.path !== path)) {
       // Check if we already have a session for this path that we should select
-      const existingSession = sessions.find(s => s.path === path);
+      const existingSession = sessions.find((s) => s.path === path);
       if (existingSession) {
         selectSession(existingSession.id);
       } else {
@@ -64,33 +71,81 @@ export default function ChatPage() {
     }
   }, [path, sessionId, sessions]);
 
-  const { messages, setMessages, sendMessage, status, addToolApprovalResponse, stop } =
-    useChat({
-      transport: new DefaultChatTransport({
-        api: "/api/chat",
-        body: {
-          path: path,
-        },
-      }),
-      sendAutomaticallyWhen:
-        lastAssistantMessageIsCompleteWithApprovalResponses,
-    });
+  const {
+    messages,
+    setMessages,
+    sendMessage,
+    status,
+    addToolApprovalResponse,
+    stop,
+  } = useChat({
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      body: {
+        path: path,
+        genUI: isGenUIEnabled,
+      },
+    }),
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+  });
 
   const isActive = status === "streaming" || status === "submitted";
 
   // Sync current session messages to useChat state on load
   useEffect(() => {
-    if (currentSession && messages.length === 0 && currentSession.messages.length > 0) {
-      setMessages(currentSession.messages.map(m => ({
-        id: m.id,
-        role: m.role,
-        parts: [{ type: 'text', text: m.content }],
-        createdAt: new Date(m.timestamp)
-      })));
+    if (!currentSession) return;
+
+    // If the user navigates to a different session, replace the UI messages.
+    if (lastSyncedSessionIdRef.current !== currentSession.id) {
+      lastSyncedSessionIdRef.current = currentSession.id;
+      const storedSignature = JSON.stringify(
+        currentSession.messages.map((m) => [m.id, m.role, m.content]),
+      );
+      lastSyncedSignatureRef.current = storedSignature;
+      pendingSignatureRef.current = storedSignature;
+      pendingMessagesRef.current = currentSession.messages;
+
+      setMessages(
+        currentSession.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          parts: [{ type: "text", text: m.content }],
+          createdAt: new Date(m.timestamp),
+        })) as UIMessage[],
+      );
     }
-  }, [currentSession?.id]);
+  }, [currentSession?.id, setMessages]);
+
+  useEffect(() => {
+    if (!currentSession) return;
+    if (isActive) return;
+
+    const signature = pendingSignatureRef.current;
+    if (!signature || signature === lastSyncedSignatureRef.current) return;
+    lastSyncedSignatureRef.current = signature;
+    setMessagesForSession(currentSession.id, pendingMessagesRef.current);
+  }, [isActive, currentSession?.id, setMessagesForSession]);
 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isSavingHistory, setIsSavingHistory] = useState(false);
+
+  const handleSaveHistory = async () => {
+    if (!currentSession || isActive || isSavingHistory) return;
+    setIsSavingHistory(true);
+    try {
+      const mapped = pendingMessagesRef.current;
+      const payload = {
+        ...currentSession,
+        messages: mapped,
+        updatedAt: Date.now(),
+      };
+      await saveSessionPayload(payload);
+    } catch (e) {
+      console.error("Failed to save history", e);
+    } finally {
+      setIsSavingHistory(false);
+    }
+  };
 
   const handleManualSync = async () => {
     if (!currentSession?.sessionKey || isSyncing) return;
@@ -98,15 +153,19 @@ export default function ChatPage() {
     try {
       const res = await fetch(`/api/history?key=${currentSession.sessionKey}`);
       if (res.ok) {
-        const remoteSession = await res.json();
+        const remoteSession: { messages: { id: string; role: "user" | "assistant"; content: string; timestamp: number }[] } =
+          await res.json();
+
         setMessagesForSession(currentSession.id, remoteSession.messages);
-        setMessages(remoteSession.messages.map((m: any) => ({
-          id: m.id,
-          role: m.role,
-          parts: [{ type: 'text', text: m.content }],
-          createdAt: new Date(m.timestamp)
-        })));
-        window.dispatchEvent(new CustomEvent('remote-update'));
+        setMessages(
+          (remoteSession.messages || []).map((m) => ({
+            id: m.id,
+            role: m.role,
+            parts: [{ type: "text", text: m.content }],
+            createdAt: new Date(m.timestamp),
+          })) as UIMessage[],
+        );
+        window.dispatchEvent(new CustomEvent("remote-update"));
       }
     } catch (err) {
       console.error("Manual sync failed", err);
@@ -115,54 +174,61 @@ export default function ChatPage() {
     }
   };
 
+  // Track latest messages, but only persist after streaming finishes.
   useEffect(() => {
-    if (messages.length > 0 && currentSession) {
-      const lastMessage = messages[messages.length - 1];
-      if (lastMessage.role === "user") {
-        addMessage({
-          id: `msg-${Date.now()}`,
-          role: "user",
-          content: lastMessage.parts
-            .filter((p: any) => p.type === "text")
-            .map((p: any) => p.text)
-            .join(""),
-          timestamp: Date.now(),
-        });
-      } else if (lastMessage.role === "assistant") {
-        const textContent = lastMessage.parts
-          .filter((p: any) => p.type === "text")
-          .map((p: any) => p.text)
+    if (!currentSession) return;
+
+    const mapped = messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m: UIMessage, idx: number) => {
+        const text = (m.parts || [])
+          .filter((p) => p.type === "text")
+          .map((p) => (p.type === "text" ? p.text : ""))
           .join("");
-        if (textContent) {
-          addMessage({
-            id: `msg-${Date.now()}`,
-            role: "assistant",
-            content: textContent,
-            timestamp: Date.now(),
-          });
-        }
-      }
-    }
-  }, [messages]);
+
+        const createdAt = (m as UIMessage & { createdAt?: Date }).createdAt;
+        const timestamp = createdAt instanceof Date ? createdAt.getTime() : Date.now();
+
+        return {
+          id: typeof m.id === "string" ? m.id : `msg-${currentSession.id}-${idx}`,
+          role: m.role as "user" | "assistant",
+          content: text,
+          timestamp,
+        };
+      });
+
+    const signature = JSON.stringify(mapped.map((m) => [m.id, m.role, m.content]));
+    pendingSignatureRef.current = signature;
+    pendingMessagesRef.current = mapped;
+  }, [messages, currentSession?.id]);
+
+  // NOTE: History is only persisted when the user clicks Save.
 
   useEffect(() => {
     const seenIds = new Set(edits.map((e) => e.id));
     const newEdits: EditInfo[] = [];
     messages.forEach((message) => {
       if (message.role === "assistant") {
-        message.parts.forEach((part: any) => {
-          if (part.type === "tool-write" && part.state === "output-available") {
-            const toolCallId =
-              part.toolCallId || `${Date.now()}-${Math.random()}`;
-            if (seenIds.has(toolCallId)) return;
+          message.parts.forEach((part: unknown) => {
+            const p = part as {
+              type?: string
+              state?: string
+              toolCallId?: string
+              input?: unknown
+              output?: unknown
+            }
 
-            const input = part.input as { filePath?: string } | undefined;
-            const output = part.output as
-              | {
-                  filePath?: string;
-                  action?: string;
-                }
-              | undefined;
+            if (p.type === "tool-write" && p.state === "output-available") {
+              const toolCallId = p.toolCallId || `${Date.now()}-${Math.random()}`;
+              if (seenIds.has(toolCallId)) return;
+
+              const input = p.input as { filePath?: string } | undefined;
+              const output = p.output as
+                | {
+                    filePath?: string;
+                    action?: string;
+                  }
+                | undefined;
 
             const filePath = output?.filePath || input?.filePath;
             if (filePath) {
@@ -258,7 +324,9 @@ export default function ChatPage() {
               className="w-full flex items-center gap-2 p-2 rounded-md hover:bg-accent/50 text-left text-xs text-muted-foreground group">
               <Folder className="size-3.5" />
               <span className="truncate flex-1">{getProjectName(path)}</span>
-              <div className="text-[10px] opacity-0 group-hover:opacity-100 bg-accent px-1.5 py-0.5 rounded transition-opacity">Change</div>
+              <div className="text-[10px] opacity-0 group-hover:opacity-100 bg-accent px-1.5 py-0.5 rounded transition-opacity">
+                Change
+              </div>
             </button>
           </div>
         </div>
@@ -296,7 +364,9 @@ export default function ChatPage() {
           )}
         </div>
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 relative">
+        <div
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto px-4 py-6 relative">
           {selectedFile && (
             <div className="absolute inset-0 z-20 p-4 bg-background/95 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
               <FileViewer
@@ -309,19 +379,14 @@ export default function ChatPage() {
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-4 animate-fade-in">
               <div className="relative">
-                <div className="absolute inset-0 bg-primary/20 rounded-2xl blur-xl" />
-                <div className="relative bg-card border border-border/60 rounded-2xl p-4">
-                  <Sparkles className="size-8 text-primary" />
+                <div className="relative bg-card border border-border/60 rounded-2xl p-6">
+                  <Code className="size-6 text-primary" />
                 </div>
               </div>
               <div className="text-center space-y-1.5">
                 <h1 className="text-lg font-semibold tracking-tight">
-                  What can I help with?
+                  What would you code today?
                 </h1>
-                <p className="text-sm text-muted-foreground/70 max-w-xs">
-                  Ask me anything. I can run commands, read and write files, and help
-                  you think through problems.
-                </p>
               </div>
             </div>
           ) : (
@@ -357,6 +422,7 @@ export default function ChatPage() {
                           <MessageUI
                             parts={message.parts}
                             addToolApprovalResponse={addToolApprovalResponse}
+                            onFileClick={setSelectedFile}
                           />
                         </div>
                       </div>
@@ -432,6 +498,9 @@ export default function ChatPage() {
               onEditClick={(edit: EditInfo) => setSelectedFile(edit.path)}
               onSync={handleManualSync}
               isSyncing={isSyncing}
+              onSaveHistory={handleSaveHistory}
+              isSavingHistory={isSavingHistory}
+              canSaveHistory={Boolean(currentSession) && !isActive}
             />
           </div>
         </div>

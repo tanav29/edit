@@ -11,15 +11,6 @@ import {
   type UIMessage,
 } from "ai";
 import { ollama } from "ollama-ai-provider-v2";
-import * as fs from "fs";
-import * as path from "path";
-
-const HISTORY_DIR = path.join(process.env.HOME || "/home/thetanav", ".edit", "history");
-
-function getHistoryFilePath(sessionPath: string): string {
-  const sanitized = sessionPath.replace(/[^a-zA-Z0-9]/g, "_");
-  return path.join(HISTORY_DIR, `${sanitized}.json`);
-}
 
 export async function POST(req: Request) {
   const { messages, path: workspacePath }: { messages: UIMessage[]; path: string } =

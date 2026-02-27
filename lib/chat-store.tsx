@@ -32,6 +32,8 @@ interface ChatStoreContextType {
   createSession: (path: string, name?: string) => ChatSession;
   selectSession: (id: string) => void;
   deleteSession: (id: string) => void;
+  deleteSessionsForPath: (path: string) => void;
+  saveSessionPayload: (session: ChatSession) => Promise<void>;
   addMessage: (message: ChatMessage) => void;
   clearCurrentSession: () => void;
   isGenUIEnabled: boolean;
@@ -45,8 +47,24 @@ const ChatStoreContext = createContext<ChatStoreContextType | null>(null);
 export function ChatStoreProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [isGenUIEnabled, setIsGenUIEnabled] = useState(true);
+  const [isGenUIEnabled, setIsGenUIEnabled] = useState(false);
+
+  // Helper to save a session to the backend
+  const saveSession = async (session: ChatSession) => {
+    try {
+      await fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(session),
+      });
+    } catch (error) {
+      console.error("Failed to save session:", error);
+    }
+  };
+
+  async function saveSessionPayload(session: ChatSession) {
+    await saveSession(session);
+  }
 
   useEffect(() => {
     async function loadSessions() {
@@ -61,8 +79,6 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         console.error("Failed to load sessions:", error);
-      } finally {
-        setLoaded(true);
       }
     }
     loadSessions();
@@ -70,23 +86,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
     const handleRemoteUpdate = () => loadSessions();
     window.addEventListener('remote-update', handleRemoteUpdate);
     return () => window.removeEventListener('remote-update', handleRemoteUpdate);
-  }, [currentSessionId]);
-
-  useEffect(() => {
-    if (!loaded) return;
-
-    const currentSession = sessions.find((s) => s.id === currentSessionId);
-    if (currentSession && currentSession.messages.length > 0) {
-      const timeoutId = setTimeout(() => {
-        fetch("/api/history", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(currentSession),
-        }).catch(console.error);
-      }, 5000);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [sessions, currentSessionId, loaded]);
+  }, []);
 
   const currentSession =
     sessions.find((s) => s.id === currentSessionId) || null;
@@ -153,12 +153,28 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
       fetch("/api/history", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionPath: session.path }),
+        body: JSON.stringify({ sessionPath: session.path, sessionId: session.id }),
       }).catch(console.error);
     }
     setSessions((prev) => prev.filter((s) => s.id !== id));
     if (currentSessionId === id) {
       const remaining = sessions.filter((s) => s.id !== id);
+      setCurrentSessionId(remaining.length > 0 ? remaining[0].id : null);
+    }
+  }
+
+  function deleteSessionsForPath(sessionPath: string) {
+    const toDelete = sessions.filter((s) => s.path === sessionPath);
+
+    fetch("/api/history", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionPath }),
+    }).catch(console.error);
+
+    setSessions((prev) => prev.filter((s) => s.path !== sessionPath));
+    if (currentSessionId && toDelete.some((s) => s.id === currentSessionId)) {
+      const remaining = sessions.filter((s) => s.path !== sessionPath);
       setCurrentSessionId(remaining.length > 0 ? remaining[0].id : null);
     }
   }
@@ -205,6 +221,8 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         createSession,
         selectSession,
         deleteSession,
+        deleteSessionsForPath,
+        saveSessionPayload,
         addMessage,
         clearCurrentSession,
         isGenUIEnabled,

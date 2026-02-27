@@ -2,7 +2,7 @@
 
 import { QRCodeSVG } from "qrcode.react"
 import { Monitor, Smartphone, Copy, Check, Globe, RefreshCw } from "lucide-react"
-import { useState, useEffect } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import { Switch } from "@/components/ui/switch"
 import { useChatStore } from "@/lib/chat-store"
 import { Button } from "@/components/ui/button"
@@ -21,7 +21,7 @@ export function RemoteToggle({ onSync, isSyncing }: { onSync?: () => void, isSyn
 
   if (!currentSession) return null
 
-  const remoteUrl = `http://${host}/k/${currentSession.sessionKey}`
+  const remoteUrl = useMemo(() => `http://${host}/k/${currentSession.sessionKey}`, [host, currentSession.sessionKey]);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(remoteUrl)
@@ -29,8 +29,14 @@ export function RemoteToggle({ onSync, isSyncing }: { onSync?: () => void, isSyn
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const qrCode = useMemo(() => (
+    <div className="flex justify-center p-2 bg-white rounded-lg border border-border">
+      <QRCodeSVG value={remoteUrl} size={100} />
+    </div>
+  ), [remoteUrl]);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 will-change-transform">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Globe className="size-3.5 text-muted-foreground" />
@@ -69,10 +75,8 @@ export function RemoteToggle({ onSync, isSyncing }: { onSync?: () => void, isSyn
       </div>
 
       {currentSession.isRemoteEnabled && (
-        <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
-          <div className="flex justify-center p-2 bg-white rounded-lg border border-border">
-            <QRCodeSVG value={remoteUrl} size={100} />
-          </div>
+        <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300 fill-mode-forwards">
+          {qrCode}
           
           <div className="space-y-1.5">
             <div className="text-[10px] text-muted-foreground text-center">

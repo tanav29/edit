@@ -22,6 +22,9 @@ interface EditsPanelProps {
   onEditClick: (edit: EditInfo) => void
   onSync?: () => void
   isSyncing?: boolean
+  onSaveHistory?: () => void
+  isSavingHistory?: boolean
+  canSaveHistory?: boolean
 }
 
 export function EditsPanel({
@@ -31,6 +34,9 @@ export function EditsPanel({
   onEditClick,
   onSync,
   isSyncing,
+  onSaveHistory,
+  isSavingHistory,
+  canSaveHistory,
 }: EditsPanelProps) {
   const { isGenUIEnabled, setIsGenUIEnabled, currentSession } = useChatStore()
   const [activeTab, setActiveTab] = useState<"ai" | "history" | "remote">("ai")
@@ -114,11 +120,30 @@ export function EditsPanel({
             <RemoteToggle onSync={onSync} isSyncing={isSyncing} />
           ) : (
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
                 <Clock className="size-3.5 text-muted-foreground" />
                 <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Edit History
                 </span>
+                </div>
+
+                {onSaveHistory && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-[10px] uppercase tracking-wider"
+                    disabled={!canSaveHistory || isSavingHistory}
+                    onClick={onSaveHistory}
+                    title={
+                      !canSaveHistory
+                        ? "Stop streaming to save"
+                        : "Save chat history to disk"
+                    }
+                  >
+                    {isSavingHistory ? "Saving..." : "Save"}
+                  </Button>
+                )}
               </div>
 
               {edits.length === 0 ? (

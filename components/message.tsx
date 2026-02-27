@@ -1,5 +1,6 @@
 "use client";
 
+import React, { useMemo } from "react";
 import { registry } from "@/lib/registry";
 import {
   ActionProvider,
@@ -48,15 +49,93 @@ import { useChatStore } from "@/lib/chat-store";
 export default function MessageUI({
   parts,
   addToolApprovalResponse,
+  onFileClick,
 }: {
   parts: any[];
   addToolApprovalResponse: (response: {
     id: string;
     approved: boolean;
   }) => void;
+  onFileClick?: (path: string) => void;
 }) {
   const { isGenUIEnabled } = useChatStore();
   const { spec, text, hasSpec } = useJsonRenderMessage(parts);
+
+  const renderedParts = useMemo(() => {
+    return parts.map((part, partIndex) => {
+      const key =
+        "toolCallId" in part && part.toolCallId ? part.toolCallId : partIndex;
+
+      switch (part.type) {
+        case "text":
+          return (
+            <div key={key} className="text-sm">
+              <Streamdown
+                className="chat-markdown"
+                mode="static"
+                plugins={{ code, mermaid, math, cjk }}
+                shikiTheme={["github-light", "github-dark"]}
+                mermaid={{ config: { theme: "dark" } }}
+                isAnimating={part.state === "streaming"}>
+                {part.text}
+              </Streamdown>
+            </div>
+          );
+
+        case "reasoning":
+          return (
+            <div
+              key={key}
+              className="flex items-center gap-2 text-xs text-muted-foreground/90 py-1">
+              {part.state === "streaming" ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <Brain className="size-3" />
+              )}
+              <span>Thinking</span>
+            </div>
+          );
+
+        case "source-document":
+          return (
+            <div
+              key={key}
+              className="inline-flex items-center gap-1.5 text-xs bg-card border border-border/50 rounded-md px-2 py-1 text-muted-foreground">
+              <File className="size-3" />
+              <span className="font-mono">{part.filename}</span>
+            </div>
+          );
+
+        case "source-url":
+          return (
+            <a
+              key={key}
+              href={part.url}
+              className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
+              target="_blank"
+              rel="noopener noreferrer">
+              <Link className="size-3" />
+              <span className="underline underline-offset-2">
+                {part.title}
+              </span>
+            </a>
+          );
+
+        default:
+          if (part.type.startsWith("tool-")) {
+            return (
+              <ToolPart
+                key={key}
+                part={part as ToolUIPart}
+                addToolApprovalResponse={addToolApprovalResponse}
+                onFileClick={onFileClick}
+              />
+            );
+          }
+          return null;
+      }
+    });
+  }, [parts, addToolApprovalResponse, onFileClick]);
 
   if (isGenUIEnabled && hasSpec && spec) {
     return (
@@ -79,78 +158,7 @@ export default function MessageUI({
 
   return (
     <>
-      {parts.map((part, partIndex) => {
-        const key =
-          "toolCallId" in part && part.toolCallId ? part.toolCallId : partIndex;
-
-        switch (part.type) {
-          case "text":
-            return (
-              <div key={key} className="text-sm">
-                <Streamdown
-                  className="chat-markdown"
-                  mode="static"
-                  plugins={{ code, mermaid, math, cjk }}
-                  shikiTheme={["github-light", "github-dark"]}
-                  mermaid={{ config: { theme: "dark" } }}
-                  isAnimating={part.state === "streaming"}>
-                  {part.text}
-                </Streamdown>
-              </div>
-            );
-
-          case "reasoning":
-            return (
-              <div
-                key={key}
-                className="flex items-center gap-2 text-xs text-muted-foreground/90 py-1">
-                {part.state === "streaming" ? (
-                  <Loader2 className="size-3 animate-spin" />
-                ) : (
-                  <Brain className="size-3" />
-                )}
-                <span>Thinking</span>
-              </div>
-            );
-
-          case "source-document":
-            return (
-              <div
-                key={key}
-                className="inline-flex items-center gap-1.5 text-xs bg-card border border-border/50 rounded-md px-2 py-1 text-muted-foreground">
-                <File className="size-3" />
-                <span className="font-mono">{part.filename}</span>
-              </div>
-            );
-
-          case "source-url":
-            return (
-              <a
-                key={key}
-                href={part.url}
-                className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
-                target="_blank"
-                rel="noopener noreferrer">
-                <Link className="size-3" />
-                <span className="underline underline-offset-2">
-                  {part.title}
-                </span>
-              </a>
-            );
-
-          default:
-            if (part.type.startsWith("tool-")) {
-              return (
-                <ToolPart
-                  key={key}
-                  part={part as ToolUIPart}
-                  addToolApprovalResponse={addToolApprovalResponse}
-                />
-              );
-            }
-            return null;
-        }
-      })}
+      {renderedParts}
     </>
   );
 }
@@ -158,14 +166,20 @@ export default function MessageUI({
 function ToolPart({
   part,
   addToolApprovalResponse,
+  onFileClick,
 }: {
   part: ToolUIPart;
   addToolApprovalResponse: (response: {
     id: string;
     approved: boolean;
   }) => void;
+  onFileClick?: (path: string) => void;
 }) {
   const toolName = part.type.replace("tool-", "");
+
+  const toolOutput = useMemo(() => (
+    <ToolOutput toolName={toolName} output={part.output} />
+  ), [toolName, part.output]);
 
   if (part.state === "approval-requested") {
     return (
@@ -230,7 +244,14 @@ function ToolPart({
 
   return (
     <details>
-      <summary className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90 select-none cursor-pointer">
+      <summary 
+        onClick={(e) => {
+          const input = part.input as any;
+          if (input?.filePath && onFileClick) {
+            onFileClick(input.filePath);
+          }
+        }}
+        className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90 select-none cursor-pointer">
         {part.state == "output-available" ||
         part.state == "output-denied" ||
         part.state == "approval-responded" ||
@@ -316,19 +337,19 @@ function ToolPart({
         })()}
       </summary>
       <div className="text-xs max-h-72 overflow-y-auto overflow-x-hidden wrap-break-word animate-fade-in mt-2">
-        <ToolOutput toolName={toolName} output={part.output} />
+        {toolOutput}
       </div>
     </details>
   );
 }
 
-function ToolOutput({
+const ToolOutput = React.memo(({
   toolName,
   output,
 }: {
   toolName: string;
   output: unknown;
-}) {
+}) => {
   if (!output) return null;
 
   const data = output as Record<string, unknown>;
@@ -342,27 +363,7 @@ function ToolOutput({
   }
 
   if (toolName === "read" && data.content) {
-    return (
-      <div className="space-y-2 tool-card rounded-lg p-3.5">
-        <div className="flex items-center gap-3 text-muted-foreground/70 text-[10px] pb-1 border-b border-border/30">
-          <span>{String(data.filePath)}</span>
-          <span>
-            {String(data.range)} of {String(data.totalLines)} lines
-          </span>
-          {data.size != null && (
-            <span>{formatFileSize(Number(data.size))}</span>
-          )}
-        </div>
-        <pre className="font-mono text-foreground/90 whitespace-pre-wrap leading-relaxed">
-          {String(data.content)}
-        </pre>
-        {data.hint != null && (
-          <div className="text-muted-foreground/60 text-[10px] pt-1 border-t border-border/30 italic">
-            {String(data.hint)}
-          </div>
-        )}
-      </div>
-    );
+    return null;
   }
 
   if (toolName === "write") {
@@ -447,7 +448,7 @@ function ToolOutput({
       {JSON.stringify(output, null, 2)}
     </pre>
   );
-}
+});
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;

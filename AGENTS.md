@@ -1,108 +1,98 @@
 # AGENTS.md - Development Guidelines for AI Coding Agents
 
-This file contains essential guidelines for AI coding agents working on this Bun-based CLI application.
+This file contains essential guidelines for AI coding agents working on this Next.js-based AI coding assistant application.
+
+## Project Overview
+
+This is a **Next.js 16** application (App Router) that provides an AI-powered coding assistant with:
+- File tree navigation and viewing
+- AI chat interface with tool execution (read, write, glob, bash)
+- Session management with local and remote sync
+- JSON-Render based UI rendering
+
+## Technology Stack
+
+- **Runtime**: Bun
+- **Framework**: Next.js 16.1.6 (App Router)
+- **UI**: React 19.2.4, Tailwind CSS 4, shadcn/ui, radix-ui
+- **AI**: @ai-sdk/react 3.0.88, ai package 6.0.86
+- **Rendering**: @json-render/core 0.8.0, @json-render/react 0.8.0, @json-render/shadcn 0.8.0
+- **Animation**: motion 12.34.0 (Framer Motion)
+- **Icons**: lucide-react 0.575.0
+- **Code Editor**: @monaco-editor/react 4.7.0
 
 ## Build, Lint, and Test Commands
 
 ### Running the Application
 ```bash
 # Start the development server
-bun run start
-# or directly
-bun run src/index.ts
+bun run dev
 
-# Run with hot reload (if needed)
-bun --hot src/index.ts
+# Build for production
+bun run build
+
+# Start production server
+bun run start
+
+# Run linting
+bun run lint
 ```
 
 ### Testing
 ```bash
-# Run all tests
+# Run tests (if configured)
 bun test
 
 # Run a specific test file
 bun test src/path/to/test.test.ts
-
-# Run tests in watch mode
-bun test --watch
-
-# Run tests with coverage
-bun test --coverage
-```
-
-### Linting and Type Checking
-```bash
-# TypeScript type checking
-bun run tsc --noEmit
-
-# If ESLint is added later, use:
-bun run lint
-bun run lint:fix
-```
-
-### Building
-```bash
-# Build for production (if build script is added)
-bun run build
-
-# Create executable
-bun build --compile src/index.ts --outfile edit
 ```
 
 ## Code Style Guidelines
 
 ### TypeScript Configuration
-- **Strict mode**: Always enabled (`"strict": true`)
-- **Module resolution**: Use bundler resolution
-- **JSX**: Use React JSX transform (`"jsx": "react-jsx"`)
-- **Module type**: ES modules (`"type": "module"`)
+- **Strict mode**: Always enabled
+- **Module resolution**: Bundler resolution
+- **JSX**: React JSX transform
+- **Module type**: ES modules
 
 ### Import Conventions
 ```typescript
 // External dependencies first
 import React from "react"
-import { Box, Text } from "ink"
-import { tool } from "ai"
-import z from "zod"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Card, Stack, Heading, Input } from "@/components/ui/card"
 
-// Local imports with .js extensions (even for .ts files)
-import type { Message } from '../types.js'
-import { useChat } from '../hooks/useChat.js'
-
-// Group imports logically:
-// 1. React/React-related
-// 2. External libraries
-// 3. Local types/interfaces
-// 4. Local utilities/hooks
-// 5. Local components
+// Local imports
+import { useChatStore } from "@/lib/chat-store"
+import { createTools, DEFAULT_IGNORE_PATTERNS } from "@/lib/tool"
+import { catalog } from "@/lib/catalog"
 ```
 
 ### Naming Conventions
-- **Files**: PascalCase for components (`MessageList.tsx`), camelCase for utilities (`useChat.ts`)
-- **Components**: PascalCase (`MessageInput`, `ToolExecutionDisplay`)
-- **Functions/Hooks**: camelCase (`useChat`, `sendMessage`)
-- **Types/Interfaces**: PascalCase (`Message`, `ChatState`)
-- **Constants**: UPPER_SNAKE_CASE for exported constants
-- **Variables**: camelCase, descriptive names
+- **Files**: PascalCase for components (`ChatPage.tsx`), camelCase for utilities (`chat-store.tsx`)
+- **Components**: PascalCase (`FileTree`, `EditsPanel`)
+- **Functions/Hooks**: camelCase (`useChatStore`, `createTools`)
+- **Types/Interfaces**: PascalCase (`Message`, `ChatSession`)
 
-### Component Structure
+### Component Structure (Next.js App Router)
 ```typescript
-import React from "react"
-import { Box, Text } from "ink"
-import type { Message } from '../../types.js'
+"use client"
 
-type ComponentNameProps = {
-  requiredProp: string
-  optionalProp?: number
-}
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 
-export function ComponentName({ requiredProp, optionalProp }: ComponentNameProps) {
-  // Component logic here
+export default function PageName() {
+  const router = useRouter()
+  const [state, setState] = useState<string>("")
 
   return (
-    <Box>
-      <Text>{requiredProp}</Text>
-    </Box>
+    <div>
+      <Component />
+    </div>
   )
 }
 ```
@@ -110,165 +100,142 @@ export function ComponentName({ requiredProp, optionalProp }: ComponentNameProps
 ### TypeScript Types
 - Use interfaces for object shapes
 - Use type aliases for unions and primitives
-- Prefer `type` over `interface` for API responses and complex types
 - Always type function parameters and return values
-- Use `unknown` over `any` when type is uncertain
 
 ```typescript
 // Good
-export type Message = {
+export interface ChatMessage {
+  id: string
   role: "user" | "assistant"
   content: string
-  toolExecution?: ToolExecution
+  timestamp: number
 }
 
-// Prefer interfaces for component props
-interface MessageListProps {
-  messages: Message[]
-  isLoading: boolean
+export type EditInfo = {
+  id: string
+  path: string
+  type: "create" | "modify" | "delete"
+  timestamp: Date
 }
 ```
 
 ### Error Handling
 - Use try/catch blocks for async operations
 - Provide meaningful error messages
-- Log errors appropriately for debugging
 - Handle loading states in UI components
-
-```typescript
-try {
-  const result = await someAsyncOperation()
-  return result
-} catch (error) {
-  console.error(`Operation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-  throw error
-}
-```
-
-### Async/Await Patterns
-- Use async/await over Promise chains
-- Use `for await...of` for streaming operations
-- Handle cleanup in finally blocks
-- Use `useCallback` for async functions in React hooks
+- Use console.error for logging errors
 
 ### State Management
 - Use React hooks for local component state
+- Use the Zustand-like store pattern in `lib/chat-store.tsx`
 - Prefer `useState` with functional updates for complex state
-- Use `useCallback` to prevent unnecessary re-renders
-- Keep state as close to where it's used as possible
 
 ### AI Integration Guidelines
-- Use the `ai` library for AI interactions
+- Use the `ai` package for AI interactions
+- Use `@ai-sdk/react` for React integration with `useChat` hook
 - Define tools using the `tool()` function with Zod schemas
 - Handle streaming responses with async generators
-- Include tool execution markers in responses: `[TOOL_START:name]` and `[TOOL_END:name]`
+- Tools available: `glob`, `read`, `write`, `bash`
 
-### AI Assistant Behavior
-- **Be Concise**: Answer directly with minimal text, use one-word answers when possible
-- **Use Tools Proactively**: Use tools immediately when needed - read files, write code, run commands without asking permission
-- **Ask When Confused**: If anything is unclear, ask the user one specific question instead of making assumptions
-- **Work Efficiently**: Complete tasks directly, chain tool calls when logical, focus on results not process explanation
+## Project Structure
 
-### Bun-Specific Guidelines
+```
+/app                    # Next.js App Router pages
+  /api                  # API routes
+    /chat               # Chat API (POST)
+    /files              # File operations API
+    /history            # Session history API
+  /chat                 # Chat page
+  /k/[key]              # Remote session page
+  layout.tsx            # Root layout
+  page.tsx              # Home page (project selector)
+  globals.css           # Global styles
 
-Default to using Bun instead of Node.js.
+/components             # React components
+  /ui                   # shadcn/ui components (Button, Card, Input, etc.)
+  /ai-elements          # AI-related UI components
+  file-tree.tsx         # File tree navigation
+  file-viewer.tsx       # File content viewer
+  edits-panel.tsx       # Edits tracking panel
+  message.tsx           # Chat message component
 
-- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
-- Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
-- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
-- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
-- Use `bunx <package> <command>` instead of `npx <package> <command>`
-- Bun automatically loads .env, so don't use dotenv.
+/lib                    # Utility libraries
+  catalog.ts            # JSON-Render catalog definition
+  chat-store.tsx        # Chat session state management
+  registry.ts           # Component registry
+  tool.ts               # AI tool definitions (glob, read, write, bash)
+  utils.ts              # General utilities
 
-### API Usage
-
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
-
-### Testing
-
-Use `bun test` to run tests.
-
-```typescript
-import { test, expect } from "bun:test";
-
-test("hello world", () => {
-  expect(1).toBe(1);
-});
+/public                 # Static assets
 ```
 
-### Frontend (if applicable)
+## API Routes
 
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
+### `/api/chat` (POST)
+- Handles AI chat requests
+- Passes `path` (workspace path) in request body
+- Returns streaming AI responses with tool executions
 
-Server:
+### `/api/files` (GET, POST)
+- GET: List files in a directory
+- POST: Read file content
+
+### `/api/history` (GET)
+- Fetches remote session history by session key
+
+## JSON-Render Integration
+
+This project uses `@json-render` for dynamic UI rendering. The catalog is defined in `lib/catalog.ts`:
 
 ```typescript
-import index from "./index.html"
+import { defineCatalog } from "@json-render/core"
+import { schema } from "@json-render/react/schema"
+import { shadcnComponentDefinitions } from "@json-render/shadcn/catalog"
 
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
+export const catalog = defineCatalog(schema, {
+  components: {
+    Card: shadcnComponentDefinitions.Card,
+    Stack: shadcnComponentDefinitions.Stack,
+    Heading: shadcnComponentDefinitions.Heading,
+    Button: shadcnComponentDefinitions.Button,
+    Input: shadcnComponentDefinitions.Input,
   },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
+  actions: {},
 })
 ```
 
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
+Available components: Card, Stack, Heading, Button, Input
 
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+## Bun-Specific Guidelines
 
-### Code Organization
-- Keep components in `src/ui/components/`
-- Put custom hooks in `src/hooks/`
-- Store types in `src/types.ts`
-- Keep AI logic in `src/ai.ts`
-- Define tools in `src/tools.ts`
-- Use index files for clean imports
+- Use `bun <file>` instead of `node <file>`
+- Use `bun run <script>` instead of `npm run <script>`
+- Use `bun install` for dependencies
+- Bun automatically loads .env files
 
-### Performance Considerations
-- Use `React.memo` for expensive components when necessary
-- Optimize re-renders with proper dependency arrays in hooks
-- Consider virtualization for long lists
-- Bundle analysis with `bun build --analyze`
+## Frontend Guidelines
 
-### Security Best Practices
-- Validate all inputs with Zod schemas
+### Tailwind CSS
+- Use Tailwind CSS 4 syntax
+- Follow shadcn/ui design patterns
+- Use `bg-card`, `bg-background`, `text-muted-foreground` etc. for theming
+
+### Component Library
+- Use shadcn/ui components from `@/components/ui/`
+- Available: Button, Card, Input, Switch
+- Customize via `components.json` and Tailwind
+
+### Animation
+- Use `motion` (Framer Motion) for animations
+- Use Tailwind `animate-` classes for simple animations
+
+## Security Best Practices
+- Validate all inputs
 - Sanitize AI-generated content before display
 - Never commit secrets or API keys
 - Use environment variables for configuration
-- Implement proper error boundaries
 
-### Git Workflow
+## Git Workflow
 - Write clear, concise commit messages
-- Use conventional commits when possible
 - Test before committing
 - Keep commits focused on single changes
-- Use feature branches for new functionality</content>
-<parameter name="filePath">/home/thetanav/Code/project/edit/AGENTS.md

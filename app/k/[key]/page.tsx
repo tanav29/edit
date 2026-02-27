@@ -5,6 +5,7 @@ import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
 } from "ai";
+import type { UIMessage } from "ai";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -104,13 +105,18 @@ function MobileChatView({ session }: { session: ChatSession }) {
     try {
       const res = await fetch(`/api/history?key=${session.sessionKey}`);
       if (res.ok) {
-        const remoteSession = await res.json();
-        setMessages(remoteSession.messages.map((m: any) => ({
-          id: m.id,
-          role: m.role,
-          parts: [{ type: 'text', text: m.content }],
-          createdAt: new Date(m.timestamp)
-        })));
+        const remoteSession: {
+          messages: { id: string; role: "user" | "assistant"; content: string; timestamp: number }[]
+        } = await res.json();
+
+        setMessages(
+          (remoteSession.messages || []).map((m) => ({
+            id: m.id,
+            role: m.role,
+            parts: [{ type: "text", text: m.content }],
+            createdAt: new Date(m.timestamp),
+          })) as UIMessage[],
+        );
       }
     } catch (e) {
       console.error("Sync failed", e);
@@ -122,12 +128,14 @@ function MobileChatView({ session }: { session: ChatSession }) {
   // Load initial messages
   useEffect(() => {
     if (session.messages.length > 0 && messages.length === 0) {
-      setMessages(session.messages.map(m => ({
-        id: m.id,
-        role: m.role,
-        parts: [{ type: 'text', text: m.content }],
-        createdAt: new Date(m.timestamp)
-      })));
+      setMessages(
+        session.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          parts: [{ type: "text", text: m.content }],
+          createdAt: new Date(m.timestamp),
+        })) as UIMessage[],
+      );
     }
   }, [session.id]);
 
@@ -195,9 +203,12 @@ function MobileChatView({ session }: { session: ChatSession }) {
               {message.role === "user" ? (
                 <div className="flex justify-end">
                   <div className="bg-primary text-primary-foreground rounded-2xl rounded-br-sm px-4 py-2 text-sm shadow-sm max-w-[85%]">
-                     {message.parts.filter(p => p.type === 'text').map((p: any) => p.text).join('')}
-                  </div>
-                </div>
+                     {message.parts
+                       .filter((p) => p.type === "text")
+                       .map((p) => (p.type === "text" ? p.text : ""))
+                       .join("")}
+                   </div>
+                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
                    <MessageUI

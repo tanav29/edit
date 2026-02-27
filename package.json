@@ -1,9 +1,9 @@
 {
-  "name": "web",
-  "version": "0.1.0",
+  "name": "edit",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
-    "dev": "bun --bun next dev -H 0.0.0.0",
+    "dev": "bun --bun next dev",
     "build": "bun --bun next build",
     "start": "bun --bun next start",
     "lint": "eslint"
