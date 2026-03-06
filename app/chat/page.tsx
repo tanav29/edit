@@ -18,6 +18,7 @@ import { EditsPanel, type EditInfo } from "@/components/edits-panel";
 import { useChatStore } from "@/lib/chat-store";
 import MessageUI from "@/components/message";
 import { FileViewer } from "@/components/file-viewer";
+import { restoreFileEdits, type RestoreFileEdit } from "@/lib/tauri-api";
 
 export default function ChatPage() {
   return (
@@ -122,6 +123,46 @@ function ChatPageInner() {
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSavingHistory, setIsSavingHistory] = useState(false);
+  const [restoringMessageId, setRestoringMessageId] = useState<string | null>(null);
+  const [restoreMessageStatus, setRestoreMessageStatus] = useState<Record<string, string>>({});
+
+  const getMessageFileEdits = (message: UIMessage): RestoreFileEdit[] => {
+    if (message.role !== "assistant") return [];
+
+    const editsInMessage: RestoreFileEdit[] = [];
+
+    message.parts.forEach((part: unknown) => {
+      const p = part as {
+        type?: string;
+        state?: string;
+        output?: unknown;
+      };
+
+      if (p.type !== "tool-write" || p.state !== "output-available") {
+        return;
+      }
+
+      const out = p.output as {
+        filePath?: unknown;
+        action?: unknown;
+        previousContent?: unknown;
+        existedBefore?: unknown;
+      } | undefined;
+
+      if (!out || typeof out.filePath !== "string") {
+        return;
+      }
+
+      editsInMessage.push({
+        filePath: out.filePath,
+        action: out.action === "created" ? "created" : "edited",
+        previousContent: typeof out.previousContent === "string" ? out.previousContent : undefined,
+        existedBefore: typeof out.existedBefore === "boolean" ? out.existedBefore : undefined,
+      });
+    });
+
+    return editsInMessage;
+  };
 
   const handleSaveHistory = async () => {
     if (!currentSession || isActive || isSavingHistory) return;
@@ -162,6 +203,39 @@ function ChatPageInner() {
       console.error("Manual sync failed", err);
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleRestoreMessageEdits = async (messageId: string, messageEdits: RestoreFileEdit[]) => {
+    if (messageEdits.length === 0 || restoringMessageId) return;
+
+    setRestoringMessageId(messageId);
+    setRestoreMessageStatus((prev) => {
+      const next = { ...prev };
+      delete next[messageId];
+      return next;
+    });
+
+    try {
+      const restoreOrder = [...messageEdits].reverse();
+      const result = await restoreFileEdits(path, restoreOrder);
+      const total = restoreOrder.length;
+      const restored = result.restored.length;
+      const errors = result.errors.length;
+
+      setRestoreMessageStatus((prev) => ({
+        ...prev,
+        [messageId]: errors > 0
+          ? `Restored ${restored}/${total} edits, ${errors} failed`
+          : `Restored ${restored} edit${restored === 1 ? "" : "s"}`,
+      }));
+    } catch (error) {
+      setRestoreMessageStatus((prev) => ({
+        ...prev,
+        [messageId]: `Restore failed: ${error instanceof Error ? error.message : String(error)}`,
+      }));
+    } finally {
+      setRestoringMessageId(null);
     }
   };
 
@@ -382,7 +456,7 @@ function ChatPageInner() {
             <div className="max-w-2xl mx-auto space-y-1">
               {messages.map((message, index) => (
                 <div
-                  key={index}
+                  key={message.id || index}
                   className="animate-message-in"
                   style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}>
                   {message.role === "user" ? (
@@ -408,6 +482,56 @@ function ChatPageInner() {
                     <div className="py-2">
                       <div className="flex items-start max-w-full">
                         <div className="min-w-0 flex-1 space-y-2">
+                          {(() => {
+                            const messageEdits = getMessageFileEdits(message);
+                            if (messageEdits.length === 0) return null;
+
+                            return (
+                              <div className="rounded-lg border border-border/60 bg-card/40 p-2.5 space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                                    {messageEdits.length} file edit{messageEdits.length === 1 ? "" : "s"}
+                                  </span>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 px-2 text-[10px] uppercase tracking-wider"
+                                    disabled={restoringMessageId !== null}
+                                    onClick={() => handleRestoreMessageEdits(message.id, messageEdits)}>
+                                    {restoringMessageId === message.id ? "Restoring..." : "Restore all"}
+                                  </Button>
+                                </div>
+
+                                <div className="space-y-1 max-h-28 overflow-y-auto">
+                                  {messageEdits.map((edit, i) => (
+                                    <button
+                                      key={`${message.id}-${edit.filePath}-${i}`}
+                                      onClick={() => setSelectedFile(edit.filePath)}
+                                      className="w-full text-left rounded-md border border-border/30 hover:bg-accent/40 px-2 py-1.5 flex items-center gap-2 transition-colors">
+                                      <span className="text-[10px] text-muted-foreground truncate flex-1">
+                                        {edit.filePath}
+                                      </span>
+                                      <span
+                                        className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                          edit.action === "created"
+                                            ? "bg-emerald-500/10 text-emerald-400"
+                                            : "bg-amber-500/10 text-amber-400"
+                                        }`}>
+                                        {edit.action === "created" ? "new" : "edit"}
+                                      </span>
+                                    </button>
+                                  ))}
+                                </div>
+
+                                {restoreMessageStatus[message.id] && (
+                                  <div className="text-[10px] text-muted-foreground">
+                                    {restoreMessageStatus[message.id]}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
                           <MessageUI
                             parts={message.parts}
                             addToolApprovalResponse={addToolApprovalResponse}

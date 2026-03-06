@@ -58,6 +58,27 @@ export async function deleteSession(sessionPath: string, sessionId?: string): Pr
   return invoke("delete_session", { sessionPath, sessionId: sessionId || null })
 }
 
+export interface RestoreFileEdit {
+  filePath: string
+  action: "created" | "edited"
+  previousContent?: string
+  existedBefore?: boolean
+}
+
+export interface RestoreEditsResult {
+  success: boolean
+  restored: string[]
+  skipped: string[]
+  errors: string[]
+}
+
+export async function restoreFileEdits(
+  workspacePath: string,
+  edits: RestoreFileEdit[]
+): Promise<RestoreEditsResult> {
+  return invoke("restore_file_edits", { workspacePath, edits })
+}
+
 // ── Tool Operations ──────────────────────────────────────────
 
 export async function globSearch(workspacePath: string, pattern: string) {

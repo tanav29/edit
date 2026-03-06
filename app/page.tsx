@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +17,23 @@ export default function HomePage() {
   const { sessions, deleteSession, deleteSessionsForPath, selectSession } = useChatStore();
 
   const dirSessions = sessions.filter((s) => s.path === tempPath);
+  const groupedHistory = useMemo(() => {
+    const groups = new Map<string, typeof sessions>();
+
+    sessions.forEach((session) => {
+      const existing = groups.get(session.path) || [];
+      existing.push(session);
+      groups.set(session.path, existing);
+    });
+
+    return Array.from(groups.entries())
+      .map(([path, items]) => ({
+        path,
+        items: [...items].sort((a, b) => b.updatedAt - a.updatedAt),
+        latestUpdatedAt: Math.max(...items.map((item) => item.updatedAt)),
+      }))
+      .sort((a, b) => b.latestUpdatedAt - a.latestUpdatedAt);
+  }, [sessions]);
 
   const handleConfirm = () => {
     // We could create a new session here or just navigate to chat with the path
@@ -126,6 +143,87 @@ export default function HomePage() {
               </div>
             </div>
           )}
+
+          <div className="space-y-3 animate-in fade-in duration-500 delay-200">
+            <div className="flex items-center gap-2 px-1">
+              <MessageSquare className="size-3.5 text-muted-foreground" />
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                Directory Grouped History
+              </span>
+            </div>
+
+            {groupedHistory.length === 0 ? (
+              <div className="text-xs text-muted-foreground px-1">
+                No chat history yet
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1 custom-scrollbar">
+                {groupedHistory.map((group) => {
+                  const projectName = group.path.split("/").filter(Boolean).pop() || group.path;
+
+                  return (
+                    <div
+                      key={group.path}
+                      className="rounded-xl border bg-card/70 p-2.5 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <button
+                          onClick={() => setTempPath(group.path)}
+                          className="min-w-0 text-left hover:opacity-80 transition-opacity">
+                          <div className="text-xs font-medium truncate">{projectName}</div>
+                          <div className="text-[10px] text-muted-foreground truncate">
+                            {group.path}
+                          </div>
+                        </button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-[10px] text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => deleteSessionsForPath(group.path)}>
+                          Clear
+                        </Button>
+                      </div>
+
+                      <div className="space-y-1">
+                        {group.items.slice(0, 4).map((session) => (
+                          <div
+                            key={session.id}
+                            className="group flex items-center gap-2 p-2 rounded-md hover:bg-accent/50 cursor-pointer transition-colors"
+                            onClick={() => handleResumeSession(session.id)}>
+                            <MessageSquare className="size-3 text-primary/70 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-xs truncate">{session.name}</div>
+                              <div className="text-[10px] text-muted-foreground">
+                                {new Date(session.updatedAt).toLocaleDateString()} {new Date(session.updatedAt).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all rounded-md shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteSession(session.id);
+                              }}>
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+
+                        {group.items.length > 4 && (
+                          <div className="text-[10px] text-muted-foreground px-2">
+                            +{group.items.length - 4} more session{group.items.length - 4 === 1 ? "" : "s"}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

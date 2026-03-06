@@ -16,6 +16,7 @@ pub fn run() {
             tool_read,
             tool_write,
             tool_bash,
+            restore_file_edits,
             send_chat_message,
             approve_tool_call,
             stop_chat,

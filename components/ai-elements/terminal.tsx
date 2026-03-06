@@ -1,9 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { createContext, useContext, useRef, useEffect, useState } from "react"
 import { Copy, RotateCcw, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import Ansi from "ansi-to-react"
+
+const TerminalContext = createContext<{ output: string }>({ output: "" })
 
 interface TerminalProps {
   autoScroll?: boolean
@@ -23,14 +26,16 @@ export function Terminal({
   className,
 }: TerminalProps) {
   return (
-    <div
-      className={cn(
-        "rounded-lg border bg-card text-card-foreground shadow-sm",
-        className
-      )}
-    >
-      {children}
-    </div>
+    <TerminalContext.Provider value={{ output }}>
+      <div
+        className={cn(
+          "rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden",
+          className
+        )}
+      >
+        {children}
+      </div>
+    </TerminalContext.Provider>
   )
 }
 
@@ -43,7 +48,7 @@ export function TerminalHeader({ children }: { children: React.ReactNode }) {
 }
 
 export function TerminalTitle({ children }: { children: React.ReactNode }) {
-  return <div className="text-xs font-mono text-muted-foreground">{children}</div>
+  return <div className="text-xs font-mono text-muted-foreground truncate">{children}</div>
 }
 
 export function TerminalActions({ children }: { children: React.ReactNode }) {
@@ -60,7 +65,25 @@ export function TerminalStatus() {
 }
 
 export function TerminalContent() {
-  return null
+  const { output } = useContext(TerminalContext)
+  const scrollRef = useRef<HTMLPreElement>(null)
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [output])
+
+  if (!output) return null
+
+  return (
+    <pre
+      ref={scrollRef}
+      className="px-3 py-2 text-xs font-mono leading-relaxed overflow-auto max-h-80 whitespace-pre-wrap break-all"
+    >
+      <Ansi>{output}</Ansi>
+    </pre>
+  )
 }
 
 export function TerminalClearButton({ onClick }: { onClick?: () => void }) {
@@ -77,9 +100,15 @@ export function TerminalClearButton({ onClick }: { onClick?: () => void }) {
 }
 
 export function TerminalCopyButton({ onCopy }: { onCopy?: () => void }) {
+  const { output } = useContext(TerminalContext)
   const [copied, setCopied] = useState(false)
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(output)
+    } catch {
+      // fallback: no-op
+    }
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
     onCopy?.()

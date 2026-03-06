@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Clock, FileCode, Folder, Bot, Sparkles, Globe } from "lucide-react"
+import { Clock, FileCode, Folder, Bot, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { useChatStore } from "@/lib/chat-store"

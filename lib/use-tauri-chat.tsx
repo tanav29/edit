@@ -63,6 +63,12 @@ export function useTauriChat({ workspacePath, model }: UseTauriChatOptions) {
 
       if (!userText.trim()) return
 
+      // Clean up previous listener if still active
+      if (unlistenRef.current) {
+        unlistenRef.current()
+        unlistenRef.current = null
+      }
+
       const chatId = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       chatIdRef.current = chatId
 
@@ -218,6 +224,11 @@ export function useTauriChat({ workspacePath, model }: UseTauriChatOptions) {
                 }
               }
               setStatus("idle")
+              // Clean up the listener when stream is complete
+              if (unlistenRef.current) {
+                unlistenRef.current()
+                unlistenRef.current = null
+              }
               break
             }
           }
@@ -235,6 +246,11 @@ export function useTauriChat({ workspacePath, model }: UseTauriChatOptions) {
         await sendChatMessage(ollamaMessages, workspacePath, chatId, model)
       } catch (err) {
         setStatus("idle")
+        // Clean up listener on send failure
+        if (unlistenRef.current) {
+          unlistenRef.current()
+          unlistenRef.current = null
+        }
         setMessages((prev) => {
           const updated = [...prev]
           const lastIdx = updated.length - 1

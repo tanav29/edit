@@ -507,13 +507,15 @@ pub async fn tool_write(
     }
 
     let existed = full_path.exists();
-    let previous_line_count = if existed {
-        fs::read_to_string(&full_path)
-            .map(|c| c.split('\n').count())
-            .unwrap_or(0)
+    let previous_content = if existed {
+        fs::read_to_string(&full_path).ok()
     } else {
-        0
+        None
     };
+    let previous_line_count = previous_content
+        .as_ref()
+        .map(|c| c.split('\n').count())
+        .unwrap_or(0);
 
     fs::write(&full_path, &content).map_err(|e| format!("Failed to write file: {}", e))?;
     let new_line_count = content.split('\n').count();
@@ -521,10 +523,98 @@ pub async fn tool_write(
     Ok(serde_json::json!({
         "filePath": full_path.to_string_lossy(),
         "action": if existed { "edited" } else { "created" },
+        "existedBefore": existed,
+        "previousContent": previous_content,
         "previousLineCount": previous_line_count,
         "newLineCount": new_line_count,
         "linesAdded": new_line_count as isize - previous_line_count as isize,
         "linesRemoved": if existed { previous_line_count } else { 0 },
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreFileEdit {
+    pub file_path: String,
+    pub action: String,
+    pub previous_content: Option<String>,
+    pub existed_before: Option<bool>,
+}
+
+#[tauri::command]
+pub async fn restore_file_edits(
+    workspace_path: String,
+    edits: Vec<RestoreFileEdit>,
+) -> Result<serde_json::Value, String> {
+    let mut restored: Vec<String> = Vec::new();
+    let mut skipped: Vec<String> = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
+
+    for edit in edits {
+        let full_path = if Path::new(&edit.file_path).is_absolute() {
+            PathBuf::from(&edit.file_path)
+        } else {
+            Path::new(&workspace_path).join(&edit.file_path)
+        };
+
+        if edit.action == "created" {
+            if full_path.exists() {
+                match fs::remove_file(&full_path) {
+                    Ok(_) => restored.push(full_path.to_string_lossy().to_string()),
+                    Err(e) => errors.push(format!(
+                        "Failed to delete {}: {}",
+                        full_path.to_string_lossy(),
+                        e
+                    )),
+                }
+            } else {
+                skipped.push(full_path.to_string_lossy().to_string());
+            }
+            continue;
+        }
+
+        match edit.previous_content {
+            Some(prev) => {
+                if let Some(parent) = full_path.parent() {
+                    if !parent.exists() {
+                        if let Err(e) = fs::create_dir_all(parent) {
+                            errors.push(format!(
+                                "Failed to create parent dir for {}: {}",
+                                full_path.to_string_lossy(),
+                                e
+                            ));
+                            continue;
+                        }
+                    }
+                }
+
+                match fs::write(&full_path, prev) {
+                    Ok(_) => restored.push(full_path.to_string_lossy().to_string()),
+                    Err(e) => errors.push(format!(
+                        "Failed to restore {}: {}",
+                        full_path.to_string_lossy(),
+                        e
+                    )),
+                }
+            }
+            None => {
+                if edit.existed_before.unwrap_or(false) {
+                    errors.push(format!(
+                        "Missing previous content for {}",
+                        full_path.to_string_lossy()
+                    ));
+                } else {
+                    skipped.push(full_path.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+
+    Ok(serde_json::json!({
+        "success": errors.is_empty(),
+        "restored": restored,
+        "skipped": skipped,
+        "errors": errors,
     }))
 }
 

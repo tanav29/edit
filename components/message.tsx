@@ -25,15 +25,10 @@ import {
   Globe,
   PenLine,
   Terminal as TerIcon,
-  Bot,
   Brain,
   Bug,
-  Check,
-  ChevronDown,
-  User,
   Link,
   Loader2,
-  Hash,
   File,
   CircleX,
 } from "lucide-react";
@@ -51,6 +46,7 @@ export default function MessageUI({
   addToolApprovalResponse,
   onFileClick,
 }: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   parts: any[];
   addToolApprovalResponse: (response: {
     id: string;
@@ -59,7 +55,7 @@ export default function MessageUI({
   onFileClick?: (path: string) => void;
 }) {
   const { isGenUIEnabled } = useChatStore();
-  const { spec, text, hasSpec } = useJsonRenderMessage(parts);
+  const { spec, hasSpec } = useJsonRenderMessage(parts);
 
   const renderedParts = useMemo(() => {
     return parts.map((part, partIndex) => {
@@ -245,12 +241,6 @@ function ToolPart({
   return (
     <details>
       <summary 
-        onClick={(e) => {
-          const input = part.input as any;
-          if (input?.filePath && onFileClick) {
-            onFileClick(input.filePath);
-          }
-        }}
         className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90 select-none cursor-pointer">
         {part.state == "output-available" ||
         part.state == "output-denied" ||
@@ -283,9 +273,18 @@ function ToolPart({
             "filePath" in input &&
             typeof (input as { filePath: unknown }).filePath === "string"
           ) {
+            const fp = (input as { filePath: string }).filePath;
             return (
-              <span className="text-muted-foreground/90">
-                {(input as { filePath: string }).filePath}
+              <span
+                className={onFileClick ? "text-muted-foreground/90 hover:text-primary hover:underline cursor-pointer" : "text-muted-foreground/90"}
+                onClick={(e) => {
+                  if (onFileClick) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onFileClick(fp);
+                  }
+                }}>
+                {fp}
               </span>
             );
           }
@@ -421,20 +420,24 @@ const ToolOutput = React.memo(({
     );
   }
 
-  if (toolName === "bash" && data.stdout) {
-    console.log("Bash output:", data.stdout);
+  if (toolName === "bash" && (data.stdout || data.stderr)) {
+    const outputText = [
+      data.stdout ? String(data.stdout) : "",
+      data.stderr ? String(data.stderr) : "",
+    ].filter(Boolean).join("\n");
+
     return (
       <Terminal
         autoScroll={false}
         isStreaming={false}
         onClear={() => {}}
-        output={String(data.stdout)}>
+        output={outputText}>
         <TerminalHeader>
-          <TerminalTitle>{String(data.path)}</TerminalTitle>
+          <TerminalTitle>{String(data.path || "bash")}</TerminalTitle>
           <div className="flex items-center gap-1">
             <TerminalStatus />
             <TerminalActions>
-              <TerminalCopyButton onCopy={() => {}} />
+              <TerminalCopyButton />
             </TerminalActions>
           </div>
         </TerminalHeader>
@@ -450,8 +453,5 @@ const ToolOutput = React.memo(({
   );
 });
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
-}
+ToolOutput.displayName = "ToolOutput";
+
