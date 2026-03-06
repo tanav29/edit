@@ -3,18 +3,12 @@
 import { useEffect, useState } from "react"
 import { ChevronRight, File, Folder, FolderOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { listFiles, type FileNode } from "@/lib/tauri-api"
 
 interface FileTreeProps {
   rootPath: string
   onFileSelect: (file: string | undefined) => void
   selectedFile?: string
-}
-
-interface FileNode {
-  name: string
-  path: string
-  type: "file" | "directory"
-  children?: FileNode[]
 }
 
 export function FileTree({ rootPath, onFileSelect, selectedFile }: FileTreeProps) {
@@ -29,8 +23,7 @@ export function FileTree({ rootPath, onFileSelect, selectedFile }: FileTreeProps
   async function loadDirectory(path: string) {
     setLoading(true)
     try {
-      const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`)
-      const data = await res.json()
+      const data = await listFiles(path)
       setRootNode(data)
     } catch (error) {
       console.error("Failed to load files:", error)
@@ -45,8 +38,7 @@ export function FileTree({ rootPath, onFileSelect, selectedFile }: FileTreeProps
     }
     
     try {
-      const res = await fetch(`/api/files?path=${encodeURIComponent(node.path)}`)
-      const data = await res.json()
+      const data = await listFiles(node.path)
       
       setRootNode((prev) => {
         if (!prev) return prev

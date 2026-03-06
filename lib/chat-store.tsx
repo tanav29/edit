@@ -7,6 +7,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  getAllSessions,
+  saveSession as tauriSaveSession,
+  deleteSession as tauriDeleteSession,
+} from "@/lib/tauri-api";
 
 export interface ChatMessage {
   id: string;
@@ -49,14 +54,10 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isGenUIEnabled, setIsGenUIEnabled] = useState(false);
 
-  // Helper to save a session to the backend
+  // Helper to save a session to the Tauri backend
   const saveSession = async (session: ChatSession) => {
     try {
-      await fetch("/api/history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(session),
-      });
+      await tauriSaveSession(session);
     } catch (error) {
       console.error("Failed to save session:", error);
     }
@@ -69,13 +70,10 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function loadSessions() {
       try {
-        const res = await fetch("/api/history");
-        if (res.ok) {
-          const data = await res.json();
-          setSessions(data);
-          if (data.length > 0 && !currentSessionId) {
-            setCurrentSessionId(data[0].id);
-          }
+        const data = await getAllSessions();
+        setSessions(data);
+        if (data.length > 0 && !currentSessionId) {
+          setCurrentSessionId(data[0].id);
         }
       } catch (error) {
         console.error("Failed to load sessions:", error);
@@ -147,14 +145,10 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
     setCurrentSessionId(id);
   }
 
-  function deleteSession(id: string) {
+  function deleteSessionFn(id: string) {
     const session = sessions.find((s) => s.id === id);
     if (session) {
-      fetch("/api/history", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionPath: session.path, sessionId: session.id }),
-      }).catch(console.error);
+      tauriDeleteSession(session.path, session.id).catch(console.error);
     }
     setSessions((prev) => prev.filter((s) => s.id !== id));
     if (currentSessionId === id) {
@@ -164,15 +158,10 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
   }
 
   function deleteSessionsForPath(sessionPath: string) {
-    const toDelete = sessions.filter((s) => s.path === sessionPath);
-
-    fetch("/api/history", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionPath }),
-    }).catch(console.error);
+    tauriDeleteSession(sessionPath).catch(console.error);
 
     setSessions((prev) => prev.filter((s) => s.path !== sessionPath));
+    const toDelete = sessions.filter((s) => s.path === sessionPath);
     if (currentSessionId && toDelete.some((s) => s.id === currentSessionId)) {
       const remaining = sessions.filter((s) => s.path !== sessionPath);
       setCurrentSessionId(remaining.length > 0 ? remaining[0].id : null);
@@ -220,7 +209,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         currentSession,
         createSession,
         selectSession,
-        deleteSession,
+        deleteSession: deleteSessionFn,
         deleteSessionsForPath,
         saveSessionPayload,
         addMessage,

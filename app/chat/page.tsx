@@ -1,12 +1,7 @@
 "use client";
 
-import { useChat } from "@ai-sdk/react";
-import {
-  DefaultChatTransport,
-  lastAssistantMessageIsCompleteWithApprovalResponses,
-} from "ai";
-import type { UIMessage } from "ai";
-import { useEffect, useRef, useState } from "react";
+import { useTauriChat, type UIMessage, type TextPart } from "@/lib/use-tauri-chat";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +20,14 @@ import MessageUI from "@/components/message";
 import { FileViewer } from "@/components/file-viewer";
 
 export default function ChatPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center bg-background text-muted-foreground">Loading...</div>}>
+      <ChatPageInner />
+    </Suspense>
+  );
+}
+
+function ChatPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const path = searchParams.get("path") || "/";
@@ -61,7 +64,6 @@ export default function ChatPage() {
         selectSession(sessionId);
       }
     } else if (path && (!currentSession || currentSession.path !== path)) {
-      // Check if we already have a session for this path that we should select
       const existingSession = sessions.find((s) => s.path === path);
       if (existingSession) {
         selectSession(existingSession.id);
@@ -78,24 +80,16 @@ export default function ChatPage() {
     status,
     addToolApprovalResponse,
     stop,
-  } = useChat({
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      body: {
-        path: path,
-        genUI: isGenUIEnabled,
-      },
-    }),
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+  } = useTauriChat({
+    workspacePath: path,
   });
 
   const isActive = status === "streaming" || status === "submitted";
 
-  // Sync current session messages to useChat state on load
+  // Sync current session messages to useTauriChat state on load
   useEffect(() => {
     if (!currentSession) return;
 
-    // If the user navigates to a different session, replace the UI messages.
     if (lastSyncedSessionIdRef.current !== currentSession.id) {
       lastSyncedSessionIdRef.current = currentSession.id;
       const storedSignature = JSON.stringify(
@@ -109,7 +103,7 @@ export default function ChatPage() {
         currentSession.messages.map((m) => ({
           id: m.id,
           role: m.role,
-          parts: [{ type: "text", text: m.content }],
+          parts: [{ type: "text" as const, text: m.content }],
           createdAt: new Date(m.timestamp),
         })) as UIMessage[],
       );
@@ -151,22 +145,19 @@ export default function ChatPage() {
     if (!currentSession?.sessionKey || isSyncing) return;
     setIsSyncing(true);
     try {
-      const res = await fetch(`/api/history?key=${currentSession.sessionKey}`);
-      if (res.ok) {
-        const remoteSession: { messages: { id: string; role: "user" | "assistant"; content: string; timestamp: number }[] } =
-          await res.json();
+      const { getSessionByKey } = await import("@/lib/tauri-api");
+      const remoteSession = await getSessionByKey(currentSession.sessionKey);
 
-        setMessagesForSession(currentSession.id, remoteSession.messages);
-        setMessages(
-          (remoteSession.messages || []).map((m) => ({
-            id: m.id,
-            role: m.role,
-            parts: [{ type: "text", text: m.content }],
-            createdAt: new Date(m.timestamp),
-          })) as UIMessage[],
-        );
-        window.dispatchEvent(new CustomEvent("remote-update"));
-      }
+      setMessagesForSession(currentSession.id, remoteSession.messages);
+      setMessages(
+        (remoteSession.messages || []).map((m) => ({
+          id: m.id,
+          role: m.role as "user" | "assistant",
+          parts: [{ type: "text" as const, text: m.content }],
+          createdAt: new Date(m.timestamp),
+        })) as UIMessage[],
+      );
+      window.dispatchEvent(new CustomEvent("remote-update"));
     } catch (err) {
       console.error("Manual sync failed", err);
     } finally {
@@ -182,11 +173,11 @@ export default function ChatPage() {
       .filter((m) => m.role === "user" || m.role === "assistant")
       .map((m: UIMessage, idx: number) => {
         const text = (m.parts || [])
-          .filter((p) => p.type === "text")
-          .map((p) => (p.type === "text" ? p.text : ""))
+          .filter((p): p is TextPart => p.type === "text")
+          .map((p) => p.text)
           .join("");
 
-        const createdAt = (m as UIMessage & { createdAt?: Date }).createdAt;
+        const createdAt = m.createdAt;
         const timestamp = createdAt instanceof Date ? createdAt.getTime() : Date.now();
 
         return {
@@ -202,33 +193,31 @@ export default function ChatPage() {
     pendingMessagesRef.current = mapped;
   }, [messages, currentSession?.id]);
 
-  // NOTE: History is only persisted when the user clicks Save.
-
   useEffect(() => {
     const seenIds = new Set(edits.map((e) => e.id));
     const newEdits: EditInfo[] = [];
     messages.forEach((message) => {
       if (message.role === "assistant") {
-          message.parts.forEach((part: unknown) => {
-            const p = part as {
-              type?: string
-              state?: string
-              toolCallId?: string
-              input?: unknown
-              output?: unknown
-            }
+        message.parts.forEach((part: unknown) => {
+          const p = part as {
+            type?: string
+            state?: string
+            toolCallId?: string
+            input?: unknown
+            output?: unknown
+          }
 
-            if (p.type === "tool-write" && p.state === "output-available") {
-              const toolCallId = p.toolCallId || `${Date.now()}-${Math.random()}`;
-              if (seenIds.has(toolCallId)) return;
+          if ((p.type === "tool-write") && p.state === "output-available") {
+            const toolCallId = p.toolCallId || `${Date.now()}-${Math.random()}`;
+            if (seenIds.has(toolCallId)) return;
 
-              const input = p.input as { filePath?: string } | undefined;
-              const output = p.output as
-                | {
-                    filePath?: string;
-                    action?: string;
-                  }
-                | undefined;
+            const input = p.input as { filePath?: string } | undefined;
+            const output = p.output as
+              | {
+                  filePath?: string;
+                  action?: string;
+                }
+              | undefined;
 
             const filePath = output?.filePath || input?.filePath;
             if (filePath) {
@@ -406,7 +395,7 @@ export default function ChatPage() {
                                 <p
                                   key={i}
                                   className="text-sm leading-relaxed whitespace-pre-wrap">
-                                  {part.text}
+                                  {(part as TextPart).text}
                                 </p>
                               );
                             }
@@ -493,7 +482,7 @@ export default function ChatPage() {
           <div className="flex-1 overflow-hidden">
             <EditsPanel
               currentPath={path}
-              modelName="minimax-m2.5:cloud"
+              modelName="qwen3:32b"
               edits={edits}
               onEditClick={(edit: EditInfo) => setSelectedFile(edit.path)}
               onSync={handleManualSync}

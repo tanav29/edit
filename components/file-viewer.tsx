@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { File, X, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Editor } from "@monaco-editor/react"
+import { readFileContent } from "@/lib/tauri-api"
 
 interface FileViewerProps {
   filePath: string
@@ -36,9 +37,7 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
       setLoading(true)
       setError(null)
       try {
-        const res = await fetch(`/api/files/content?path=${encodeURIComponent(filePath)}`)
-        if (!res.ok) throw new Error("Failed to load file")
-        const data = await res.json()
+        const data = await readFileContent(filePath)
         setContent(data.content)
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load file")

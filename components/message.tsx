@@ -19,7 +19,7 @@ import {
   TerminalStatus,
   TerminalTitle,
 } from "./ai-elements/terminal";
-import { type ToolUIPart } from "ai";
+import { type ToolCallPart as ToolUIPart } from "@/lib/use-tauri-chat";
 import {
   BookSearch,
   Globe,
@@ -218,7 +218,7 @@ function ToolPart({
             size="sm"
             onClick={() => {
               addToolApprovalResponse({
-                id: part.approval.id,
+                id: part.approval!.id,
                 approved: true,
               });
             }}
@@ -230,7 +230,7 @@ function ToolPart({
             variant="outline"
             onClick={() => {
               addToolApprovalResponse({
-                id: part.approval.id,
+                id: part.approval!.id,
                 approved: false,
               });
             }}
@@ -267,7 +267,7 @@ function ToolPart({
                 {toolName == "web-search" && <Globe className="size-3" />}
               </>
             )}
-            {part.state === "approval-responded" && !part.approval.approved && (
+            {part.state === "approval-responded" && !part.approval?.approved && (
               <CircleX className="size-3" />
             )}
           </>
