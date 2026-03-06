@@ -668,6 +668,8 @@ pub async fn tool_bash(
 pub struct OllamaMessage {
     pub role: String,
     pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub images: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1006,6 +1008,7 @@ async fn run_chat_loop(
     let mut messages = vec![OllamaMessage {
         role: "system".to_string(),
         content: system_prompt,
+        images: None,
     }];
     messages.extend(initial_messages);
 
@@ -1074,6 +1077,7 @@ async fn run_chat_loop(
         messages.push(OllamaMessage {
             role: "assistant".to_string(),
             content: content.clone(),
+            images: None,
         });
 
         // If no tool calls, we're done
@@ -1081,22 +1085,23 @@ async fn run_chat_loop(
             break;
         }
 
-        // Execute tool calls
-        for tool_call in &tool_calls {
-            let tool_name = &tool_call.function.name;
-            let arguments = &tool_call.function.arguments;
+        let mut tool_tasks = Vec::new();
+
+        for (tool_index, tool_call) in tool_calls.iter().enumerate() {
+            let tool_name = tool_call.function.name.clone();
+            let arguments = tool_call.function.arguments.clone();
             let tool_call_id = format!(
-                "call-{}-{}",
+                "call-{}-{}-{}",
                 tool_name,
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
-                    .as_millis()
+                    .as_millis(),
+                tool_index
             );
 
             let needs_approval = tool_name == "write" || tool_name == "bash";
 
-            // Emit tool call event
             let _ = app.emit(
                 event_name,
                 ChatStreamEvent {
@@ -1111,56 +1116,62 @@ async fn run_chat_loop(
                 },
             );
 
-            if needs_approval {
-                // Wait for approval from frontend
-                let approval = wait_for_approval(app, &tool_call_id).await;
+            let app_handle = app.clone();
+            let event_name_owned = event_name.to_string();
+            let workspace_path_owned = workspace_path.to_string();
+            tool_tasks.push(tokio::spawn(async move {
+                if needs_approval {
+                    let approval = wait_for_approval(&app_handle, &tool_call_id).await;
+                    if !approval {
+                        let _ = app_handle.emit(
+                            &event_name_owned,
+                            ChatStreamEvent {
+                                event_type: "tool-denied".to_string(),
+                                content: None,
+                                tool_name: Some(tool_name.clone()),
+                                tool_call_id: Some(tool_call_id.clone()),
+                                tool_input: None,
+                                tool_output: None,
+                                error: None,
+                                needs_approval: None,
+                            },
+                        );
 
-                if !approval {
-                    // Emit denied
-                    let _ = app.emit(
-                        event_name,
-                        ChatStreamEvent {
-                            event_type: "tool-denied".to_string(),
-                            content: None,
-                            tool_name: Some(tool_name.clone()),
-                            tool_call_id: Some(tool_call_id.clone()),
-                            tool_input: None,
-                            tool_output: None,
-                            error: None,
-                            needs_approval: None,
-                        },
-                    );
-
-                    messages.push(OllamaMessage {
-                        role: "tool".to_string(),
-                        content: serde_json::json!({ "error": "Tool execution was denied by the user" }).to_string(),
-                    });
-                    continue;
+                        return serde_json::json!({ "error": "Tool execution was denied by the user" });
+                    }
                 }
-            }
 
-            // Execute the tool
-            let tool_result = execute_tool(workspace_path, tool_name, arguments).await;
+                let tool_result = execute_tool(&workspace_path_owned, &tool_name, &arguments).await;
 
-            // Emit tool output
-            let _ = app.emit(
-                event_name,
-                ChatStreamEvent {
-                    event_type: "tool-output".to_string(),
-                    content: None,
-                    tool_name: Some(tool_name.clone()),
-                    tool_call_id: Some(tool_call_id.clone()),
-                    tool_input: Some(arguments.clone()),
-                    tool_output: Some(tool_result.clone()),
-                    error: None,
-                    needs_approval: None,
-                },
-            );
+                let _ = app_handle.emit(
+                    &event_name_owned,
+                    ChatStreamEvent {
+                        event_type: "tool-output".to_string(),
+                        content: None,
+                        tool_name: Some(tool_name.clone()),
+                        tool_call_id: Some(tool_call_id.clone()),
+                        tool_input: Some(arguments.clone()),
+                        tool_output: Some(tool_result.clone()),
+                        error: None,
+                        needs_approval: None,
+                    },
+                );
 
-            // Add tool result to messages for next iteration
+                tool_result
+            }));
+        }
+
+        let tool_results = futures::future::join_all(tool_tasks).await;
+        for tool_result in tool_results {
+            let normalized = match tool_result {
+                Ok(value) => value,
+                Err(err) => serde_json::json!({ "error": format!("Tool task failed: {}", err) }),
+            };
+
             messages.push(OllamaMessage {
                 role: "tool".to_string(),
-                content: tool_result.to_string(),
+                content: normalized.to_string(),
+                images: None,
             });
         }
     }

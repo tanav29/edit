@@ -27,11 +27,6 @@ export default defineConfig({
             "@streamdown/math",
             "@streamdown/cjk",
           ],
-          jsonrender: [
-            "@json-render/core",
-            "@json-render/react",
-            "@json-render/shadcn",
-          ],
         },
       },
     },

@@ -1,6 +1,11 @@
 "use client";
 
-import { useTauriChat, type UIMessage, type TextPart } from "@/lib/use-tauri-chat";
+import {
+  useTauriChat,
+  type ImagePart,
+  type UIMessage,
+  type TextPart,
+} from "@/lib/use-tauri-chat";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -12,6 +17,7 @@ import {
   Plus,
   Square,
   Code,
+  X,
 } from "lucide-react";
 import { FileTree } from "@/components/file-tree";
 import { EditsPanel, type EditInfo } from "@/components/edits-panel";
@@ -40,6 +46,7 @@ export default function ChatPage() {
   const [showRightPanel, setShowRightPanel] = useState(false);
   const [edits, setEdits] = useState<EditInfo[]>([]);
   const [input, setInput] = useState("");
+  const [attachedImages, setAttachedImages] = useState<ImagePart[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastSyncedSessionIdRef = useRef<string | null>(null);
@@ -112,7 +119,6 @@ export default function ChatPage() {
     setMessagesForSession(currentSession.id, pendingMessagesRef.current);
   }, [isActive, currentSession?.id, setMessagesForSession]);
 
-  const [isSyncing, setIsSyncing] = useState(false);
   const [isSavingHistory, setIsSavingHistory] = useState(false);
   const [restoringMessageId, setRestoringMessageId] = useState<string | null>(null);
   const [restoreMessageStatus, setRestoreMessageStatus] = useState<Record<string, string>>({});
@@ -170,30 +176,6 @@ export default function ChatPage() {
       console.error("Failed to save history", e);
     } finally {
       setIsSavingHistory(false);
-    }
-  };
-
-  const handleManualSync = async () => {
-    if (!currentSession?.sessionKey || isSyncing) return;
-    setIsSyncing(true);
-    try {
-      const { getSessionByKey } = await import("@/lib/tauri-api");
-      const remoteSession = await getSessionByKey(currentSession.sessionKey);
-
-      setMessagesForSession(currentSession.id, remoteSession.messages);
-      setMessages(
-        (remoteSession.messages || []).map((m) => ({
-          id: m.id,
-          role: m.role as "user" | "assistant",
-          parts: [{ type: "text" as const, text: m.content }],
-          createdAt: new Date(m.timestamp),
-        })) as UIMessage[],
-      );
-      window.dispatchEvent(new CustomEvent("remote-update"));
-    } catch (err) {
-      console.error("Manual sync failed", err);
-    } finally {
-      setIsSyncing(false);
     }
   };
 
@@ -323,19 +305,75 @@ export default function ChatPage() {
   }, [input]);
 
   const handleSend = () => {
-    if (!input.trim() || isActive) return;
+    if ((!input.trim() && attachedImages.length === 0) || isActive) return;
 
     if (!currentSession) {
       createSession(path);
     }
 
-    sendMessage({
-      parts: [{ type: "text", text: input.trim() }],
-    });
+    const parts: Array<{ type: "text"; text: string } | ImagePart> = [];
+    if (input.trim()) {
+      parts.push({ type: "text", text: input.trim() });
+    }
+    parts.push(...attachedImages);
+
+    sendMessage({ parts });
     setInput("");
+    setAttachedImages([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
+  };
+
+  const handleImagePick = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const toDataParts = async (file: File): Promise<ImagePart | null> => {
+      if (!file.type.startsWith("image/")) return null;
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Failed to read image"));
+        reader.readAsDataURL(file);
+      });
+      const commaIndex = dataUrl.indexOf(",");
+      if (commaIndex < 0) return null;
+
+      return {
+        type: "image",
+        mediaType: file.type,
+        data: dataUrl.slice(commaIndex + 1),
+        name: file.name,
+      };
+    };
+
+    const picked = await Promise.all(Array.from(files).map(toDataParts));
+    const valid = picked.filter((p): p is ImagePart => p !== null);
+    if (valid.length === 0) return;
+
+    setAttachedImages((prev) => [...prev, ...valid].slice(0, 4));
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items || items.length === 0) return;
+
+    const imageFiles: File[] = [];
+    for (const item of Array.from(items)) {
+      if (!item.type.startsWith("image/")) continue;
+      const file = item.getAsFile();
+      if (file) {
+        imageFiles.push(file);
+      }
+    }
+
+    if (imageFiles.length === 0) return;
+
+    e.preventDefault();
+
+    const dataTransfer = new DataTransfer();
+    imageFiles.forEach((file) => dataTransfer.items.add(file));
+    void handleImagePick(dataTransfer.files);
   };
 
   const handleGoHome = () => {
@@ -464,6 +502,17 @@ export default function ChatPage() {
                                 </p>
                               );
                             }
+                            if (part.type === "image") {
+                              const imagePart = part as ImagePart;
+                              return (
+                                <img
+                                  key={i}
+                                  src={`data:${imagePart.mediaType};base64,${imagePart.data}`}
+                                  alt={imagePart.name || "attached image"}
+                                  className="mt-2 first:mt-0 rounded-lg border border-primary/20 max-h-64 w-auto"
+                                />
+                              );
+                            }
                             return null;
                           })}
                         </div>
@@ -550,33 +599,59 @@ export default function ChatPage() {
 
         <div className="bg-background">
           <div className="max-w-2xl mx-auto pt-0 pb-4 space-y-2">
-            <div className="flex justify-center items-end gap-2 bg-card border rounded-xl focus-within:border-muted-foreground/50 p-2 transition-colors">
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e: React.KeyboardEvent) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                placeholder="Send a message..."
-                rows={2}
-                className="ml-1 flex-1 bg-transparent resize-none outline-none text-sm leading-relaxed placeholder:text-muted-foreground max-h-[200px]"
-              />
-              <div className="h-full items-end flex">
-                <Button
-                  size="icon-sm"
-                  onClick={isActive ? stop : handleSend}
-                  disabled={!isActive && !input.trim()}
-                  className="rounded-lg shrink-0 transition-all duration-200 disabled:opacity-30 cursor-pointer">
-                  {isActive ? (
-                    <Square className="size-3 fill-current" />
-                  ) : (
-                    <ArrowUp className="size-4" />
-                  )}
-                </Button>
+            <div className="bg-card border rounded-xl focus-within:border-muted-foreground/50 p-2 transition-colors space-y-2">
+              {attachedImages.length > 0 && (
+                <div className="flex flex-wrap gap-2 px-1 pt-1">
+                  {attachedImages.map((img, index) => (
+                    <div key={`${img.name || "image"}-${index}`} className="relative">
+                      <img
+                        src={`data:${img.mediaType};base64,${img.data}`}
+                        alt={img.name || "attached image"}
+                        className="h-16 w-16 rounded-md border border-border object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAttachedImages((prev) => prev.filter((_, i) => i !== index));
+                        }}
+                        className="absolute -top-1.5 -right-1.5 size-5 rounded-full bg-background border border-border flex items-center justify-center hover:bg-accent"
+                        aria-label="Remove image"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex justify-center items-end gap-2">
+                <textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onPaste={handlePaste}
+                  onKeyDown={(e: React.KeyboardEvent) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                  placeholder="Send a message... (you can paste images)"
+                  rows={2}
+                  className="ml-1 flex-1 bg-transparent resize-none outline-none text-sm leading-relaxed placeholder:text-muted-foreground max-h-[200px]"
+                />
+                <div className="h-full items-end flex">
+                  <Button
+                    size="icon-sm"
+                    onClick={isActive ? stop : handleSend}
+                    disabled={!isActive && !input.trim() && attachedImages.length === 0}
+                    className="rounded-lg shrink-0 transition-all duration-200 disabled:opacity-30 cursor-pointer">
+                    {isActive ? (
+                      <Square className="size-3 fill-current" />
+                    ) : (
+                      <ArrowUp className="size-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -600,8 +675,6 @@ export default function ChatPage() {
               modelName="minimax-m2.5:cloud"
               edits={edits}
               onEditClick={(edit: EditInfo) => setSelectedFile(edit.path)}
-              onSync={handleManualSync}
-              isSyncing={isSyncing}
               onSaveHistory={handleSaveHistory}
               isSavingHistory={isSavingHistory}
               canSaveHistory={Boolean(currentSession) && !isActive}

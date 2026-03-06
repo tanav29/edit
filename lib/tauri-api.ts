@@ -27,8 +27,6 @@ export interface ChatSession {
   messages: ChatMessage[]
   createdAt: number
   updatedAt: number
-  sessionKey?: string
-  isRemoteEnabled?: boolean
 }
 
 export interface ChatMessage {
@@ -44,10 +42,6 @@ export async function getSessions(key?: string): Promise<ChatSession[] | ChatSes
 
 export async function getAllSessions(): Promise<ChatSession[]> {
   return invoke("get_sessions", { key: null })
-}
-
-export async function getSessionByKey(key: string): Promise<ChatSession> {
-  return invoke("get_sessions", { key })
 }
 
 export async function saveSession(session: ChatSession): Promise<{ success: boolean }> {
@@ -113,6 +107,7 @@ export interface ChatStreamEvent {
 export interface OllamaMessage {
   role: string
   content: string
+  images?: string[]
 }
 
 export async function sendChatMessage(

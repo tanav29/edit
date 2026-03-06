@@ -17,6 +17,13 @@ export interface TextPart {
   state?: "streaming" | "complete"
 }
 
+export interface ImagePart {
+  type: "image"
+  data: string
+  mediaType: string
+  name?: string
+}
+
 export interface ToolCallPart {
   type: string // "tool-read", "tool-write", "tool-bash", "tool-glob"
   toolCallId: string
@@ -28,7 +35,7 @@ export interface ToolCallPart {
   approval?: { id: string; approved?: boolean }
 }
 
-export type MessagePart = TextPart | ToolCallPart
+export type MessagePart = TextPart | ImagePart | ToolCallPart
 
 export interface UIMessage {
   id: string
@@ -55,13 +62,15 @@ export function useTauriChat({ workspacePath, model }: UseTauriChatOptions) {
   }, [])
 
   const sendMessage = useCallback(
-    async (input: { parts: { type: "text"; text: string }[] }) => {
+    async (input: { parts: Array<{ type: "text"; text: string } | ImagePart> }) => {
       const userText = input.parts
         .filter((p) => p.type === "text")
         .map((p) => p.text)
         .join("")
 
-      if (!userText.trim()) return
+      const userImages = input.parts.filter((p): p is ImagePart => p.type === "image")
+
+      if (!userText.trim() && userImages.length === 0) return
 
       // Clean up previous listener if still active
       if (unlistenRef.current) {
@@ -76,7 +85,7 @@ export function useTauriChat({ workspacePath, model }: UseTauriChatOptions) {
       const userMessage: UIMessage = {
         id: `msg-user-${Date.now()}`,
         role: "user",
-        parts: [{ type: "text", text: userText }],
+        parts: input.parts,
         createdAt: new Date(),
       }
 
@@ -106,8 +115,17 @@ export function useTauriChat({ workspacePath, model }: UseTauriChatOptions) {
             .filter((p): p is TextPart => p.type === "text")
             .map((p) => p.text)
             .join("")
-          if (text) {
-            ollamaMessages.push({ role: "user", content: text })
+
+          const images = msg.parts
+            .filter((p): p is ImagePart => p.type === "image")
+            .map((p) => p.data)
+
+          if (text || images.length > 0) {
+            ollamaMessages.push({
+              role: "user",
+              content: text || "Analyze the attached image(s).",
+              images: images.length > 0 ? images : undefined,
+            })
           }
         } else if (msg.role === "assistant") {
           const text = msg.parts

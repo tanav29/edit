@@ -1,12 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { Clock, FileCode, Folder, Bot, Sparkles } from "lucide-react"
+import { Clock, FileCode, Folder, Bot } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
-import { useChatStore } from "@/lib/chat-store"
 import { cn } from "@/lib/utils"
-import { RemoteToggle } from "@/components/remote-toggle"
 
 export interface EditInfo {
   id: string
@@ -20,8 +17,6 @@ interface EditsPanelProps {
   modelName: string
   edits: EditInfo[]
   onEditClick: (edit: EditInfo) => void
-  onSync?: () => void
-  isSyncing?: boolean
   onSaveHistory?: () => void
   isSavingHistory?: boolean
   canSaveHistory?: boolean
@@ -32,14 +27,11 @@ export function EditsPanel({
   modelName,
   edits,
   onEditClick,
-  onSync,
-  isSyncing,
   onSaveHistory,
   isSavingHistory,
   canSaveHistory,
 }: EditsPanelProps) {
-  const { isGenUIEnabled, setIsGenUIEnabled } = useChatStore()
-  const [activeTab, setActiveTab] = useState<"ai" | "history" | "remote">("ai")
+  const [activeTab, setActiveTab] = useState<"ai" | "history">("ai")
   const pathParts = currentPath.split("/")
   const projectName = pathParts[pathParts.length - 1] || currentPath
 
@@ -67,15 +59,6 @@ export function EditsPanel({
           AI
         </button>
         <button
-          onClick={() => setActiveTab("remote")}
-          className={cn(
-            "flex-1 py-2 px-1 text-[10px] font-medium uppercase tracking-wider transition-colors min-w-[60px]",
-            activeTab === "remote" ? "text-primary border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          Remote
-        </button>
-        <button
           onClick={() => setActiveTab("history")}
           className={cn(
             "flex-1 py-2 px-1 text-[10px] font-medium uppercase tracking-wider transition-colors min-w-[60px]",
@@ -90,34 +73,12 @@ export function EditsPanel({
         <div className="p-3">
           {activeTab === "ai" ? (
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Sparkles className="size-3.5 text-muted-foreground" />
-                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  AI Settings
-                </span>
-              </div>
-              
-              <div className="flex items-center justify-between p-2 rounded-lg bg-accent/30 border border-border/50">
-                <div className="space-y-0.5">
-                  <div className="text-[11px] font-medium">Gen UI</div>
-                  <div className="text-[10px] text-muted-foreground">
-                    Enable interactive components
-                  </div>
-                </div>
-                <Switch 
-                  checked={isGenUIEnabled} 
-                  onCheckedChange={setIsGenUIEnabled}
-                />
-              </div>
-
               <div className="p-2 rounded-lg border border-dashed border-border/50 text-center">
                 <div className="text-[10px] text-muted-foreground italic">
                   More AI settings coming soon...
                 </div>
               </div>
             </div>
-          ) : activeTab === "remote" ? (
-            <RemoteToggle onSync={onSync} isSyncing={isSyncing} />
           ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-2">

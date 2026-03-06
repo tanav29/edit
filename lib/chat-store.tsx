@@ -27,8 +27,6 @@ export interface ChatSession {
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
-  sessionKey?: string;
-  isRemoteEnabled?: boolean;
 }
 
 interface ChatStoreContextType {
@@ -41,9 +39,6 @@ interface ChatStoreContextType {
   saveSessionPayload: (session: ChatSession) => Promise<void>;
   addMessage: (message: ChatMessage) => void;
   clearCurrentSession: () => void;
-  isGenUIEnabled: boolean;
-  setIsGenUIEnabled: (enabled: boolean) => void;
-  toggleRemoteMode: (enabled: boolean) => void;
   setMessagesForSession: (sessionId: string, messages: ChatMessage[]) => void;
 }
 
@@ -52,7 +47,6 @@ const ChatStoreContext = createContext<ChatStoreContextType | null>(null);
 export function ChatStoreProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [isGenUIEnabled, setIsGenUIEnabled] = useState(false);
 
   // Helper to save a session to the Tauri backend
   const saveSession = async (session: ChatSession) => {
@@ -81,9 +75,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
     }
     loadSessions();
 
-    const handleRemoteUpdate = () => loadSessions();
-    window.addEventListener('remote-update', handleRemoteUpdate);
-    return () => window.removeEventListener('remote-update', handleRemoteUpdate);
+    return;
   }, []);
 
   const currentSession =
@@ -96,28 +88,6 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
           return {
             ...session,
             messages,
-            updatedAt: Date.now(),
-          };
-        }
-        return session;
-      }),
-    );
-  }
-
-  function generateSessionKey() {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
-  }
-
-  function toggleRemoteMode(enabled: boolean) {
-    if (!currentSessionId) return;
-
-    setSessions((prev) =>
-      prev.map((session) => {
-        if (session.id === currentSessionId) {
-          return {
-            ...session,
-            isRemoteEnabled: enabled,
-            sessionKey: enabled ? (session.sessionKey || generateSessionKey()) : session.sessionKey,
             updatedAt: Date.now(),
           };
         }
@@ -214,9 +184,6 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         saveSessionPayload,
         addMessage,
         clearCurrentSession,
-        isGenUIEnabled,
-        setIsGenUIEnabled,
-        toggleRemoteMode,
         setMessagesForSession,
       }}>
       {children}

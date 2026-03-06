@@ -1,15 +1,6 @@
 "use client";
 
 import React, { Suspense, useMemo } from "react";
-import { registry } from "@/lib/registry";
-import {
-  ActionProvider,
-  Renderer,
-  StateProvider,
-  useJsonRenderMessage,
-  ValidationProvider,
-  VisibilityProvider,
-} from "@json-render/react";
 import {
   Terminal,
   TerminalActions,
@@ -34,8 +25,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-import { useChatStore } from "@/lib/chat-store";
-
 const MarkdownRenderer = React.lazy(() => import("@/components/markdown-renderer"));
 
 export default function MessageUI({
@@ -51,9 +40,6 @@ export default function MessageUI({
   }) => void;
   onFileClick?: (path: string) => void;
 }) {
-  const { isGenUIEnabled } = useChatStore();
-  const { spec, hasSpec } = useJsonRenderMessage(parts);
-
   const renderedParts = useMemo(() => {
     return parts.map((part, partIndex) => {
       const key =
@@ -131,25 +117,6 @@ export default function MessageUI({
       }
     });
   }, [parts, addToolApprovalResponse, onFileClick]);
-
-  if (isGenUIEnabled && hasSpec && spec) {
-    return (
-      <StateProvider initialState={{}}>
-        <VisibilityProvider>
-          <ActionProvider
-            handlers={{
-              // Define your action handlers here
-              submit: (params) => console.log("Submit:", params),
-              // Add other handlers as needed
-            }}>
-            <ValidationProvider customFunctions={{}}>
-              <Renderer spec={spec} registry={registry} />
-            </ValidationProvider>
-          </ActionProvider>
-        </VisibilityProvider>
-      </StateProvider>
-    );
-  }
 
   return (
     <>
