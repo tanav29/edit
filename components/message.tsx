@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { Suspense, useMemo } from "react";
 import { registry } from "@/lib/registry";
 import {
   ActionProvider,
@@ -34,12 +34,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-import { Streamdown } from "streamdown";
-import { code } from "@streamdown/code";
-import { mermaid } from "@streamdown/mermaid";
-import { math } from "@streamdown/math";
-import { cjk } from "@streamdown/cjk";
 import { useChatStore } from "@/lib/chat-store";
+
+const MarkdownRenderer = React.lazy(() => import("@/components/markdown-renderer"));
 
 export default function MessageUI({
   parts,
@@ -66,15 +63,17 @@ export default function MessageUI({
         case "text":
           return (
             <div key={key} className="text-sm">
-              <Streamdown
-                className="chat-markdown"
-                mode="static"
-                plugins={{ code, mermaid, math, cjk }}
-                shikiTheme={["github-light", "github-dark"]}
-                mermaid={{ config: { theme: "dark" } }}
-                isAnimating={part.state === "streaming"}>
-                {part.text}
-              </Streamdown>
+              <Suspense
+                fallback={
+                  <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">
+                    {part.text}
+                  </p>
+                }>
+                <MarkdownRenderer
+                  text={part.text}
+                  isStreaming={part.state === "streaming"}
+                />
+              </Suspense>
             </div>
           );
 
@@ -454,4 +453,3 @@ const ToolOutput = React.memo(({
 });
 
 ToolOutput.displayName = "ToolOutput";
-

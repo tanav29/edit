@@ -17,14 +17,9 @@ interface TerminalProps {
   className?: string
 }
 
-export function Terminal({
-  autoScroll = true,
-  isStreaming = false,
-  onClear,
-  output,
-  children,
-  className,
-}: TerminalProps) {
+export function Terminal(props: TerminalProps) {
+  const { output, children, className } = props
+
   return (
     <TerminalContext.Provider value={{ output }}>
       <div

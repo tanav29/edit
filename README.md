@@ -1,6 +1,6 @@
 # Edit
 
-An AI-powered coding assistant with a web interface for interactive code editing.
+An AI-powered coding assistant packaged as a Tauri desktop app.
 
 ![Screenshot](screenshot.png)
 
@@ -30,11 +30,17 @@ cd edit
 # Install dependencies
 bun install
 
-# Start the development server
+# Start the desktop app in development
 bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and select a workspace directory to begin.
+This launches the Tauri desktop window.
+
+### Build Desktop Binary
+
+```bash
+bun run build
+```
 
 ### Optional: Web Search
 
@@ -55,10 +61,12 @@ echo "TAVILY_API_KEY=your_api_key_here" > .env.local
 ## Project Structure
 
 ```
-├── app/                    # Next.js app router
-│   ├── api/chat/route.ts  # AI chat API endpoint
-│   ├── layout.tsx         # Root layout
-│   └── page.tsx           # Main interface
+├── app/                    # UI screens
+│   ├── chat/page.tsx      # Chat interface
+│   └── page.tsx           # Project/session selector
+├── src/
+│   ├── App.tsx            # React Router setup
+│   └── main.tsx           # Vite app entrypoint
 ├── components/            # React components
 │   ├── ai-elements/      # AI-specific UI (terminal, shimmer)
 │   ├── ui/               # shadcn/ui components
@@ -72,7 +80,7 @@ echo "TAVILY_API_KEY=your_api_key_here" > .env.local
 
 ## Tech Stack
 
-- **Next.js 15** - React framework with App Router
+- **Tauri + Vite + React** - Desktop runtime with lightweight frontend build
 - **Bun** - Fast JavaScript runtime and package manager
 - **AI SDK** - Streaming AI responses with tool support
 - **Ollama** - Local LLM integration

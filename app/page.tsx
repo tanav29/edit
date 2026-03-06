@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   ArrowRight,
@@ -12,7 +12,7 @@ import {
 import { useChatStore } from "@/lib/chat-store";
 
 export default function HomePage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [tempPath, setTempPath] = useState("/home/thetanav/Code/minis");
   const { sessions, deleteSession, deleteSessionsForPath, selectSession } = useChatStore();
 
@@ -38,7 +38,7 @@ export default function HomePage() {
   const handleConfirm = () => {
     // We could create a new session here or just navigate to chat with the path
     // For now, let's just navigate to chat. The chat page will handle session creation if needed.
-    router.push(`/chat?path=${encodeURIComponent(tempPath)}`);
+    navigate(`/chat?path=${encodeURIComponent(tempPath)}`);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -51,7 +51,7 @@ export default function HomePage() {
     selectSession(sessionId);
     const session = sessions.find((s) => s.id === sessionId);
     if (session) {
-      router.push(
+      navigate(
         `/chat?path=${encodeURIComponent(session.path)}&sessionId=${sessionId}`,
       );
     }

@@ -3,7 +3,9 @@
 import { Globe, Smartphone } from "lucide-react"
 import React from "react"
 
-export function RemoteToggle({ onSync, isSyncing }: { onSync?: () => void, isSyncing?: boolean }) {
+export function RemoteToggle(props: { onSync?: () => void, isSyncing?: boolean }) {
+  void props
+
   return (
     <div className="space-y-4 will-change-transform">
       <div className="flex items-center gap-2">

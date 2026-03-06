@@ -1,8 +1,8 @@
 "use client";
 
 import { useTauriChat, type UIMessage, type TextPart } from "@/lib/use-tauri-chat";
-import { Suspense, useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   ArrowUp,
@@ -21,16 +21,8 @@ import { FileViewer } from "@/components/file-viewer";
 import { restoreFileEdits, type RestoreFileEdit } from "@/lib/tauri-api";
 
 export default function ChatPage() {
-  return (
-    <Suspense fallback={<div className="flex h-screen items-center justify-center bg-background text-muted-foreground">Loading...</div>}>
-      <ChatPageInner />
-    </Suspense>
-  );
-}
-
-function ChatPageInner() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const path = searchParams.get("path") || "/";
   const sessionId = searchParams.get("sessionId");
 
@@ -41,7 +33,6 @@ function ChatPageInner() {
     selectSession,
     setMessagesForSession,
     saveSessionPayload,
-    isGenUIEnabled,
   } = useChatStore();
 
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
@@ -348,7 +339,7 @@ function ChatPageInner() {
   };
 
   const handleGoHome = () => {
-    router.push("/");
+    navigate("/");
   };
 
   const getProjectName = (sessionPath: string) => {
@@ -606,7 +597,7 @@ function ChatPageInner() {
           <div className="flex-1 overflow-hidden">
             <EditsPanel
               currentPath={path}
-              modelName="qwen3:32b"
+              modelName="minimax-m2.5:cloud"
               edits={edits}
               onEditClick={(edit: EditInfo) => setSelectedFile(edit.path)}
               onSync={handleManualSync}

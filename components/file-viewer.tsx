@@ -1,10 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, lazy, useEffect, useState } from "react"
 import { File, X, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Editor } from "@monaco-editor/react"
 import { readFileContent } from "@/lib/tauri-api"
+
+const MonacoEditor = lazy(async () => {
+  const mod = await import("@monaco-editor/react")
+  return { default: mod.Editor }
+})
 
 interface FileViewerProps {
   filePath: string
@@ -71,20 +75,27 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
             {error}
           </div>
         ) : (
-          <Editor
-            height="100%"
-            defaultLanguage={language}
-            value={content || ""}
-            theme="vs-dark"
-            options={{
-              readOnly: true,
-              minimap: { enabled: false },
-              fontSize: 13,
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-              padding: { top: 16, bottom: 16 },
-            }}
-          />
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center h-full text-muted-foreground text-xs">
+                Loading editor...
+              </div>
+            }>
+            <MonacoEditor
+              height="100%"
+              defaultLanguage={language}
+              value={content || ""}
+              theme="vs-dark"
+              options={{
+                readOnly: true,
+                minimap: { enabled: false },
+                fontSize: 13,
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                padding: { top: 16, bottom: 16 },
+              }}
+            />
+          </Suspense>
         )}
       </div>
       <div className="p-2 border-t bg-muted/10">

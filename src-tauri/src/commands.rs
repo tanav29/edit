@@ -953,7 +953,7 @@ pub async fn send_chat_message(
 ) -> Result<(), String> {
     let chat_id = request.chat_id.clone();
     let workspace_path = request.workspace_path.clone();
-    let model = request.model.unwrap_or_else(|| "qwen3:32b".to_string());
+    let model = request.model.unwrap_or_else(|| "minimax-m2.5:cloud".to_string());
 
     let event_name = format!("chat-stream-{}", chat_id);
 

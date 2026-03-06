@@ -38,7 +38,7 @@ export function EditsPanel({
   isSavingHistory,
   canSaveHistory,
 }: EditsPanelProps) {
-  const { isGenUIEnabled, setIsGenUIEnabled, currentSession } = useChatStore()
+  const { isGenUIEnabled, setIsGenUIEnabled } = useChatStore()
   const [activeTab, setActiveTab] = useState<"ai" | "history" | "remote">("ai")
   const pathParts = currentPath.split("/")
   const projectName = pathParts[pathParts.length - 1] || currentPath
