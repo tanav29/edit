@@ -6,25 +6,29 @@ import {
   type UIMessage,
   type TextPart,
 } from "@/lib/use-tauri-chat";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   ArrowUp,
   Folder,
-  PanelLeft,
   PanelRight,
   Plus,
   Square,
   Code,
   X,
+  MessageSquare,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+  Files,
+  Settings,
 } from "lucide-react";
 import { FileTree } from "@/components/file-tree";
-import { EditsPanel, type EditInfo } from "@/components/edits-panel";
 import { useChatStore } from "@/lib/chat-store";
 import MessageUI from "@/components/message";
 import { FileViewer } from "@/components/file-viewer";
-import { restoreFileEdits, type RestoreFileEdit } from "@/lib/tauri-api";
 
 export default function ChatPage() {
   const navigate = useNavigate();
@@ -38,15 +42,24 @@ export default function ChatPage() {
     createSession,
     selectSession,
     setMessagesForSession,
-    saveSessionPayload,
+    deleteSession,
+    deleteSessionsForPath,
+    folderDefaultPaths,
+    setFolderDefaultPath,
+    getFolderDefaultPath,
   } = useChatStore();
 
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
-  const [showLeftPanel, setShowLeftPanel] = useState(true);
-  const [showRightPanel, setShowRightPanel] = useState(false);
-  const [edits, setEdits] = useState<EditInfo[]>([]);
+  const [showHistoryPanel, setShowHistoryPanel] = useState(true);
+  const [showFileTreePanel, setShowFileTreePanel] = useState(false);
   const [input, setInput] = useState("");
   const [attachedImages, setAttachedImages] = useState<ImagePart[]>([]);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [showNewChatDialog, setShowNewChatDialog] = useState(false);
+  const [newChatPath, setNewChatPath] = useState("");
+  const [newChatFolder, setNewChatFolder] = useState<string | null>(null);
+  const [showFolderSettings, setShowFolderSettings] = useState<string | null>(null);
+  const [folderSettingPath, setFolderSettingPath] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastSyncedSessionIdRef = useRef<string | null>(null);
@@ -55,6 +68,36 @@ export default function ChatPage() {
   const pendingMessagesRef = useRef<
     { id: string; role: "user" | "assistant"; content: string; timestamp: number }[]
   >([]);
+
+  const groupedHistory = useMemo(() => {
+    const groups = new Map<string, typeof sessions>();
+
+    sessions.forEach((session) => {
+      const existing = groups.get(session.path) || [];
+      existing.push(session);
+      groups.set(session.path, existing);
+    });
+
+    return Array.from(groups.entries())
+      .map(([path, items]) => ({
+        path,
+        items: [...items].sort((a, b) => b.updatedAt - a.updatedAt),
+        latestUpdatedAt: Math.max(...items.map((item) => item.updatedAt)),
+      }))
+      .sort((a, b) => b.latestUpdatedAt - a.latestUpdatedAt);
+  }, [sessions]);
+
+  const toggleFolder = (path: string) => {
+    setExpandedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  };
 
   // Initialize session if not already set or if it's a new path
   useEffect(() => {
@@ -71,6 +114,60 @@ export default function ChatPage() {
       }
     }
   }, [path, sessionId, sessions]);
+
+  const handleSelectSession = (sessionId: string) => {
+    const session = sessions.find((s) => s.id === sessionId);
+    if (!session) return;
+    
+    selectSession(sessionId);
+    lastSyncedSessionIdRef.current = sessionId;
+    const storedSignature = JSON.stringify(
+      session.messages.map((m) => [m.id, m.role, m.content]),
+    );
+    lastSyncedSignatureRef.current = storedSignature;
+    pendingSignatureRef.current = storedSignature;
+    pendingMessagesRef.current = session.messages;
+
+    setMessages(
+      session.messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        parts: [{ type: "text" as const, text: m.content }],
+        createdAt: new Date(m.timestamp),
+      })) as UIMessage[],
+    );
+  };
+
+  const handleOpenNewChatDialog = (folderPath: string) => {
+    const defaultPath = getFolderDefaultPath(folderPath) || folderPath;
+    setNewChatFolder(folderPath);
+    setNewChatPath(defaultPath);
+    setShowNewChatDialog(true);
+  };
+
+  const handleCreateNewChat = () => {
+    if (!newChatPath.trim() || !newChatFolder) return;
+    
+    if (newChatPath !== newChatFolder) {
+      setFolderDefaultPath(newChatFolder, newChatPath);
+    }
+    
+    const newSession = createSession(newChatPath);
+    setShowNewChatDialog(false);
+    navigate(`/chat?path=${encodeURIComponent(newChatPath)}&sessionId=${newSession.id}`);
+  };
+
+  const handleOpenFolderSettings = (folderPath: string) => {
+    const currentDefault = getFolderDefaultPath(folderPath) || folderPath;
+    setFolderSettingPath(currentDefault);
+    setShowFolderSettings(folderPath);
+  };
+
+  const handleSaveFolderSettings = () => {
+    if (!showFolderSettings || !folderSettingPath.trim()) return;
+    setFolderDefaultPath(showFolderSettings, folderSettingPath);
+    setShowFolderSettings(null);
+  };
 
   const {
     messages,
@@ -119,99 +216,6 @@ export default function ChatPage() {
     setMessagesForSession(currentSession.id, pendingMessagesRef.current);
   }, [isActive, currentSession?.id, setMessagesForSession]);
 
-  const [isSavingHistory, setIsSavingHistory] = useState(false);
-  const [restoringMessageId, setRestoringMessageId] = useState<string | null>(null);
-  const [restoreMessageStatus, setRestoreMessageStatus] = useState<Record<string, string>>({});
-
-  const getMessageFileEdits = (message: UIMessage): RestoreFileEdit[] => {
-    if (message.role !== "assistant") return [];
-
-    const editsInMessage: RestoreFileEdit[] = [];
-
-    message.parts.forEach((part: unknown) => {
-      const p = part as {
-        type?: string;
-        state?: string;
-        output?: unknown;
-      };
-
-      if (p.type !== "tool-write" || p.state !== "output-available") {
-        return;
-      }
-
-      const out = p.output as {
-        filePath?: unknown;
-        action?: unknown;
-        previousContent?: unknown;
-        existedBefore?: unknown;
-      } | undefined;
-
-      if (!out || typeof out.filePath !== "string") {
-        return;
-      }
-
-      editsInMessage.push({
-        filePath: out.filePath,
-        action: out.action === "created" ? "created" : "edited",
-        previousContent: typeof out.previousContent === "string" ? out.previousContent : undefined,
-        existedBefore: typeof out.existedBefore === "boolean" ? out.existedBefore : undefined,
-      });
-    });
-
-    return editsInMessage;
-  };
-
-  const handleSaveHistory = async () => {
-    if (!currentSession || isActive || isSavingHistory) return;
-    setIsSavingHistory(true);
-    try {
-      const mapped = pendingMessagesRef.current;
-      const payload = {
-        ...currentSession,
-        messages: mapped,
-        updatedAt: Date.now(),
-      };
-      await saveSessionPayload(payload);
-    } catch (e) {
-      console.error("Failed to save history", e);
-    } finally {
-      setIsSavingHistory(false);
-    }
-  };
-
-  const handleRestoreMessageEdits = async (messageId: string, messageEdits: RestoreFileEdit[]) => {
-    if (messageEdits.length === 0 || restoringMessageId) return;
-
-    setRestoringMessageId(messageId);
-    setRestoreMessageStatus((prev) => {
-      const next = { ...prev };
-      delete next[messageId];
-      return next;
-    });
-
-    try {
-      const restoreOrder = [...messageEdits].reverse();
-      const result = await restoreFileEdits(path, restoreOrder);
-      const total = restoreOrder.length;
-      const restored = result.restored.length;
-      const errors = result.errors.length;
-
-      setRestoreMessageStatus((prev) => ({
-        ...prev,
-        [messageId]: errors > 0
-          ? `Restored ${restored}/${total} edits, ${errors} failed`
-          : `Restored ${restored} edit${restored === 1 ? "" : "s"}`,
-      }));
-    } catch (error) {
-      setRestoreMessageStatus((prev) => ({
-        ...prev,
-        [messageId]: `Restore failed: ${error instanceof Error ? error.message : String(error)}`,
-      }));
-    } finally {
-      setRestoringMessageId(null);
-    }
-  };
-
   // Track latest messages, but only persist after streaming finishes.
   useEffect(() => {
     if (!currentSession) return;
@@ -239,56 +243,6 @@ export default function ChatPage() {
     pendingSignatureRef.current = signature;
     pendingMessagesRef.current = mapped;
   }, [messages, currentSession?.id]);
-
-  useEffect(() => {
-    const seenIds = new Set(edits.map((e) => e.id));
-    const newEdits: EditInfo[] = [];
-    messages.forEach((message) => {
-      if (message.role === "assistant") {
-        message.parts.forEach((part: unknown) => {
-          const p = part as {
-            type?: string
-            state?: string
-            toolCallId?: string
-            input?: unknown
-            output?: unknown
-          }
-
-          if ((p.type === "tool-write") && p.state === "output-available") {
-            const toolCallId = p.toolCallId || `${Date.now()}-${Math.random()}`;
-            if (seenIds.has(toolCallId)) return;
-
-            const input = p.input as { filePath?: string } | undefined;
-            const output = p.output as
-              | {
-                  filePath?: string;
-                  action?: string;
-                }
-              | undefined;
-
-            const filePath = output?.filePath || input?.filePath;
-            if (filePath) {
-              const action = output?.action;
-              newEdits.push({
-                id: toolCallId,
-                path: filePath,
-                type:
-                  action === "created"
-                    ? "create"
-                    : action === "overwritten"
-                      ? "modify"
-                      : "modify",
-                timestamp: new Date(),
-              });
-            }
-          }
-        });
-      }
-    });
-    if (newEdits.length > 0) {
-      setEdits((prev) => [...prev, ...newEdits]);
-    }
-  }, [messages]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -376,82 +330,183 @@ export default function ChatPage() {
     void handleImagePick(dataTransfer.files);
   };
 
-  const handleGoHome = () => {
-    navigate("/");
-  };
-
-  const getProjectName = (sessionPath: string) => {
-    const parts = sessionPath.split("/");
-    return parts[parts.length - 1] || sessionPath;
-  };
-
   return (
     <div className="flex h-screen bg-background">
-      {showLeftPanel && (
+      {showHistoryPanel && (
         <div className="w-64 border-r flex flex-col bg-card/50">
           <div className="flex items-center justify-between p-3 border-b">
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Files
+              Chats
             </span>
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="icon-xs"
-                onClick={() => setShowLeftPanel(false)}
+                onClick={() => setShowHistoryPanel(false)}
                 className="size-6">
-                <PanelLeft className="size-3.5" />
+                <PanelRight className="size-3.5" />
               </Button>
             </div>
           </div>
-          <div className="flex-1 overflow-hidden">
-            <FileTree
-              rootPath={path}
-              onFileSelect={setSelectedFile}
-              selectedFile={selectedFile}
-            />
+          <div className="p-2">
+            <Button
+              variant="outline"
+              className="w-full justify-start text-xs gap-2"
+              onClick={() => handleOpenNewChatDialog(path)}
+            >
+              <Plus className="size-3.5" />
+              New Chat
+            </Button>
           </div>
-          <div className="p-2 border-t">
-            <button
-              onClick={handleGoHome}
-              className="w-full flex items-center gap-2 p-2 rounded-md hover:bg-accent/50 text-left text-xs text-muted-foreground group">
-              <Folder className="size-3.5" />
-              <span className="truncate flex-1">{getProjectName(path)}</span>
-              <div className="text-[10px] opacity-0 group-hover:opacity-100 bg-accent px-1.5 py-0.5 rounded transition-opacity">
-                Change
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {groupedHistory.length === 0 ? (
+              <div className="text-xs text-muted-foreground px-2 py-8 text-center space-y-2">
+                <MessageSquare className="size-8 mx-auto opacity-30" />
+                <p>No chat history yet</p>
+                <p className="text-[10px] opacity-60">Start a new chat to begin</p>
               </div>
-            </button>
+            ) : (
+              groupedHistory.map((group) => {
+                const projectName = group.path.split("/").filter(Boolean).pop() || group.path;
+                const isExpanded = expandedFolders.has(group.path);
+                const isCurrentPath = group.path === path;
+
+                return (
+                    <div key={group.path} className="space-y-1">
+                      {isExpanded && folderDefaultPaths[group.path] && folderDefaultPaths[group.path] !== group.path && (
+                        <div className="text-[10px] text-muted-foreground px-1 ml-6 flex items-center gap-1">
+                          <span className="opacity-60">Default:</span>
+                          <span className="font-mono truncate">{folderDefaultPaths[group.path]}</span>
+                        </div>
+                      )}
+                      <div
+                      className={`flex items-center gap-1 p-2 rounded-lg cursor-pointer transition-colors ${
+                        isCurrentPath ? "bg-accent" : "hover:bg-accent/50"
+                      }`}
+                    >
+                      <button
+                        onClick={() => toggleFolder(group.path)}
+                        className="p-0.5 hover:bg-accent/50 rounded"
+                      >
+                        {isExpanded ? (
+                          <ChevronDown className="size-3.5 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="size-3.5 text-muted-foreground" />
+                        )}
+                      </button>
+                      <Folder className="size-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-xs font-medium truncate flex-1 min-w-0">
+                        {projectName}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        className="size-6 opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteSessionsForPath(group.path);
+                        }}
+                      >
+                        <Trash2 className="size-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        className="size-6 opacity-0 group-hover:opacity-100 hover:text-muted-foreground hover:bg-accent"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenFolderSettings(group.path);
+                        }}
+                        title="Folder settings"
+                      >
+                        <Settings className="size-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        className="size-6 hover:text-primary hover:bg-primary/10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenNewChatDialog(group.path);
+                        }}
+                        title="New chat in this folder"
+                      >
+                        <Plus className="size-3" />
+                      </Button>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="ml-4 space-y-0.5">
+                        {group.items.map((session) => (
+                          <div
+                            key={session.id}
+                            className={`group flex items-center gap-2 p-1.5 rounded-md cursor-pointer transition-colors ${
+                              currentSession?.id === session.id
+                                ? "bg-primary/10 text-primary"
+                                : "hover:bg-accent/50"
+                            }`}
+                            onClick={() => handleSelectSession(session.id)}
+                          >
+                            <MessageSquare className="size-3 text-muted-foreground shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-xs truncate">{session.name}</div>
+                              <div className="text-[10px] text-muted-foreground">
+                                {new Date(session.updatedAt).toLocaleDateString()}
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              className="size-5 opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteSession(session.id);
+                              }}
+                            >
+                              <Trash2 className="size-2.5" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       )}
 
       <div className="flex-1 flex flex-col min-w-0 relative">
         <div className="absolute top-3 left-3 z-10 flex gap-1">
-          {!showLeftPanel && (
+          {!showHistoryPanel && (
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={() => setShowLeftPanel(true)}
-              className="size-8 bg-background/80 backdrop-blur-sm border shadow-sm">
-              <PanelLeft className="size-4" />
+              onClick={() => setShowHistoryPanel(true)}
+              className="size-8 bg-background/80 backdrop-blur-sm border shadow-sm"
+              title="Show chat history">
+              <MessageSquare className="size-4" />
             </Button>
           )}
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={handleGoHome}
+            onClick={() => handleOpenNewChatDialog(path)}
             className="size-8 bg-background/80 backdrop-blur-sm border shadow-sm"
-            title="Go to Home">
+            title="New chat">
             <Plus className="size-4" />
           </Button>
         </div>
-        <div className="absolute top-3 right-3 z-10">
-          {!showRightPanel && (
+        <div className="absolute top-3 right-3 z-10 flex gap-1">
+          {!showFileTreePanel && (
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={() => setShowRightPanel(true)}
-              className="size-8 bg-background/80 backdrop-blur-sm border shadow-sm">
-              <PanelRight className="size-4" />
+              onClick={() => setShowFileTreePanel(true)}
+              className="size-8 bg-background/80 backdrop-blur-sm border shadow-sm"
+              title="Show files">
+              <Files className="size-4" />
             </Button>
           )}
         </div>
@@ -469,16 +524,23 @@ export default function ChatPage() {
           )}
 
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-4 animate-fade-in">
+            <div className="flex flex-col items-center justify-center h-full gap-6 animate-fade-in">
               <div className="relative">
-                <div className="relative bg-card border border-border/60 rounded-2xl p-6">
-                  <Code className="size-6 text-primary" />
+                <div className="relative bg-card border border-border/60 rounded-2xl p-8">
+                  <Code className="size-10 text-primary" />
                 </div>
               </div>
-              <div className="text-center space-y-1.5">
-                <h1 className="text-lg font-semibold tracking-tight">
-                  What would you code today?
+              <div className="text-center space-y-2">
+                <h1 className="text-xl font-semibold tracking-tight">
+                  What would you like to build?
                 </h1>
+                <p className="text-sm text-muted-foreground max-w-md">
+                  I can read, edit, and create files. Just tell me what you want to accomplish.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-card/50 px-3 py-1.5 rounded-full border">
+                <Folder className="size-3" />
+                <span className="truncate max-w-[200px]">{path}</span>
               </div>
             </div>
           ) : (
@@ -522,56 +584,6 @@ export default function ChatPage() {
                     <div className="py-2">
                       <div className="flex items-start max-w-full">
                         <div className="min-w-0 flex-1 space-y-2">
-                          {(() => {
-                            const messageEdits = getMessageFileEdits(message);
-                            if (messageEdits.length === 0) return null;
-
-                            return (
-                              <div className="rounded-lg border border-border/60 bg-card/40 p-2.5 space-y-2">
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                                    {messageEdits.length} file edit{messageEdits.length === 1 ? "" : "s"}
-                                  </span>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 px-2 text-[10px] uppercase tracking-wider"
-                                    disabled={restoringMessageId !== null}
-                                    onClick={() => handleRestoreMessageEdits(message.id, messageEdits)}>
-                                    {restoringMessageId === message.id ? "Restoring..." : "Restore all"}
-                                  </Button>
-                                </div>
-
-                                <div className="space-y-1 max-h-28 overflow-y-auto">
-                                  {messageEdits.map((edit, i) => (
-                                    <button
-                                      key={`${message.id}-${edit.filePath}-${i}`}
-                                      onClick={() => setSelectedFile(edit.filePath)}
-                                      className="w-full text-left rounded-md border border-border/30 hover:bg-accent/40 px-2 py-1.5 flex items-center gap-2 transition-colors">
-                                      <span className="text-[10px] text-muted-foreground truncate flex-1">
-                                        {edit.filePath}
-                                      </span>
-                                      <span
-                                        className={`text-[10px] px-1.5 py-0.5 rounded ${
-                                          edit.action === "created"
-                                            ? "bg-emerald-500/10 text-emerald-400"
-                                            : "bg-amber-500/10 text-amber-400"
-                                        }`}>
-                                        {edit.action === "created" ? "new" : "edit"}
-                                      </span>
-                                    </button>
-                                  ))}
-                                </div>
-
-                                {restoreMessageStatus[message.id] && (
-                                  <div className="text-[10px] text-muted-foreground">
-                                    {restoreMessageStatus[message.id]}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
-
                           <MessageUI
                             parts={message.parts}
                             addToolApprovalResponse={addToolApprovalResponse}
@@ -635,7 +647,7 @@ export default function ChatPage() {
                       handleSend();
                     }
                   }}
-                  placeholder="Send a message... (you can paste images)"
+                  placeholder="Ask anything... (Shift+Enter for new line)"
                   rows={2}
                   className="ml-1 flex-1 bg-transparent resize-none outline-none text-sm leading-relaxed placeholder:text-muted-foreground max-h-[200px]"
                 />
@@ -644,7 +656,8 @@ export default function ChatPage() {
                     size="icon-sm"
                     onClick={isActive ? stop : handleSend}
                     disabled={!isActive && !input.trim() && attachedImages.length === 0}
-                    className="rounded-lg shrink-0 transition-all duration-200 disabled:opacity-30 cursor-pointer">
+                    className="rounded-lg shrink-0 transition-all duration-200 disabled:opacity-30 cursor-pointer"
+                  >
                     {isActive ? (
                       <Square className="size-3 fill-current" />
                     ) : (
@@ -654,31 +667,121 @@ export default function ChatPage() {
                 </div>
               </div>
             </div>
+            <div className="text-[10px] text-muted-foreground text-center px-2">
+              <span className="hidden sm:inline">Enter</span> to send · <span className="hidden sm:inline">Shift+Enter</span> for new line · Paste images directly
+            </div>
           </div>
         </div>
       </div>
 
-      {showRightPanel && (
+      {showFileTreePanel && (
         <div className="w-72 border-l flex flex-col bg-card/50">
-          <div className="flex items-center justify-start p-3 border-b">
+          <div className="flex items-center justify-between p-3 border-b">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Files
+            </span>
             <Button
               variant="ghost"
               size="icon-xs"
-              onClick={() => setShowRightPanel(false)}
+              onClick={() => setShowFileTreePanel(false)}
               className="size-6">
               <PanelRight className="size-3.5" />
             </Button>
           </div>
           <div className="flex-1 overflow-hidden">
-            <EditsPanel
-              currentPath={path}
-              modelName="minimax-m2.5:cloud"
-              edits={edits}
-              onEditClick={(edit: EditInfo) => setSelectedFile(edit.path)}
-              onSaveHistory={handleSaveHistory}
-              isSavingHistory={isSavingHistory}
-              canSaveHistory={Boolean(currentSession) && !isActive}
+            <FileTree
+              rootPath={path}
+              onFileSelect={setSelectedFile}
+              selectedFile={selectedFile}
             />
+          </div>
+        </div>
+      )}
+
+      {showNewChatDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-card border rounded-xl p-4 w-full max-w-md mx-4 space-y-4 shadow-xl animate-in zoom-in-95">
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold">New Chat</h2>
+              <p className="text-sm text-muted-foreground">
+                Enter the workspace directory for this chat
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Workspace Path
+              </label>
+              <Input
+                value={newChatPath}
+                onChange={(e) => setNewChatPath(e.target.value)}
+                placeholder="/path/to/project"
+                className="font-mono text-sm"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleCreateNewChat();
+                  }
+                }}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => setShowNewChatDialog(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateNewChat}
+                disabled={!newChatPath.trim()}
+              >
+                Create Chat
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showFolderSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-card border rounded-xl p-4 w-full max-w-md mx-4 space-y-4 shadow-xl animate-in zoom-in-95">
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold">Folder Settings</h2>
+              <p className="text-sm text-muted-foreground">
+                Set the default workspace for this folder
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Default Workspace Path
+              </label>
+              <Input
+                value={folderSettingPath}
+                onChange={(e) => setFolderSettingPath(e.target.value)}
+                placeholder="/path/to/project"
+                className="font-mono text-sm"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleSaveFolderSettings();
+                  }
+                }}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => setShowFolderSettings(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveFolderSettings}
+                disabled={!folderSettingPath.trim()}
+              >
+                Save
+              </Button>
+            </div>
           </div>
         </div>
       )}

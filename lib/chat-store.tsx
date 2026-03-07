@@ -32,6 +32,7 @@ export interface ChatSession {
 interface ChatStoreContextType {
   sessions: ChatSession[];
   currentSession: ChatSession | null;
+  folderDefaultPaths: Record<string, string>;
   createSession: (path: string, name?: string) => ChatSession;
   selectSession: (id: string) => void;
   deleteSession: (id: string) => void;
@@ -40,6 +41,8 @@ interface ChatStoreContextType {
   addMessage: (message: ChatMessage) => void;
   clearCurrentSession: () => void;
   setMessagesForSession: (sessionId: string, messages: ChatMessage[]) => void;
+  setFolderDefaultPath: (folderPath: string, defaultPath: string) => void;
+  getFolderDefaultPath: (folderPath: string) => string | null;
 }
 
 const ChatStoreContext = createContext<ChatStoreContextType | null>(null);
@@ -47,6 +50,7 @@ const ChatStoreContext = createContext<ChatStoreContextType | null>(null);
 export function ChatStoreProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [folderDefaultPaths, setFolderDefaultPaths] = useState<Record<string, string>>({});
 
   // Helper to save a session to the Tauri backend
   const saveSession = async (session: ChatSession) => {
@@ -172,11 +176,23 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
     );
   }
 
+  function setFolderDefaultPath(folderPath: string, defaultPath: string) {
+    setFolderDefaultPaths((prev) => ({
+      ...prev,
+      [folderPath]: defaultPath,
+    }));
+  }
+
+  function getFolderDefaultPath(folderPath: string): string | null {
+    return folderDefaultPaths[folderPath] || null;
+  }
+
   return (
     <ChatStoreContext.Provider
       value={{
         sessions,
         currentSession,
+        folderDefaultPaths,
         createSession,
         selectSession,
         deleteSession: deleteSessionFn,
@@ -185,6 +201,8 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         addMessage,
         clearCurrentSession,
         setMessagesForSession,
+        setFolderDefaultPath,
+        getFolderDefaultPath,
       }}>
       {children}
     </ChatStoreContext.Provider>
