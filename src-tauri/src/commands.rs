@@ -1237,3 +1237,18 @@ pub async fn stop_chat(chat_id: String) -> Result<(), String> {
 
 static STOP_MAP: Lazy<Mutex<HashMap<String, bool>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
+
+#[tauri::command]
+pub async fn create_folder(path: String) -> Result<serde_json::Value, String> {
+    let p = Path::new(&path);
+    if p.exists() {
+        return Err("Folder already exists".to_string());
+    }
+    
+    fs::create_dir_all(p).map_err(|e| format!("Failed to create folder: {}", e))?;
+    
+    Ok(serde_json::json!({
+        "success": true,
+        "path": path,
+    }))
+}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   sendChatMessage,
   listenChatStream,
@@ -48,18 +48,80 @@ export type ChatStatus = "idle" | "submitted" | "streaming"
 
 interface UseTauriChatOptions {
   workspacePath: string
+  sessionId?: string
   model?: string
 }
 
-export function useTauriChat({ workspacePath, model }: UseTauriChatOptions) {
-  const [messages, setMessages] = useState<UIMessage[]>([])
-  const [status, setStatus] = useState<ChatStatus>("idle")
-  const chatIdRef = useRef<string>("")
-  const unlistenRef = useRef<(() => void) | null>(null)
+const DEFAULT_SESSION_KEY = "__default__"
+const EMPTY_MESSAGES: UIMessage[] = []
+
+type SessionRuntime = {
+  chatId: string
+  unlisten: (() => void) | null
+}
+
+export function useTauriChat({ workspacePath, sessionId, model }: UseTauriChatOptions) {
+  const currentSessionKey = sessionId || workspacePath || DEFAULT_SESSION_KEY
+  const [messagesBySession, setMessagesBySession] = useState<Record<string, UIMessage[]>>({})
+  const [statusBySession, setStatusBySession] = useState<Record<string, ChatStatus>>({})
+  const runtimesRef = useRef<Record<string, SessionRuntime>>({})
+
+  const messages = messagesBySession[currentSessionKey] ?? EMPTY_MESSAGES
+  const status = statusBySession[currentSessionKey] || "idle"
+
+  useEffect(() => {
+    return () => {
+      Object.values(runtimesRef.current).forEach((runtime) => {
+        if (runtime.unlisten) {
+          runtime.unlisten()
+        }
+      })
+      runtimesRef.current = {}
+    }
+  }, [])
+
+  const setSessionStatus = useCallback((key: string, nextStatus: ChatStatus) => {
+    setStatusBySession((prev) => ({ ...prev, [key]: nextStatus }))
+  }, [])
+
+  const hasSessionMessages = useCallback(
+    (key: string) => {
+      return (messagesBySession[key]?.length || 0) > 0
+    },
+    [messagesBySession]
+  )
+
+  const getSessionStatus = useCallback(
+    (key: string): ChatStatus => {
+      return statusBySession[key] || "idle"
+    },
+    [statusBySession]
+  )
+
+  const sessionNeedsToolApproval = useCallback(
+    (key: string) => {
+      const sessionMessages = messagesBySession[key] || EMPTY_MESSAGES
+      for (const message of sessionMessages) {
+        for (const part of message.parts) {
+          if (
+            part.type !== "text" &&
+            (part as ToolCallPart).state === "approval-requested"
+          ) {
+            return true
+          }
+        }
+      }
+      return false
+    },
+    [messagesBySession]
+  )
 
   const setMessagesExternal = useCallback((msgs: UIMessage[]) => {
-    setMessages(msgs)
-  }, [])
+    setMessagesBySession((prev) => ({
+      ...prev,
+      [currentSessionKey]: msgs,
+    }))
+  }, [currentSessionKey])
 
   const sendMessage = useCallback(
     async (input: { parts: Array<{ type: "text"; text: string } | ImagePart> }) => {
@@ -72,14 +134,14 @@ export function useTauriChat({ workspacePath, model }: UseTauriChatOptions) {
 
       if (!userText.trim() && userImages.length === 0) return
 
-      // Clean up previous listener if still active
-      if (unlistenRef.current) {
-        unlistenRef.current()
-        unlistenRef.current = null
-      }
-
+      const sessionKey = currentSessionKey
       const chatId = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      chatIdRef.current = chatId
+
+      const existingRuntime = runtimesRef.current[sessionKey]
+      if (existingRuntime?.unlisten) {
+        existingRuntime.unlisten()
+      }
+      runtimesRef.current[sessionKey] = { chatId, unlisten: null }
 
       // Add user message
       const userMessage: UIMessage = {
@@ -92,18 +154,24 @@ export function useTauriChat({ workspacePath, model }: UseTauriChatOptions) {
       // Add assistant placeholder
       const assistantMsgId = `msg-assistant-${Date.now()}`
 
-      setMessages((prev) => [
-        ...prev,
-        userMessage,
-        {
-          id: assistantMsgId,
-          role: "assistant",
-          parts: [],
-          createdAt: new Date(),
-        },
-      ])
+      setMessagesBySession((prev) => {
+        const current = prev[sessionKey] || []
+        return {
+          ...prev,
+          [sessionKey]: [
+            ...current,
+            userMessage,
+            {
+              id: assistantMsgId,
+              role: "assistant",
+              parts: [],
+              createdAt: new Date(),
+            },
+          ],
+        }
+      })
 
-      setStatus("submitted")
+      setSessionStatus(sessionKey, "submitted")
 
       // Build Ollama messages from history
       const ollamaMessages: OllamaMessage[] = []
@@ -140,8 +208,9 @@ export function useTauriChat({ workspacePath, model }: UseTauriChatOptions) {
 
       // Listen for streaming events
       const unlisten = await listenChatStream(chatId, (event: ChatStreamEvent) => {
-        setMessages((prev) => {
-          const updated = [...prev]
+        setMessagesBySession((prev) => {
+          const sessionMessages = prev[sessionKey] || []
+          const updated = [...sessionMessages]
           const lastIdx = updated.length - 1
           if (lastIdx < 0) return prev
 
@@ -150,7 +219,7 @@ export function useTauriChat({ workspacePath, model }: UseTauriChatOptions) {
 
           switch (event.type) {
             case "text": {
-              setStatus("streaming")
+              setSessionStatus(sessionKey, "streaming")
               // Append or update text content
               const lastPart = parts[parts.length - 1]
               if (lastPart && lastPart.type === "text") {
@@ -171,7 +240,7 @@ export function useTauriChat({ workspacePath, model }: UseTauriChatOptions) {
             }
 
             case "tool-call": {
-              setStatus("streaming")
+              setSessionStatus(sessionKey, "streaming")
               const needsApproval = event.needs_approval || false
               const toolPart: ToolCallPart = {
                 type: `tool-${event.tool_name}`,
@@ -241,36 +310,45 @@ export function useTauriChat({ workspacePath, model }: UseTauriChatOptions) {
                   parts[i] = { ...(parts[i] as TextPart), state: "complete" }
                 }
               }
-              setStatus("idle")
+              setSessionStatus(sessionKey, "idle")
               // Clean up the listener when stream is complete
-              if (unlistenRef.current) {
-                unlistenRef.current()
-                unlistenRef.current = null
+              const runtime = runtimesRef.current[sessionKey]
+              if (runtime?.unlisten) {
+                runtime.unlisten()
               }
+              delete runtimesRef.current[sessionKey]
               break
             }
           }
 
           lastMsg.parts = parts
           updated[lastIdx] = lastMsg
-          return updated
+          return {
+            ...prev,
+            [sessionKey]: updated,
+          }
         })
       })
 
-      unlistenRef.current = unlisten
+      runtimesRef.current[sessionKey] = {
+        chatId,
+        unlisten,
+      }
 
       // Send the message
       try {
         await sendChatMessage(ollamaMessages, workspacePath, chatId, model)
       } catch (err) {
-        setStatus("idle")
+        setSessionStatus(sessionKey, "idle")
         // Clean up listener on send failure
-        if (unlistenRef.current) {
-          unlistenRef.current()
-          unlistenRef.current = null
+        const runtime = runtimesRef.current[sessionKey]
+        if (runtime?.unlisten) {
+          runtime.unlisten()
         }
-        setMessages((prev) => {
-          const updated = [...prev]
+        delete runtimesRef.current[sessionKey]
+        setMessagesBySession((prev) => {
+          const current = prev[sessionKey] || []
+          const updated = [...current]
           const lastIdx = updated.length - 1
           if (lastIdx >= 0) {
             const lastMsg = { ...updated[lastIdx] }
@@ -284,11 +362,14 @@ export function useTauriChat({ workspacePath, model }: UseTauriChatOptions) {
             ]
             updated[lastIdx] = lastMsg
           }
-          return updated
+          return {
+            ...prev,
+            [sessionKey]: updated,
+          }
         })
       }
     },
-    [messages, workspacePath, model]
+    [messages, workspacePath, model, currentSessionKey, setSessionStatus]
   )
 
   const addToolApprovalResponse = useCallback(
@@ -297,30 +378,46 @@ export function useTauriChat({ workspacePath, model }: UseTauriChatOptions) {
         await approveToolCall(response.id, response.approved)
 
         // Update the UI to reflect the response
-        setMessages((prev) => {
-          const updated = [...prev]
-          for (let i = updated.length - 1; i >= 0; i--) {
-            const msg = updated[i]
-            if (msg.role === "assistant") {
-              const parts = [...msg.parts]
-              for (let j = 0; j < parts.length; j++) {
-                const p = parts[j]
-                if (
-                  p.type !== "text" &&
-                  (p as ToolCallPart).toolCallId === response.id
-                ) {
-                  parts[j] = {
-                    ...(p as ToolCallPart),
-                    state: response.approved ? "running" : "output-denied",
-                    approval: { id: response.id, approved: response.approved },
+        setMessagesBySession((prev) => {
+          const next = { ...prev }
+          const sessionKeys = Object.keys(next)
+
+          for (const key of sessionKeys) {
+            const sessionMessages = next[key] || []
+            const updated = [...sessionMessages]
+            let changed = false
+
+            for (let i = updated.length - 1; i >= 0; i--) {
+              const msg = updated[i]
+              if (msg.role === "assistant") {
+                const parts = [...msg.parts]
+                for (let j = 0; j < parts.length; j++) {
+                  const p = parts[j]
+                  if (
+                    p.type !== "text" &&
+                    (p as ToolCallPart).toolCallId === response.id
+                  ) {
+                    parts[j] = {
+                      ...(p as ToolCallPart),
+                      state: response.approved ? "running" : "output-denied",
+                      approval: { id: response.id, approved: response.approved },
+                    }
+                    updated[i] = { ...msg, parts }
+                    changed = true
+                    break
                   }
-                  updated[i] = { ...msg, parts }
-                  return updated
                 }
               }
+              if (changed) break
+            }
+
+            if (changed) {
+              next[key] = updated
+              return next
             }
           }
-          return updated
+
+          return prev
         })
       } catch (err) {
         console.error("Failed to send tool approval:", err)
@@ -330,23 +427,28 @@ export function useTauriChat({ workspacePath, model }: UseTauriChatOptions) {
   )
 
   const stop = useCallback(async () => {
-    if (chatIdRef.current) {
+    const sessionKey = currentSessionKey
+    const runtime = runtimesRef.current[sessionKey]
+    if (runtime?.chatId) {
       try {
-        await stopChat(chatIdRef.current)
+        await stopChat(runtime.chatId)
       } catch (err) {
         console.error("Failed to stop chat:", err)
       }
     }
-    setStatus("idle")
-    if (unlistenRef.current) {
-      unlistenRef.current()
-      unlistenRef.current = null
+    setSessionStatus(sessionKey, "idle")
+    if (runtime?.unlisten) {
+      runtime.unlisten()
     }
-  }, [])
+    delete runtimesRef.current[sessionKey]
+  }, [currentSessionKey, setSessionStatus])
 
   return {
     messages,
     setMessages: setMessagesExternal,
+    hasSessionMessages,
+    getSessionStatus,
+    sessionNeedsToolApproval,
     sendMessage,
     status,
     addToolApprovalResponse,

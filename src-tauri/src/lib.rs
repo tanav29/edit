@@ -20,6 +20,7 @@ pub fn run() {
             send_chat_message,
             approve_tool_call,
             stop_chat,
+            create_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

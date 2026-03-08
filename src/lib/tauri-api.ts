@@ -91,6 +91,10 @@ export async function toolBash(workspacePath: string, command: string, timeoutMs
   return invoke("tool_bash", { workspacePath, command, timeoutMs: timeoutMs || null })
 }
 
+export async function createFolder(path: string) {
+  return invoke<{ success: boolean; path: string }>("create_folder", { path })
+}
+
 // ── AI Chat ──────────────────────────────────────────────────
 
 export interface ChatStreamEvent {

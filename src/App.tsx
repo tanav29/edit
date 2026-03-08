@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom"
-import ChatPage from "@/app/chat/page"
+import ChatPage from "@/pages/ChatPage"
 
 export default function App() {
   return (
