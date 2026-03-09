@@ -1,11 +1,11 @@
 "use client";
 
 import {
-  useTauriChat,
+  useAIChat,
   type ImagePart,
   type UIMessage,
   type TextPart,
-} from "@/lib/use-tauri-chat";
+} from "@/lib/use-ai-chat";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -117,7 +117,7 @@ export default function ChatPage() {
     status,
     addToolApprovalResponse,
     stop,
-  } = useTauriChat({
+  } = useAIChat({
     workspacePath: path,
     sessionId: currentSession?.id || sessionId || undefined,
   });
@@ -611,8 +611,6 @@ export default function ChatPage() {
               {messages.map((message, index) => (
                 <div
                   key={message.id || index}
-                  className="animate-message-in"
-                  style={{ animationDelay: `${Math.min(index * 40, 240)}ms` }}
                 >
                   {message.role === "user" ? (
                     <div className="flex justify-end py-1">

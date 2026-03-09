@@ -145,7 +145,7 @@ function ToolPart({
 
   if (part.state === "approval-requested") {
     return (
-      <div className="tool-card rounded-xl p-3.5 space-y-3 animate-fade-in">
+      <div className="tool-card rounded-xl p-3.5 space-y-3">
         <div className="flex items-center gap-2">
           <div className="size-6 rounded-md bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
             <TerIcon className="size-3 text-amber-400" />
@@ -207,7 +207,7 @@ function ToolPart({
   return (
     <details>
       <summary 
-        className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90 select-none cursor-pointer">
+        className="flex items-center gap-2 text-xs py-0.5 text-muted-foreground/90 select-none cursor-pointer">
         {part.state == "output-available" ||
         part.state == "output-denied" ||
         part.state == "approval-responded" ||
@@ -301,7 +301,7 @@ function ToolPart({
           return null;
         })()}
       </summary>
-      <div className="text-xs max-h-72 overflow-y-auto overflow-x-hidden wrap-break-word animate-fade-in mt-2">
+      <div className="text-xs max-h-72 overflow-y-auto overflow-x-hidden wrap-break-word mt-2">
         {toolOutput}
       </div>
     </details>
