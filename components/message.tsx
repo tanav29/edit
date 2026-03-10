@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { registry } from "@/lib/registry";
 import {
   ActionProvider,
   Renderer,
@@ -76,23 +75,10 @@ export default function MessageUI({
                 plugins={{ code, mermaid, math, cjk }}
                 shikiTheme={["github-light", "github-dark"]}
                 mermaid={{ config: { theme: "dark" } }}
-                isAnimating={part.state === "streaming"}>
+                isAnimating={part.state === "streaming"}
+              >
                 {part.text}
               </Streamdown>
-            </div>
-          );
-
-        case "reasoning":
-          return (
-            <div
-              key={key}
-              className="flex items-center gap-2 text-xs text-muted-foreground/90 py-1">
-              {part.state === "streaming" ? (
-                <Loader2 className="size-3 animate-spin" />
-              ) : (
-                <Brain className="size-3" />
-              )}
-              <span>Thinking</span>
             </div>
           );
 
@@ -100,7 +86,8 @@ export default function MessageUI({
           return (
             <div
               key={key}
-              className="inline-flex items-center gap-1.5 text-xs bg-card border border-border/50 rounded-md px-2 py-1 text-muted-foreground">
+              className="inline-flex items-center gap-1.5 text-xs bg-card border border-border/50 rounded-md px-2 py-1 text-muted-foreground"
+            >
               <File className="size-3" />
               <span className="font-mono">{part.filename}</span>
             </div>
@@ -113,11 +100,10 @@ export default function MessageUI({
               href={part.url}
               className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
               target="_blank"
-              rel="noopener noreferrer">
+              rel="noopener noreferrer"
+            >
               <Link className="size-3" />
-              <span className="underline underline-offset-2">
-                {part.title}
-              </span>
+              <span className="underline underline-offset-2">{part.title}</span>
             </a>
           );
 
@@ -136,31 +122,7 @@ export default function MessageUI({
       }
     });
   }, [parts, addToolApprovalResponse, onFileClick]);
-
-  if (isGenUIEnabled && hasSpec && spec) {
-    return (
-      <StateProvider initialState={{}}>
-        <VisibilityProvider>
-          <ActionProvider
-            handlers={{
-              // Define your action handlers here
-              submit: (params) => console.log("Submit:", params),
-              // Add other handlers as needed
-            }}>
-            <ValidationProvider customFunctions={{}}>
-              <Renderer spec={spec} registry={registry} />
-            </ValidationProvider>
-          </ActionProvider>
-        </VisibilityProvider>
-      </StateProvider>
-    );
-  }
-
-  return (
-    <>
-      {renderedParts}
-    </>
-  );
+  return <>{renderedParts}</>;
 }
 
 function ToolPart({
@@ -177,9 +139,10 @@ function ToolPart({
 }) {
   const toolName = part.type.replace("tool-", "");
 
-  const toolOutput = useMemo(() => (
-    <ToolOutput toolName={toolName} output={part.output} />
-  ), [toolName, part.output]);
+  const toolOutput = useMemo(
+    () => <ToolOutput toolName={toolName} output={part.output} />,
+    [toolName, part.output],
+  );
 
   if (part.state === "approval-requested") {
     return (
@@ -222,7 +185,8 @@ function ToolPart({
                 approved: true,
               });
             }}
-            className="rounded-lg text-xs">
+            className="rounded-lg text-xs"
+          >
             Approve
           </Button>
           <Button
@@ -234,7 +198,8 @@ function ToolPart({
                 approved: false,
               });
             }}
-            className="rounded-lg text-xs">
+            className="rounded-lg text-xs"
+          >
             Decline
           </Button>
         </div>
@@ -244,14 +209,15 @@ function ToolPart({
 
   return (
     <details>
-      <summary 
-        onClick={(e) => {
+      <summary
+        onClick={() => {
           const input = part.input as any;
           if (input?.filePath && onFileClick) {
             onFileClick(input.filePath);
           }
         }}
-        className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90 select-none cursor-pointer">
+        className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90 select-none cursor-pointer"
+      >
         {part.state == "output-available" ||
         part.state == "output-denied" ||
         part.state == "approval-responded" ||
@@ -343,112 +309,111 @@ function ToolPart({
   );
 }
 
-const ToolOutput = React.memo(({
-  toolName,
-  output,
-}: {
-  toolName: string;
-  output: unknown;
-}) => {
-  if (!output) return null;
+const ToolOutput = React.memo(
+  ({ toolName, output }: { toolName: string; output: unknown }) => {
+    if (!output) return null;
 
-  const data = output as Record<string, unknown>;
+    const data = output as Record<string, unknown>;
 
-  if (data.error) {
-    return (
-      <div className="text-red-400 font-mono whitespace-pre-wrap">
-        {String(data.error)}
-      </div>
-    );
-  }
-
-  if (toolName === "read" && data.content) {
-    return null;
-  }
-
-  if (toolName === "write") {
-    const editsArr = Array.isArray(data.edits)
-      ? (data.edits as Array<Record<string, unknown>>)
-      : [];
-
-    return (
-      <div className="space-y-2 tool-card rounded-lg p-3.5">
-        <div className="flex items-center gap-2 text-[10px] pb-1 border-b border-border/30">
-          <span
-            className={
-              data.action === "created"
-                ? "text-emerald-400"
-                : data.action === "edited"
-                  ? "text-amber-400"
-                  : "text-blue-400"
-            }>
-            {String(data.action ?? "").toUpperCase()}
-          </span>
-          <span className="text-muted-foreground/70">
-            {String(data.filePath)}
-          </span>
+    if (data.error) {
+      return (
+        <div className="text-red-400 font-mono whitespace-pre-wrap">
+          {String(data.error)}
         </div>
-        {editsArr.map((edit, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-2 text-[10px] text-muted-foreground/80">
-            <span className="font-mono">L{String(edit.range)}</span>
-            <span className="text-red-400/70">
-              -{String(edit.linesRemoved)}
+      );
+    }
+
+    if (toolName === "read" && data.content) {
+      return null;
+    }
+
+    if (toolName === "write") {
+      const editsArr = Array.isArray(data.edits)
+        ? (data.edits as Array<Record<string, unknown>>)
+        : [];
+
+      return (
+        <div className="space-y-2 tool-card rounded-lg p-3.5">
+          <div className="flex items-center gap-2 text-[10px] pb-1 border-b border-border/30">
+            <span
+              className={
+                data.action === "created"
+                  ? "text-emerald-400"
+                  : data.action === "edited"
+                    ? "text-amber-400"
+                    : "text-blue-400"
+              }
+            >
+              {String(data.action ?? "").toUpperCase()}
             </span>
-            <span className="text-emerald-400/70">
-              +{String(edit.linesAdded)}
+            <span className="text-muted-foreground/70">
+              {String(data.filePath)}
             </span>
-            {edit.description != null && (
-              <span className="text-muted-foreground/50 ml-1">
-                {String(edit.description)}
+          </div>
+          {editsArr.map((edit, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-2 text-[10px] text-muted-foreground/80"
+            >
+              <span className="font-mono">L{String(edit.range)}</span>
+              <span className="text-red-400/70">
+                -{String(edit.linesRemoved)}
               </span>
-            )}
-          </div>
-        ))}
-        {data.message != null && (
-          <div className="text-muted-foreground/60 text-[10px]">
-            {String(data.message)}
-          </div>
-        )}
-        {data.previousLineCount !== undefined && (
-          <div className="text-muted-foreground/50 text-[10px]">
-            {String(data.previousLineCount)} &rarr; {String(data.newLineCount)}{" "}
-            lines
-          </div>
-        )}
-      </div>
-    );
-  }
+              <span className="text-emerald-400/70">
+                +{String(edit.linesAdded)}
+              </span>
+              {edit.description != null && (
+                <span className="text-muted-foreground/50 ml-1">
+                  {String(edit.description)}
+                </span>
+              )}
+            </div>
+          ))}
+          {data.message != null && (
+            <div className="text-muted-foreground/60 text-[10px]">
+              {String(data.message)}
+            </div>
+          )}
+          {data.previousLineCount !== undefined && (
+            <div className="text-muted-foreground/50 text-[10px]">
+              {String(data.previousLineCount)} &rarr;{" "}
+              {String(data.newLineCount)} lines
+            </div>
+          )}
+        </div>
+      );
+    }
 
-  if (toolName === "bash" && data.stdout) {
-    console.log("Bash output:", data.stdout);
+    if (toolName === "bash" && data.stdout) {
+      console.log("Bash output:", data.stdout);
+      return (
+        <Terminal
+          autoScroll={false}
+          isStreaming={false}
+          onClear={() => {}}
+          output={String(data.stdout)}
+        >
+          <TerminalHeader>
+            <TerminalTitle>{String(data.path)}</TerminalTitle>
+            <div className="flex items-center gap-1">
+              <TerminalStatus />
+              <TerminalActions>
+                <TerminalCopyButton onCopy={() => {}} />
+              </TerminalActions>
+            </div>
+          </TerminalHeader>
+          <TerminalContent />
+        </Terminal>
+      );
+    }
+
     return (
-      <Terminal
-        autoScroll={false}
-        isStreaming={false}
-        onClear={() => {}}
-        output={String(data.stdout)}>
-        <TerminalHeader>
-          <TerminalTitle>{String(data.path)}</TerminalTitle>
-          <div className="flex items-center gap-1">
-            <TerminalStatus />
-            <TerminalActions>
-              <TerminalCopyButton onCopy={() => {}} />
-            </TerminalActions>
-          </div>
-        </TerminalHeader>
-        <TerminalContent />
-      </Terminal>
+      <pre className="tool-card rounded-lg p-3.5">
+        {JSON.stringify(output, null, 2)}
+      </pre>
     );
-  }
-
-  return (
-    <pre className="tool-card rounded-lg p-3.5">
-      {JSON.stringify(output, null, 2)}
-    </pre>
-  );
-});
+  },
+);
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;

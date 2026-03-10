@@ -1,0 +1,33 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model ChatSession {
+  id        String        @id
+  name      String
+  path      String
+  createdAt DateTime
+  updatedAt DateTime
+  messages  ChatMessage[]
+
+  @@index([path])
+  @@index([updatedAt])
+}
+
+model ChatMessage {
+  id        Int         @id @default(autoincrement())
+  messageId String
+  role      String
+  content   String
+  timestamp DateTime
+  position  Int
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, position])
+}

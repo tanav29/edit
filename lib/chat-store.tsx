@@ -22,13 +22,12 @@ export interface ChatSession {
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
-  sessionKey?: string;
-  isRemoteEnabled?: boolean;
 }
 
 interface ChatStoreContextType {
   sessions: ChatSession[];
   currentSession: ChatSession | null;
+  isLoaded: boolean;
   createSession: (path: string, name?: string) => ChatSession;
   selectSession: (id: string) => void;
   deleteSession: (id: string) => void;
@@ -38,7 +37,6 @@ interface ChatStoreContextType {
   clearCurrentSession: () => void;
   isGenUIEnabled: boolean;
   setIsGenUIEnabled: (enabled: boolean) => void;
-  toggleRemoteMode: (enabled: boolean) => void;
   setMessagesForSession: (sessionId: string, messages: ChatMessage[]) => void;
 }
 
@@ -47,9 +45,9 @@ const ChatStoreContext = createContext<ChatStoreContextType | null>(null);
 export function ChatStoreProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
   const [isGenUIEnabled, setIsGenUIEnabled] = useState(false);
 
-  // Helper to save a session to the backend
   const saveSession = async (session: ChatSession) => {
     try {
       await fetch("/api/history", {
@@ -70,76 +68,73 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
     async function loadSessions() {
       try {
         const res = await fetch("/api/history");
-        if (res.ok) {
-          const data = await res.json();
-          setSessions(data);
-          if (data.length > 0 && !currentSessionId) {
-            setCurrentSessionId(data[0].id);
+        if (!res.ok) return;
+
+        const data: ChatSession[] = await res.json();
+        setSessions(data);
+
+        setCurrentSessionId((prev) => {
+          if (prev && data.some((session) => session.id === prev)) {
+            return prev;
           }
-        }
+          return data.length > 0 ? data[0].id : null;
+        });
       } catch (error) {
         console.error("Failed to load sessions:", error);
+      } finally {
+        setIsLoaded(true);
       }
     }
-    loadSessions();
 
-    const handleRemoteUpdate = () => loadSessions();
-    window.addEventListener('remote-update', handleRemoteUpdate);
-    return () => window.removeEventListener('remote-update', handleRemoteUpdate);
+    loadSessions();
   }, []);
 
   const currentSession =
-    sessions.find((s) => s.id === currentSessionId) || null;
+    sessions.find((session) => session.id === currentSessionId) || null;
 
   function setMessagesForSession(sessionId: string, messages: ChatMessage[]) {
-    setSessions((prev) =>
-      prev.map((session) => {
-        if (session.id === sessionId) {
-          return {
-            ...session,
-            messages,
-            updatedAt: Date.now(),
-          };
-        }
-        return session;
-      }),
-    );
-  }
+    let updatedSession: ChatSession | null = null;
 
-  function generateSessionKey() {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
-  }
+    setSessions((prev) => {
+      const next = prev.map((session) => {
+        if (session.id !== sessionId) return session;
 
-  function toggleRemoteMode(enabled: boolean) {
-    if (!currentSessionId) return;
+        updatedSession = {
+          ...session,
+          messages,
+          updatedAt: Date.now(),
+        };
 
-    setSessions((prev) =>
-      prev.map((session) => {
-        if (session.id === currentSessionId) {
-          return {
-            ...session,
-            isRemoteEnabled: enabled,
-            sessionKey: enabled ? (session.sessionKey || generateSessionKey()) : session.sessionKey,
-            updatedAt: Date.now(),
-          };
-        }
-        return session;
-      }),
-    );
+        return updatedSession;
+      });
+
+      return next;
+    });
+
+    if (updatedSession) {
+      void saveSession(updatedSession);
+    }
   }
 
   function createSession(workspacePath: string, name?: string): ChatSession {
-    const sessionName = name || `Chat ${sessions.length + 1}`;
+    const existingForPath = sessions.filter(
+      (session) => session.path === workspacePath,
+    );
+    const sessionName = name || `Chat ${existingForPath.length + 1}`;
+
     const newSession: ChatSession = {
-      id: `session-${Date.now()}`,
+      id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name: sessionName,
       path: workspacePath,
       messages: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
+
     setSessions((prev) => [newSession, ...prev]);
     setCurrentSessionId(newSession.id);
+    void saveSession(newSession);
+
     return newSession;
   }
 
@@ -148,69 +143,101 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
   }
 
   function deleteSession(id: string) {
-    const session = sessions.find((s) => s.id === id);
+    setSessions((prev) => {
+      const next = prev.filter((session) => session.id !== id);
+
+      if (currentSessionId === id) {
+        setCurrentSessionId(next.length > 0 ? next[0].id : null);
+      }
+
+      return next;
+    });
+
+    const session = sessions.find((item) => item.id === id);
     if (session) {
       fetch("/api/history", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionPath: session.path, sessionId: session.id }),
-      }).catch(console.error);
-    }
-    setSessions((prev) => prev.filter((s) => s.id !== id));
-    if (currentSessionId === id) {
-      const remaining = sessions.filter((s) => s.id !== id);
-      setCurrentSessionId(remaining.length > 0 ? remaining[0].id : null);
+        body: JSON.stringify({
+          sessionPath: session.path,
+          sessionId: session.id,
+        }),
+      }).catch((error) => console.error("Failed to delete session:", error));
     }
   }
 
   function deleteSessionsForPath(sessionPath: string) {
-    const toDelete = sessions.filter((s) => s.path === sessionPath);
+    setSessions((prev) => {
+      const next = prev.filter((session) => session.path !== sessionPath);
+
+      if (
+        currentSessionId &&
+        prev.some(
+          (session) =>
+            session.id === currentSessionId && session.path === sessionPath,
+        )
+      ) {
+        setCurrentSessionId(next.length > 0 ? next[0].id : null);
+      }
+
+      return next;
+    });
 
     fetch("/api/history", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionPath }),
-    }).catch(console.error);
-
-    setSessions((prev) => prev.filter((s) => s.path !== sessionPath));
-    if (currentSessionId && toDelete.some((s) => s.id === currentSessionId)) {
-      const remaining = sessions.filter((s) => s.path !== sessionPath);
-      setCurrentSessionId(remaining.length > 0 ? remaining[0].id : null);
-    }
+    }).catch((error) =>
+      console.error("Failed to delete sessions for path:", error),
+    );
   }
 
   function addMessage(message: ChatMessage) {
     if (!currentSessionId) return;
 
+    let updatedSession: ChatSession | null = null;
+
     setSessions((prev) =>
       prev.map((session) => {
-        if (session.id === currentSessionId) {
-          return {
-            ...session,
-            messages: [...session.messages, message],
-            updatedAt: Date.now(),
-          };
-        }
-        return session;
+        if (session.id !== currentSessionId) return session;
+
+        updatedSession = {
+          ...session,
+          messages: [...session.messages, message],
+          updatedAt: Date.now(),
+        };
+
+        return updatedSession;
       }),
     );
+
+    if (updatedSession) {
+      void saveSession(updatedSession);
+    }
   }
 
   function clearCurrentSession() {
     if (!currentSessionId) return;
 
+    let updatedSession: ChatSession | null = null;
+
     setSessions((prev) =>
       prev.map((session) => {
-        if (session.id === currentSessionId) {
-          return {
-            ...session,
-            messages: [],
-            updatedAt: Date.now(),
-          };
-        }
-        return session;
+        if (session.id !== currentSessionId) return session;
+
+        updatedSession = {
+          ...session,
+          messages: [],
+          updatedAt: Date.now(),
+        };
+
+        return updatedSession;
       }),
     );
+
+    if (updatedSession) {
+      void saveSession(updatedSession);
+    }
   }
 
   return (
@@ -218,6 +245,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
       value={{
         sessions,
         currentSession,
+        isLoaded,
         createSession,
         selectSession,
         deleteSession,
@@ -227,9 +255,9 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         clearCurrentSession,
         isGenUIEnabled,
         setIsGenUIEnabled,
-        toggleRemoteMode,
         setMessagesForSession,
-      }}>
+      }}
+    >
       {children}
     </ChatStoreContext.Provider>
   );
@@ -237,8 +265,10 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
 export function useChatStore() {
   const context = useContext(ChatStoreContext);
+
   if (!context) {
     throw new Error("useChatStore must be used within a ChatStoreProvider");
   }
+
   return context;
 }

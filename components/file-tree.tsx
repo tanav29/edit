@@ -1,100 +1,114 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { ChevronRight, File, Folder, FolderOpen } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { useEffect, useState } from "react";
+import { ChevronRight, File, Folder, FolderOpen } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface FileTreeProps {
-  rootPath: string
-  onFileSelect: (file: string | undefined) => void
-  selectedFile?: string
+  rootPath: string;
+  onFileSelect: (file: string | undefined) => void;
+  selectedFile?: string;
 }
 
 interface FileNode {
-  name: string
-  path: string
-  type: "file" | "directory"
-  children?: FileNode[]
+  name: string;
+  path: string;
+  type: "file" | "directory";
+  children?: FileNode[];
 }
 
-export function FileTree({ rootPath, onFileSelect, selectedFile }: FileTreeProps) {
-  const [rootNode, setRootNode] = useState<FileNode | null>(null)
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
-  const [loading, setLoading] = useState(true)
+export function FileTree({
+  rootPath,
+  onFileSelect,
+  selectedFile,
+}: FileTreeProps) {
+  const [rootNode, setRootNode] = useState<FileNode | null>(null);
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadDirectory(rootPath)
-  }, [rootPath])
+    loadDirectory(rootPath);
+  }, [rootPath]);
 
   async function loadDirectory(path: string) {
-    setLoading(true)
+    setLoading(true);
     try {
-      const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`)
-      const data = await res.json()
-      setRootNode(data)
+      const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
+      const data = await res.json();
+      setRootNode(data);
     } catch (error) {
-      console.error("Failed to load files:", error)
+      console.error("Failed to load files:", error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
   async function loadChildDirectory(node: FileNode) {
-    if (node.type !== "directory" || !node.children || node.children.length > 0) {
-      return
+    if (
+      node.type !== "directory" ||
+      !node.children ||
+      node.children.length > 0
+    ) {
+      return;
     }
-    
+
     try {
-      const res = await fetch(`/api/files?path=${encodeURIComponent(node.path)}`)
-      const data = await res.json()
-      
+      const res = await fetch(
+        `/api/files?path=${encodeURIComponent(node.path)}`,
+      );
+      const data = await res.json();
+
       setRootNode((prev) => {
-        if (!prev) return prev
-        return updateNodeChildren(prev, node.path, data.children || [])
-      })
+        if (!prev) return prev;
+        return updateNodeChildren(prev, node.path, data.children || []);
+      });
     } catch (error) {
-      console.error("Failed to load directory:", error)
+      console.error("Failed to load directory:", error);
     }
   }
 
-  function updateNodeChildren(node: FileNode, targetPath: string, children: FileNode[]): FileNode {
+  function updateNodeChildren(
+    node: FileNode,
+    targetPath: string,
+    children: FileNode[],
+  ): FileNode {
     if (node.path === targetPath) {
-      return { ...node, children }
+      return { ...node, children };
     }
-    
+
     if (node.children) {
       return {
         ...node,
-        children: node.children.map((child) => updateNodeChildren(child, targetPath, children))
-      }
+        children: node.children.map((child) =>
+          updateNodeChildren(child, targetPath, children),
+        ),
+      };
     }
-    
-    return node
+
+    return node;
   }
 
   function toggleDir(node: FileNode) {
     setExpandedDirs((prev) => {
-      const next = new Set(prev)
+      const next = new Set(prev);
       if (next.has(node.path)) {
-        next.delete(node.path)
+        next.delete(node.path);
       } else {
-        next.add(node.path)
-        loadChildDirectory(node)
+        next.add(node.path);
+        loadChildDirectory(node);
       }
-      return next
-    })
+      return next;
+    });
   }
 
   if (loading) {
-    return (
-      <div className="p-3 text-xs text-muted-foreground">Loading...</div>
-    )
+    return <div className="p-3 text-xs text-muted-foreground">Loading...</div>;
   }
 
   if (!rootNode) {
     return (
       <div className="p-3 text-xs text-muted-foreground">No files found</div>
-    )
+    );
   }
 
   return (
@@ -108,7 +122,7 @@ export function FileTree({ rootPath, onFileSelect, selectedFile }: FileTreeProps
         onSelect={onFileSelect}
       />
     </div>
-  )
+  );
 }
 
 function FileTreeNode({
@@ -119,30 +133,30 @@ function FileTreeNode({
   onToggle,
   onSelect,
 }: {
-  node: FileNode
-  depth: number
-  expandedDirs: Set<string>
-  selectedFile?: string
-  onToggle: (node: FileNode) => void
-  onSelect: (path: string) => void
+  node: FileNode;
+  depth: number;
+  expandedDirs: Set<string>;
+  selectedFile?: string;
+  onToggle: (node: FileNode) => void;
+  onSelect: (path: string) => void;
 }) {
-  const isExpanded = expandedDirs.has(node.path)
-  const isSelected = selectedFile === node.path
-  const isDirectory = node.type === "directory"
+  const isExpanded = expandedDirs.has(node.path);
+  const isSelected = selectedFile === node.path;
+  const isDirectory = node.type === "directory";
 
   return (
     <div>
       <div
         className={cn(
-          "flex items-center gap-1 py-1 px-2 cursor-pointer hover:bg-accent/50 rounded-sm transition-colors",
-          isSelected && "bg-accent"
+          "flex items-center gap-1 py-1 px-2 cursor-pointer hover:bg-accent/50 transition-colors",
+          isSelected && "bg-accent",
         )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
         onClick={() => {
           if (isDirectory) {
-            onToggle(node)
+            onToggle(node);
           } else {
-            onSelect(node.path)
+            onSelect(node.path);
           }
         }}
       >
@@ -151,13 +165,13 @@ function FileTreeNode({
             <ChevronRight
               className={cn(
                 "size-3 text-muted-foreground transition-transform",
-                isExpanded && "rotate-90"
+                isExpanded && "rotate-90",
               )}
             />
             {isExpanded ? (
-              <FolderOpen className="size-3.5 text-amber-400" />
+              <FolderOpen className="size-3.5 text-muted-foreground" />
             ) : (
-              <Folder className="size-3.5 text-amber-400" />
+              <Folder className="size-3.5 text-muted-foreground" />
             )}
           </>
         ) : (
@@ -181,5 +195,5 @@ function FileTreeNode({
         </div>
       )}
     </div>
-  )
+  );
 }
