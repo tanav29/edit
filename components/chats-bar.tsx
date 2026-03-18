@@ -1,19 +1,24 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Folder, FolderOpen, FolderPlus, Plus, X } from "lucide-react";
+import { Folder, FolderPlus, Plus, X } from "lucide-react";
+
 import { Button } from "./ui/button";
-import { useChatStore } from "@/lib/chat-store";
+import type { ChatSession } from "@/lib/chat-types";
 
 type ChatsBarProps = {
   workspacePath: string;
-  onOpenSession: (sessionId: string, sessionPath: string) => void;
-  onCreateChat: (workspacePath: string) => void;
+  sessions: ChatSession[];
+  currentSessionId: string | null;
+  onOpenSessionAction: (sessionId: string, sessionPath: string) => void;
+  onCreateChatAction: (workspacePath: string) => void;
+  onCreateFolderAction: (workspacePath: string) => Promise<ChatSession | null>;
+  onDeleteSessionAction: (sessionId: string) => void | Promise<void>;
 };
 
 type FolderGroup = {
   path: string;
-  sessions: ReturnType<typeof useChatStore>["sessions"];
+  sessions: ChatSession[];
 };
 
 function getProjectName(path: string) {
@@ -24,12 +29,13 @@ function getProjectName(path: string) {
 
 export default function ChatsBar({
   workspacePath,
-  onOpenSession,
-  onCreateChat,
+  sessions,
+  currentSessionId,
+  onOpenSessionAction,
+  onCreateChatAction,
+  onCreateFolderAction,
+  onDeleteSessionAction,
 }: ChatsBarProps) {
-  const { sessions, currentSession, deleteSession, createSession } =
-    useChatStore();
-
   const [showFolderDialog, setShowFolderDialog] = useState(false);
   const [newFolderPath, setNewFolderPath] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
@@ -41,6 +47,7 @@ export default function ChatsBar({
 
     for (const session of sessions) {
       const existing = groups.get(session.path);
+
       if (existing) {
         existing.sessions.push(session);
       } else {
@@ -60,11 +67,13 @@ export default function ChatsBar({
   function toggleGroup(path: string) {
     setExpandedGroups((prev) => {
       const next = new Set(prev);
+
       if (next.has(path)) {
         next.delete(path);
       } else {
         next.add(path);
       }
+
       return next;
     });
   }
@@ -74,11 +83,12 @@ export default function ChatsBar({
     setShowFolderDialog(true);
   }
 
-  function handleConfirmFolder() {
+  async function handleConfirmFolder() {
     const nextPath = newFolderPath.trim();
     if (!nextPath) return;
 
-    const session = createSession(nextPath);
+    const session = await onCreateFolderAction(nextPath);
+    if (!session) return;
 
     setExpandedGroups((prev) => {
       const next = new Set(prev);
@@ -88,7 +98,7 @@ export default function ChatsBar({
 
     setShowFolderDialog(false);
     setNewFolderPath("");
-    onOpenSession(session.id, session.path);
+    onOpenSessionAction(session.id, session.path);
   }
 
   function handleCreateChat(path: string) {
@@ -98,7 +108,7 @@ export default function ChatsBar({
       return next;
     });
 
-    onCreateChat(path);
+    onCreateChatAction(path);
   }
 
   return (
@@ -110,18 +120,25 @@ export default function ChatsBar({
             <p className="text-xs text-muted-foreground">
               Enter the path for the new workspace folder.
             </p>
+
             <input
               autoFocus
               type="text"
               value={newFolderPath}
               onChange={(e) => setNewFolderPath(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleConfirmFolder();
-                if (e.key === "Escape") setShowFolderDialog(false);
+                if (e.key === "Enter") {
+                  void handleConfirmFolder();
+                }
+
+                if (e.key === "Escape") {
+                  setShowFolderDialog(false);
+                }
               }}
               placeholder="/path/to/folder"
               className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-muted-foreground/50 transition-colors placeholder:text-muted-foreground font-mono"
             />
+
             <div className="flex justify-end gap-2">
               <Button
                 variant="ghost"
@@ -132,7 +149,7 @@ export default function ChatsBar({
               </Button>
               <Button
                 size="sm"
-                onClick={handleConfirmFolder}
+                onClick={() => void handleConfirmFolder()}
                 disabled={!newFolderPath.trim()}
               >
                 Add Folder
@@ -196,7 +213,7 @@ export default function ChatsBar({
                 {isExpanded && (
                   <div>
                     {group.sessions.map((session) => {
-                      const isCurrent = currentSession?.id === session.id;
+                      const isCurrent = currentSessionId === session.id;
 
                       return (
                         <div
@@ -207,17 +224,21 @@ export default function ChatsBar({
                         >
                           <button
                             onClick={() =>
-                              onOpenSession(session.id, session.path)
+                              onOpenSessionAction(session.id, session.path)
                             }
                             className="min-w-0 flex flex-1 items-center gap-2 text-left text-sm truncate cursor-pointer"
+                            type="button"
                           >
                             {session.name}
                           </button>
 
                           <button
-                            className="p-1 opacity-0 group-hover:opacity-100 hover:text-red-500 cursor-pointer"
-                            onClick={() => deleteSession(session.id)}
+                            className="opacity-0 translate-x-5 group-hover:translate-x-0 group-hover:opacity-100 transition-transform ease-out duration-150 hover:text-red-500 cursor-pointer"
+                            onClick={() =>
+                              void onDeleteSessionAction(session.id)
+                            }
                             title="Delete chat"
+                            type="button"
                           >
                             <X className="size-4" />
                           </button>

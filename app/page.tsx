@@ -8,16 +8,14 @@ import {
 } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUp, Code, Folder, Save, Square } from "lucide-react";
+import { Code } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import MessageUI from "@/components/message";
-import { FileViewer } from "@/components/file-viewer";
 import ChatsBar from "@/components/chats-bar";
 import FileBar from "@/components/file-bar";
-import { useChatStore, type ChatMessage } from "@/lib/chat-store";
 import ChatInput from "@/components/chat-input";
 import Loader from "@/components/loader";
+import type { ChatMessage, ChatSession } from "@/lib/chat-types";
 
 function toStoredMessages(messages: UIMessage[]): ChatMessage[] {
   return messages.map((message, index) => {
@@ -51,32 +49,194 @@ function toUIMessages(messages: ChatMessage[]): UIMessage[] {
   }));
 }
 
+function sortSessionsByUpdatedAt(sessions: ChatSession[]) {
+  return [...sessions].sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+function makeSessionId() {
+  return `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function requestJSON<T>(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<T> {
+  const response = await fetch(input, init);
+
+  if (!response.ok) {
+    const message = await response.text().catch(() => "Request failed");
+    throw new Error(message || "Request failed");
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return response.json() as Promise<T>;
+}
+
 export default function ChatPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const {
-    sessions,
-    currentSession,
-    isLoaded,
-    createSession,
-    selectSession,
-    setMessagesForSession,
-    saveSessionPayload,
-    deleteSession,
-  } = useChatStore();
-
   const requestedChatId = searchParams.get("chat");
-  const workspacePath = currentSession?.path ?? "";
 
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
   const [input, setInput] = useState("");
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
-  const [showFilePane, setShowFilePane] = useState(true);
-  const [isSavingHistory, setIsSavingHistory] = useState(false);
+  const [showFilePane] = useState(true);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastSyncedSessionIdRef = useRef<string | null>(null);
+
+  const currentSession = useMemo(
+    () => sessions.find((session) => session.id === currentSessionId) || null,
+    [currentSessionId, sessions],
+  );
+
+  const workspacePath = currentSession?.path ?? "";
+
+  async function refreshSessions() {
+    const nextSessions = sortSessionsByUpdatedAt(
+      await requestJSON<ChatSession[]>("/api/history"),
+    );
+
+    setSessions(nextSessions);
+    setCurrentSessionId((prev) => {
+      if (prev && nextSessions.some((session) => session.id === prev)) {
+        return prev;
+      }
+
+      return nextSessions[0]?.id ?? null;
+    });
+
+    return nextSessions;
+  }
+
+  async function saveSessionPayload(session: ChatSession) {
+    const normalizedSession: ChatSession = {
+      ...session,
+      messages: [...session.messages],
+      updatedAt: session.updatedAt || Date.now(),
+    };
+
+    setSessions((prev) => {
+      const exists = prev.some((item) => item.id === normalizedSession.id);
+      const next = exists
+        ? prev.map((item) =>
+            item.id === normalizedSession.id ? normalizedSession : item,
+          )
+        : [normalizedSession, ...prev];
+
+      return sortSessionsByUpdatedAt(next);
+    });
+
+    await requestJSON<{ success: boolean }>("/api/history", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(normalizedSession),
+    });
+  }
+
+  async function createSession(
+    workspacePathValue: string,
+    name?: string,
+  ): Promise<ChatSession> {
+    const existingForPath = sessions.filter(
+      (session) => session.path === workspacePathValue,
+    );
+    const now = Date.now();
+
+    const newSession: ChatSession = {
+      id: makeSessionId(),
+      name: name || `Chat ${existingForPath.length + 1}`,
+      path: workspacePathValue,
+      messages: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    setSessions((prev) => sortSessionsByUpdatedAt([newSession, ...prev]));
+    setCurrentSessionId(newSession.id);
+
+    try {
+      await requestJSON<{ success: boolean }>("/api/history", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newSession),
+      });
+    } catch (error) {
+      console.error("Failed to create session:", error);
+    }
+
+    return newSession;
+  }
+
+  function selectSession(id: string) {
+    setCurrentSessionId(id);
+  }
+
+  async function deleteSession(id: string) {
+    const session = sessions.find((item) => item.id === id);
+    if (!session) return;
+
+    setSessions((prev) => {
+      const next = prev.filter((item) => item.id !== id);
+
+      if (currentSessionId === id) {
+        setCurrentSessionId(next[0]?.id ?? null);
+      }
+
+      return next;
+    });
+
+    try {
+      await requestJSON<{ success: boolean }>("/api/history", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionPath: session.path,
+          sessionId: session.id,
+        }),
+      });
+    } catch (error) {
+      console.error("Failed to delete session:", error);
+      await refreshSessions().catch((refreshError) =>
+        console.error(
+          "Failed to refresh sessions after delete error:",
+          refreshError,
+        ),
+      );
+    }
+  }
+
+  function setMessagesForSession(sessionId: string, messages: ChatMessage[]) {
+    setSessions((prev) => {
+      let updated = false;
+
+      const next = prev.map((session) => {
+        if (session.id !== sessionId) return session;
+
+        updated = true;
+        return {
+          ...session,
+          messages,
+          updatedAt: Date.now(),
+        };
+      });
+
+      return updated ? sortSessionsByUpdatedAt(next) : prev;
+    });
+  }
 
   const {
     messages,
@@ -90,12 +250,28 @@ export default function ChatPage() {
       api: "/api/chat",
       body: {
         path: workspacePath,
+        sessionId: currentSession?.id,
+        sessionName: currentSession?.name,
       },
     }),
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
   });
 
   const isActive = status === "streaming" || status === "submitted";
+
+  useEffect(() => {
+    async function loadSessions() {
+      try {
+        await refreshSessions();
+      } catch (error) {
+        console.error("Failed to load sessions:", error);
+      } finally {
+        setIsLoaded(true);
+      }
+    }
+
+    void loadSessions();
+  }, []);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -118,14 +294,7 @@ export default function ChatPage() {
       selectSession(nextSession.id);
       router.replace(`/?chat=${nextSession.id}`);
     }
-  }, [
-    currentSession,
-    isLoaded,
-    requestedChatId,
-    router,
-    selectSession,
-    sessions,
-  ]);
+  }, [currentSession, isLoaded, requestedChatId, router, sessions]);
 
   useEffect(() => {
     const sessionId = currentSession?.id ?? null;
@@ -137,9 +306,21 @@ export default function ChatPage() {
   }, [currentSession, setMessages]);
 
   useEffect(() => {
-    if (!currentSession) return;
+    if (!currentSession || isActive) return;
     setMessagesForSession(currentSession.id, toStoredMessages(messages));
-  }, [currentSession, messages, setMessagesForSession]);
+  }, [currentSession, isActive, messages]);
+
+  useEffect(() => {
+    if (!currentSession || isActive || messages.length === 0) return;
+
+    void saveSessionPayload({
+      ...currentSession,
+      messages: toStoredMessages(messages),
+      updatedAt: Date.now(),
+    }).catch((error) => {
+      console.error("Failed to save session:", error);
+    });
+  }, [currentSession, isActive, messages]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -160,17 +341,22 @@ export default function ChatPage() {
     return `${currentSession.name} · ${currentSession.path}`;
   }, [currentSession]);
 
-  function handleCreateChat(path?: string) {
+  async function handleCreateChat(path?: string) {
     const basePath =
       path ||
       currentSession?.path ||
       sessions[0]?.path ||
       "/home/thetanav/Code/project/edit";
 
-    const session = createSession(basePath);
+    const session = await createSession(basePath);
     setSelectedFile(undefined);
     setMessages([]);
     router.push(`/?chat=${session.id}`);
+  }
+
+  async function handleCreateFolder(path: string) {
+    const session = await createSession(path);
+    return session;
   }
 
   function handleOpenSession(sessionId: string) {
@@ -179,27 +365,12 @@ export default function ChatPage() {
     router.push(`/?chat=${sessionId}`);
   }
 
-  async function handleSaveHistory() {
-    if (!currentSession) return;
-
-    setIsSavingHistory(true);
-    try {
-      await saveSessionPayload({
-        ...currentSession,
-        messages: toStoredMessages(messages),
-        updatedAt: Date.now(),
-      });
-    } finally {
-      setIsSavingHistory(false);
-    }
-  }
-
   async function handleSend() {
     const value = input.trim();
     if (!value || isActive || !workspacePath) return;
 
     if (!currentSession) {
-      const created = createSession("/home/thetanav/Code/project/edit");
+      const created = await createSession("/home/thetanav/Code/project/edit");
       router.push(`/?chat=${created.id}`);
       return;
     }
@@ -214,9 +385,17 @@ export default function ChatPage() {
     <div className="flex h-screen bg-background text-foreground">
       <ChatsBar
         workspacePath={workspacePath}
-        onCreateChat={handleCreateChat}
-        onOpenSession={(sessionId) => {
+        sessions={sessions}
+        currentSessionId={currentSession?.id ?? null}
+        onCreateChatAction={(path) => {
+          void handleCreateChat(path);
+        }}
+        onCreateFolderAction={handleCreateFolder}
+        onOpenSessionAction={(sessionId) => {
           handleOpenSession(sessionId);
+        }}
+        onDeleteSessionAction={(sessionId) => {
+          void deleteSession(sessionId);
         }}
       />
 
@@ -233,15 +412,6 @@ export default function ChatPage() {
               ref={scrollRef}
               className="flex-1 overflow-y-auto px-4 py-6 relative"
             >
-              {/*{selectedFile && (
-                <div className="absolute inset-0 z-20 bg-background/95 backdrop-blur-sm p-4">
-                  <FileViewer
-                    filePath={selectedFile}
-                    onClose={() => setSelectedFile(undefined)}
-                  />
-                </div>
-              )}*/}
-
               {messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center">
                   <div className="text-center space-y-3">
@@ -260,7 +430,7 @@ export default function ChatPage() {
                   </div>
                 </div>
               ) : (
-                <div className="max-w-3xl mx-auto space-y-1">
+                <div className="max-w-3xl mx-auto space-y-1 select-text">
                   {messages.map((message, index) => (
                     <div key={message.id || index}>
                       {message.role === "user" ? (
@@ -281,15 +451,13 @@ export default function ChatPage() {
                           </div>
                         </div>
                       ) : (
-                        <div className="py-2">
-                          <MessageUI
-                            parts={message.parts}
-                            addToolApprovalResponseAction={
-                              addToolApprovalResponse
-                            }
-                            onFileClickAction={setSelectedFile}
-                          />
-                        </div>
+                        <MessageUI
+                          parts={message.parts}
+                          addToolApprovalResponseAction={
+                            addToolApprovalResponse
+                          }
+                          onFileClickAction={setSelectedFile}
+                        />
                       )}
                     </div>
                   ))}
@@ -306,17 +474,18 @@ export default function ChatPage() {
                 setInput={setInput}
                 handleSend={handleSend}
                 isActive={isActive}
+                stop={stop}
               />
             </div>
           </section>
 
-          {/*{showFilePane && (
+          {showFilePane && (
             <FileBar
               rootPath={workspacePath}
               selectedFile={selectedFile}
               onFileSelect={setSelectedFile}
             />
-          )}*/}
+          )}
         </div>
       </main>
     </div>

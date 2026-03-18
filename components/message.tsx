@@ -30,7 +30,6 @@ import { code } from "@streamdown/code";
 import { mermaid } from "@streamdown/mermaid";
 import { math } from "@streamdown/math";
 import { cjk } from "@streamdown/cjk";
-import { useChatStore } from "@/lib/chat-store";
 
 type ToolApprovalResponse = {
   id: string;
@@ -84,7 +83,6 @@ export default function MessageUI({
   addToolApprovalResponseAction: (response: ToolApprovalResponse) => void;
   onFileClickAction?: (path: string) => void;
 }) {
-  useChatStore();
   useJsonRenderMessage(parts);
 
   const renderedParts = useMemo(() => {
@@ -96,7 +94,7 @@ export default function MessageUI({
           return (
             <div key={key} className="text-sm">
               <Streamdown
-                className="chat-markdown"
+                className="chat-markdown my-2"
                 mode="static"
                 plugins={{ code, mermaid, math, cjk }}
                 shikiTheme={["github-light", "github-dark"]}
@@ -310,7 +308,7 @@ function ToolPart({
           return null;
         })()}
       </summary>
-      <div className="text-xs max-h-72 overflow-y-auto overflow-x-hidden wrap-break-word animate-fade-in mt-2">
+      <div className="text-xs overflow-y-auto overflow-x-hidden wrap-break-word animate-fade-in mt-2">
         {toolOutput}
       </div>
     </details>
@@ -330,7 +328,7 @@ const ToolOutput = React.memo(function ToolOutput({
 
   if (data.error) {
     return (
-      <div className="text-red-400 font-mono whitespace-pre-wrap">
+      <div className="text-red-400 font-mono whitespace-pre-wrap max-h-48">
         {String(data.error)}
       </div>
     );
@@ -398,7 +396,6 @@ const ToolOutput = React.memo(function ToolOutput({
   }
 
   if (toolName === "bash" && data.stdout) {
-    console.log("Bash output:", data.stdout);
     return (
       <Terminal
         autoScroll={false}
@@ -421,7 +418,7 @@ const ToolOutput = React.memo(function ToolOutput({
   }
 
   return (
-    <pre className="tool-card rounded-lg p-3.5">
+    <pre className="tool-card rounded-lg p-3.5 max-h-48">
       {JSON.stringify(output, null, 2)}
     </pre>
   );

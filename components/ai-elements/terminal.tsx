@@ -39,7 +39,7 @@ export function Terminal({
       {children}
       <div
         ref={contentRef}
-        className="max-h-72 overflow-auto bg-black text-green-400 font-mono text-xs leading-relaxed p-3 whitespace-pre-wrap wrap-break-word"
+        className="max-h-72 overflow-auto bg-black text-neutral-400 font-mono text-xs leading-relaxed p-3 whitespace-pre-wrap wrap-break-word"
       >
         {output}
       </div>

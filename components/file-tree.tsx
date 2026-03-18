@@ -112,7 +112,7 @@ export function FileTree({
   }
 
   return (
-    <div className="text-xs">
+    <div className="text-xs font-mono">
       <FileTreeNode
         node={rootNode}
         depth={0}

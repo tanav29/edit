@@ -14,7 +14,7 @@ export default function FileBar({
   onFileSelect,
 }: FileBarProps) {
   return (
-    <aside className="w-80 shrink-0 border-l flex flex-col min-h-0 font-mono">
+    <aside className="w-80 shrink-0 border-l flex flex-col min-h-0 select-none">
       <div className="border-b px-3 py-2">
         <div className="text-[11px] text-muted-foreground truncate">
           {rootPath || "No workspace selected"}

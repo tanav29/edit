@@ -8,9 +8,27 @@ datasource db {
 }
 
 model ChatSession {
-  id        String   @id
+  id        String        @id
+  name      String
   path      String
-  messages  Json
+  messages  ChatMessage[]
   createdAt DateTime
   updatedAt DateTime
+
+  @@index([path])
+  @@index([updatedAt])
+}
+
+model ChatMessage {
+  id        Int         @id @default(autoincrement())
+  messageId String
+  role      String
+  content   String
+  timestamp DateTime
+  position  Int
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, messageId])
+  @@index([sessionId, position])
 }
