@@ -26,7 +26,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen dark`}>
+        className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen dark font-sans`}
+      >
         <ChatStoreProvider>{children}</ChatStoreProvider>
       </body>
     </html>

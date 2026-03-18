@@ -1,14 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import {
-  ActionProvider,
-  Renderer,
-  StateProvider,
-  useJsonRenderMessage,
-  ValidationProvider,
-  VisibilityProvider,
-} from "@json-render/react";
+import { useJsonRenderMessage } from "@json-render/react";
 import {
   Terminal,
   TerminalActions,
@@ -24,15 +17,9 @@ import {
   Globe,
   PenLine,
   Terminal as TerIcon,
-  Bot,
-  Brain,
   Bug,
-  Check,
-  ChevronDown,
-  User,
   Link,
   Loader2,
-  Hash,
   File,
   CircleX,
 } from "lucide-react";
@@ -45,25 +32,64 @@ import { math } from "@streamdown/math";
 import { cjk } from "@streamdown/cjk";
 import { useChatStore } from "@/lib/chat-store";
 
+type ToolApprovalResponse = {
+  id: string;
+  approved: boolean;
+};
+
+type MessagePart = {
+  type: string;
+  state?: string;
+  text?: string;
+  title?: string;
+  filename?: string;
+  url?: string;
+  toolCallId?: string;
+  input?: unknown;
+  output?: unknown;
+};
+
+type FilePathInput = {
+  filePath: string;
+};
+
+type CommandInput = {
+  command: string;
+};
+
+function hasFilePathInput(input: unknown): input is FilePathInput {
+  return (
+    typeof input === "object" &&
+    input !== null &&
+    "filePath" in input &&
+    typeof (input as FilePathInput).filePath === "string"
+  );
+}
+
+function hasCommandInput(input: unknown): input is CommandInput {
+  return (
+    typeof input === "object" &&
+    input !== null &&
+    "command" in input &&
+    typeof (input as CommandInput).command === "string"
+  );
+}
+
 export default function MessageUI({
   parts,
-  addToolApprovalResponse,
-  onFileClick,
+  addToolApprovalResponseAction,
+  onFileClickAction,
 }: {
-  parts: any[];
-  addToolApprovalResponse: (response: {
-    id: string;
-    approved: boolean;
-  }) => void;
-  onFileClick?: (path: string) => void;
+  parts: MessagePart[];
+  addToolApprovalResponseAction: (response: ToolApprovalResponse) => void;
+  onFileClickAction?: (path: string) => void;
 }) {
-  const { isGenUIEnabled } = useChatStore();
-  const { spec, text, hasSpec } = useJsonRenderMessage(parts);
+  useChatStore();
+  useJsonRenderMessage(parts);
 
   const renderedParts = useMemo(() => {
     return parts.map((part, partIndex) => {
-      const key =
-        "toolCallId" in part && part.toolCallId ? part.toolCallId : partIndex;
+      const key = part.toolCallId ? part.toolCallId : partIndex;
 
       switch (part.type) {
         case "text":
@@ -113,29 +139,26 @@ export default function MessageUI({
               <ToolPart
                 key={key}
                 part={part as ToolUIPart}
-                addToolApprovalResponse={addToolApprovalResponse}
-                onFileClick={onFileClick}
+                addToolApprovalResponseAction={addToolApprovalResponseAction}
+                onFileClickAction={onFileClickAction}
               />
             );
           }
           return null;
       }
     });
-  }, [parts, addToolApprovalResponse, onFileClick]);
+  }, [parts, addToolApprovalResponseAction, onFileClickAction]);
   return <>{renderedParts}</>;
 }
 
 function ToolPart({
   part,
-  addToolApprovalResponse,
-  onFileClick,
+  addToolApprovalResponseAction,
+  onFileClickAction,
 }: {
   part: ToolUIPart;
-  addToolApprovalResponse: (response: {
-    id: string;
-    approved: boolean;
-  }) => void;
-  onFileClick?: (path: string) => void;
+  addToolApprovalResponseAction: (response: ToolApprovalResponse) => void;
+  onFileClickAction?: (path: string) => void;
 }) {
   const toolName = part.type.replace("tool-", "");
 
@@ -180,7 +203,7 @@ function ToolPart({
           <Button
             size="sm"
             onClick={() => {
-              addToolApprovalResponse({
+              addToolApprovalResponseAction({
                 id: part.approval.id,
                 approved: true,
               });
@@ -193,7 +216,7 @@ function ToolPart({
             size="sm"
             variant="outline"
             onClick={() => {
-              addToolApprovalResponse({
+              addToolApprovalResponseAction({
                 id: part.approval.id,
                 approved: false,
               });
@@ -211,9 +234,8 @@ function ToolPart({
     <details>
       <summary
         onClick={() => {
-          const input = part.input as any;
-          if (input?.filePath && onFileClick) {
-            onFileClick(input.filePath);
+          if (hasFilePathInput(part.input) && onFileClickAction) {
+            onFileClickAction(part.input.filePath);
           }
         }}
         className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90 select-none cursor-pointer"
@@ -243,28 +265,14 @@ function ToolPart({
         {part.title && <span>{part.title}</span>}
         {(() => {
           const input = part.input;
-          if (
-            input &&
-            typeof input === "object" &&
-            "filePath" in input &&
-            typeof (input as { filePath: unknown }).filePath === "string"
-          ) {
+          if (hasFilePathInput(input)) {
             return (
-              <span className="text-muted-foreground/90">
-                {(input as { filePath: string }).filePath}
-              </span>
+              <span className="text-muted-foreground/90">{input.filePath}</span>
             );
           }
-          if (
-            input &&
-            typeof input === "object" &&
-            "command" in input &&
-            typeof (input as { command: unknown }).command === "string"
-          ) {
+          if (hasCommandInput(input)) {
             return (
-              <span className="text-muted-foreground/90">
-                {(input as { command: string }).command}
-              </span>
+              <span className="text-muted-foreground/90">{input.command}</span>
             );
           }
           return null;
@@ -309,114 +317,112 @@ function ToolPart({
   );
 }
 
-const ToolOutput = React.memo(
-  ({ toolName, output }: { toolName: string; output: unknown }) => {
-    if (!output) return null;
+const ToolOutput = React.memo(function ToolOutput({
+  toolName,
+  output,
+}: {
+  toolName: string;
+  output: unknown;
+}) {
+  if (!output) return null;
 
-    const data = output as Record<string, unknown>;
+  const data = output as Record<string, unknown>;
 
-    if (data.error) {
-      return (
-        <div className="text-red-400 font-mono whitespace-pre-wrap">
-          {String(data.error)}
-        </div>
-      );
-    }
+  if (data.error) {
+    return (
+      <div className="text-red-400 font-mono whitespace-pre-wrap">
+        {String(data.error)}
+      </div>
+    );
+  }
 
-    if (toolName === "read" && data.content) {
-      return null;
-    }
+  if (toolName === "read" && data.content) {
+    return null;
+  }
 
-    if (toolName === "write") {
-      const editsArr = Array.isArray(data.edits)
-        ? (data.edits as Array<Record<string, unknown>>)
-        : [];
-
-      return (
-        <div className="space-y-2 tool-card rounded-lg p-3.5">
-          <div className="flex items-center gap-2 text-[10px] pb-1 border-b border-border/30">
-            <span
-              className={
-                data.action === "created"
-                  ? "text-emerald-400"
-                  : data.action === "edited"
-                    ? "text-amber-400"
-                    : "text-blue-400"
-              }
-            >
-              {String(data.action ?? "").toUpperCase()}
-            </span>
-            <span className="text-muted-foreground/70">
-              {String(data.filePath)}
-            </span>
-          </div>
-          {editsArr.map((edit, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-2 text-[10px] text-muted-foreground/80"
-            >
-              <span className="font-mono">L{String(edit.range)}</span>
-              <span className="text-red-400/70">
-                -{String(edit.linesRemoved)}
-              </span>
-              <span className="text-emerald-400/70">
-                +{String(edit.linesAdded)}
-              </span>
-              {edit.description != null && (
-                <span className="text-muted-foreground/50 ml-1">
-                  {String(edit.description)}
-                </span>
-              )}
-            </div>
-          ))}
-          {data.message != null && (
-            <div className="text-muted-foreground/60 text-[10px]">
-              {String(data.message)}
-            </div>
-          )}
-          {data.previousLineCount !== undefined && (
-            <div className="text-muted-foreground/50 text-[10px]">
-              {String(data.previousLineCount)} &rarr;{" "}
-              {String(data.newLineCount)} lines
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    if (toolName === "bash" && data.stdout) {
-      console.log("Bash output:", data.stdout);
-      return (
-        <Terminal
-          autoScroll={false}
-          isStreaming={false}
-          onClear={() => {}}
-          output={String(data.stdout)}
-        >
-          <TerminalHeader>
-            <TerminalTitle>{String(data.path)}</TerminalTitle>
-            <div className="flex items-center gap-1">
-              <TerminalStatus />
-              <TerminalActions>
-                <TerminalCopyButton onCopy={() => {}} />
-              </TerminalActions>
-            </div>
-          </TerminalHeader>
-          <TerminalContent />
-        </Terminal>
-      );
-    }
+  if (toolName === "write") {
+    const editsArr = Array.isArray(data.edits)
+      ? (data.edits as Array<Record<string, unknown>>)
+      : [];
 
     return (
-      <pre className="tool-card rounded-lg p-3.5">
-        {JSON.stringify(output, null, 2)}
-      </pre>
+      <div className="space-y-2 tool-card rounded-lg p-3.5">
+        <div className="flex items-center gap-2 text-[10px] pb-1 border-b border-border/30">
+          <span
+            className={
+              data.action === "created"
+                ? "text-emerald-400"
+                : data.action === "edited"
+                  ? "text-amber-400"
+                  : "text-blue-400"
+            }
+          >
+            {String(data.action ?? "").toUpperCase()}
+          </span>
+          <span className="text-muted-foreground/70">
+            {String(data.filePath)}
+          </span>
+        </div>
+        {editsArr.map((edit, i) => (
+          <div
+            key={i}
+            className="flex items-center gap-2 text-[10px] text-muted-foreground/80"
+          >
+            <span className="font-mono">L{String(edit.range)}</span>
+            <span className="text-red-400/70">
+              -{String(edit.linesRemoved)}
+            </span>
+            <span className="text-emerald-400/70">
+              +{String(edit.linesAdded)}
+            </span>
+            {edit.description != null && (
+              <span className="text-muted-foreground/50 ml-1">
+                {String(edit.description)}
+              </span>
+            )}
+          </div>
+        ))}
+        {data.message != null && (
+          <div className="text-muted-foreground/60 text-[10px]">
+            {String(data.message)}
+          </div>
+        )}
+        {data.previousLineCount !== undefined && (
+          <div className="text-muted-foreground/50 text-[10px]">
+            {String(data.previousLineCount)} &rarr; {String(data.newLineCount)}{" "}
+            lines
+          </div>
+        )}
+      </div>
     );
-  },
-);
+  }
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
-}
+  if (toolName === "bash" && data.stdout) {
+    console.log("Bash output:", data.stdout);
+    return (
+      <Terminal
+        autoScroll={false}
+        isStreaming={false}
+        onClear={() => {}}
+        output={String(data.stdout)}
+      >
+        <TerminalHeader>
+          <TerminalTitle>{String(data.path)}</TerminalTitle>
+          <div className="flex items-center gap-1">
+            <TerminalStatus />
+            <TerminalActions>
+              <TerminalCopyButton onCopyAction={() => {}} />
+            </TerminalActions>
+          </div>
+        </TerminalHeader>
+        <TerminalContent />
+      </Terminal>
+    );
+  }
+
+  return (
+    <pre className="tool-card rounded-lg p-3.5">
+      {JSON.stringify(output, null, 2)}
+    </pre>
+  );
+});
