@@ -24,6 +24,7 @@ import {
   CircleX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useHotkey } from "@tanstack/react-hotkeys";
 
 import { Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
@@ -99,8 +100,7 @@ export default function MessageUI({
                 plugins={{ code, mermaid, math, cjk }}
                 shikiTheme={["github-light", "github-dark"]}
                 mermaid={{ config: { theme: "dark" } }}
-                isAnimating={part.state === "streaming"}
-              >
+                isAnimating={part.state === "streaming"}>
                 {part.text}
               </Streamdown>
             </div>
@@ -110,8 +110,7 @@ export default function MessageUI({
           return (
             <div
               key={key}
-              className="inline-flex items-center gap-1.5 text-xs bg-card border border-border/50 rounded-md px-2 py-1 text-muted-foreground"
-            >
+              className="inline-flex items-center gap-1.5 text-xs bg-card border border-border/50 rounded-md px-2 py-1 text-muted-foreground">
               <File className="size-3" />
               <span className="font-mono">{part.filename}</span>
             </div>
@@ -124,8 +123,7 @@ export default function MessageUI({
               href={part.url}
               className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
               target="_blank"
-              rel="noopener noreferrer"
-            >
+              rel="noopener noreferrer">
               <Link className="size-3" />
               <span className="underline underline-offset-2">{part.title}</span>
             </a>
@@ -206,9 +204,9 @@ function ToolPart({
                 approved: true,
               });
             }}
-            className="rounded-lg text-xs"
-          >
+            className="rounded-lg text-xs">
             Approve
+            <kbd>A</kbd>
           </Button>
           <Button
             size="sm"
@@ -219,9 +217,9 @@ function ToolPart({
                 approved: false,
               });
             }}
-            className="rounded-lg text-xs"
-          >
+            className="rounded-lg text-xs">
             Decline
+            <kbd>D</kbd>
           </Button>
         </div>
       </div>
@@ -236,8 +234,7 @@ function ToolPart({
             onFileClickAction(part.input.filePath);
           }
         }}
-        className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90 select-none cursor-pointer"
-      >
+        className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90 select-none cursor-pointer">
         {part.state == "output-available" ||
         part.state == "output-denied" ||
         part.state == "approval-responded" ||
@@ -353,8 +350,7 @@ const ToolOutput = React.memo(function ToolOutput({
                 : data.action === "edited"
                   ? "text-amber-400"
                   : "text-blue-400"
-            }
-          >
+            }>
             {String(data.action ?? "").toUpperCase()}
           </span>
           <span className="text-muted-foreground/70">
@@ -364,8 +360,7 @@ const ToolOutput = React.memo(function ToolOutput({
         {editsArr.map((edit, i) => (
           <div
             key={i}
-            className="flex items-center gap-2 text-[10px] text-muted-foreground/80"
-          >
+            className="flex items-center gap-2 text-[10px] text-muted-foreground/80">
             <span className="font-mono">L{String(edit.range)}</span>
             <span className="text-red-400/70">
               -{String(edit.linesRemoved)}
@@ -401,8 +396,7 @@ const ToolOutput = React.memo(function ToolOutput({
         autoScroll={false}
         isStreaming={false}
         onClear={() => {}}
-        output={String(data.stdout)}
-      >
+        output={String(data.stdout)}>
         <TerminalHeader>
           <TerminalTitle>{String(data.path)}</TerminalTitle>
           <div className="flex items-center gap-1">

@@ -97,17 +97,8 @@ export default function ChatPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
         <Card className="w-full max-w-lg gap-0">
-          <CardHeader className="gap-4">
-            <div className="flex size-12 items-center justify-center rounded-2xl border bg-card">
-              <FolderOpen className="size-5 text-primary" />
-            </div>
-            <div className="space-y-1">
-              <CardTitle>Choose a workspace</CardTitle>
-              <CardDescription>
-                Enter the absolute path to the project you want to edit. The
-                file tree and chat session will use this directory.
-              </CardDescription>
-            </div>
+          <CardHeader>
+            <CardTitle>Choose a workspace</CardTitle>
           </CardHeader>
 
           <form onSubmit={handleWorkspaceSubmit}>
@@ -135,8 +126,7 @@ export default function ChatPage() {
             <CardFooter className="justify-end gap-2">
               <Button
                 type="submit"
-                disabled={!draftWorkspacePath.trim() || isValidatingWorkspace}
-              >
+                disabled={!draftWorkspacePath.trim() || isValidatingWorkspace}>
                 {isValidatingWorkspace ? "Opening..." : "Open workspace"}
               </Button>
             </CardFooter>
@@ -168,21 +158,17 @@ function WorkspaceChat({
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const {
-    messages,
-    sendMessage,
-    status,
-    addToolApprovalResponse,
-    stop,
-  } = useChat({
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      body: {
-        path: workspacePath,
-      },
-    }),
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
-  });
+  const { messages, sendMessage, status, addToolApprovalResponse, stop } =
+    useChat({
+      transport: new DefaultChatTransport({
+        api: "/api/chat",
+        body: {
+          path: workspacePath,
+        },
+      }),
+      sendAutomaticallyWhen:
+        lastAssistantMessageIsCompleteWithApprovalResponses,
+    });
 
   const isActive = status === "streaming" || status === "submitted";
 
@@ -227,8 +213,7 @@ function WorkspaceChat({
                 variant="outline"
                 size="sm"
                 onClick={onChangeWorkspace}
-                disabled={isActive}
-              >
+                disabled={isActive}>
                 <PencilLine className="size-4" />
                 Change
               </Button>
@@ -236,8 +221,7 @@ function WorkspaceChat({
 
             <div
               ref={scrollRef}
-              className="relative flex-1 overflow-y-auto px-4 py-6"
-            >
+              className="relative flex-1 overflow-y-auto px-4 py-6">
               {messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center">
                   <div className="space-y-3 text-center">
@@ -268,8 +252,7 @@ function WorkspaceChat({
                               return (
                                 <p
                                   key={partIndex}
-                                  className="whitespace-pre-wrap text-sm leading-relaxed"
-                                >
+                                  className="whitespace-pre-wrap text-sm leading-relaxed">
                                   {part.text}
                                 </p>
                               );
