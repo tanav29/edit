@@ -4,229 +4,172 @@ import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
-  type UIMessage,
 } from "ai";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Code } from "lucide-react";
+import { Code, FolderOpen, Loader2, PencilLine } from "lucide-react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
-import MessageUI from "@/components/message";
-import ChatsBar from "@/components/chats-bar";
-import FileBar from "@/components/file-bar";
 import ChatInput from "@/components/chat-input";
+import FileBar from "@/components/file-bar";
 import Loader from "@/components/loader";
-import type { ChatMessage, ChatSession } from "@/lib/chat-types";
+import MessageUI from "@/components/message";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
-function toStoredMessages(messages: UIMessage[]): ChatMessage[] {
-  return messages.map((message, index) => {
-    const text = message.parts
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join("\n")
-      .trim();
-
-    return {
-      id: message.id || `message-${index}`,
-      role: message.role === "assistant" ? "assistant" : "user",
-      content: text,
-      timestamp: Date.now() + index,
-    };
-  });
-}
-
-function toUIMessages(messages: ChatMessage[]): UIMessage[] {
-  return messages.map((message) => ({
-    id: message.id,
-    role: message.role,
-    parts: message.content
-      ? [
-          {
-            type: "text" as const,
-            text: message.content,
-          },
-        ]
-      : [],
-  }));
-}
-
-function sortSessionsByUpdatedAt(sessions: ChatSession[]) {
-  return [...sessions].sort((a, b) => b.updatedAt - a.updatedAt);
-}
-
-function makeSessionId() {
-  return `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-async function requestJSON<T>(
-  input: RequestInfo | URL,
-  init?: RequestInit,
-): Promise<T> {
-  const response = await fetch(input, init);
-
-  if (!response.ok) {
-    const message = await response.text().catch(() => "Request failed");
-    throw new Error(message || "Request failed");
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json() as Promise<T>;
-}
+const WORKSPACE_STORAGE_KEY = "edit.workspace-path";
 
 export default function ChatPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const [workspacePath, setWorkspacePath] = useState("");
+  const [draftWorkspacePath, setDraftWorkspacePath] = useState("");
+  const [isWorkspaceReady, setIsWorkspaceReady] = useState(false);
+  const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(true);
+  const [isValidatingWorkspace, setIsValidatingWorkspace] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 
-  const requestedChatId = searchParams.get("chat");
+  useEffect(() => {
+    const savedPath = window.localStorage.getItem(WORKSPACE_STORAGE_KEY) ?? "";
+    setWorkspacePath(savedPath);
+    setDraftWorkspacePath(savedPath);
+    setIsWorkspaceReady(Boolean(savedPath));
+    setIsWorkspaceLoading(false);
+  }, []);
 
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
+  async function handleWorkspaceSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextPath = draftWorkspacePath.trim();
+    if (!nextPath || isValidatingWorkspace) return;
+
+    setIsValidatingWorkspace(true);
+    setWorkspaceError(null);
+
+    try {
+      const response = await fetch(
+        `/api/files?path=${encodeURIComponent(nextPath)}`,
+      );
+      const data = (await response.json()) as { error?: string; type?: string };
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to open workspace");
+      }
+
+      if (data.type !== "directory") {
+        throw new Error("Workspace path must point to a directory");
+      }
+
+      window.localStorage.setItem(WORKSPACE_STORAGE_KEY, nextPath);
+      setWorkspacePath(nextPath);
+      setIsWorkspaceReady(true);
+    } catch (error) {
+      setWorkspaceError(
+        error instanceof Error ? error.message : "Failed to open workspace",
+      );
+      setIsWorkspaceReady(false);
+    } finally {
+      setIsValidatingWorkspace(false);
+    }
+  }
+
+  function handleWorkspaceReset() {
+    window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+    setWorkspacePath("");
+    setDraftWorkspacePath("");
+    setWorkspaceError(null);
+    setIsWorkspaceReady(false);
+  }
+
+  if (isWorkspaceLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background text-foreground">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!isWorkspaceReady || !workspacePath) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
+        <Card className="w-full max-w-lg gap-0">
+          <CardHeader className="gap-4">
+            <div className="flex size-12 items-center justify-center rounded-2xl border bg-card">
+              <FolderOpen className="size-5 text-primary" />
+            </div>
+            <div className="space-y-1">
+              <CardTitle>Choose a workspace</CardTitle>
+              <CardDescription>
+                Enter the absolute path to the project you want to edit. The
+                file tree and chat session will use this directory.
+              </CardDescription>
+            </div>
+          </CardHeader>
+
+          <form onSubmit={handleWorkspaceSubmit}>
+            <CardContent>
+              <div className="space-y-3">
+                <Input
+                  autoFocus
+                  value={draftWorkspacePath}
+                  onChange={(event) => {
+                    setDraftWorkspacePath(event.target.value);
+                    if (workspaceError) setWorkspaceError(null);
+                  }}
+                  placeholder="/absolute/path/to/project"
+                />
+                {workspaceError ? (
+                  <p className="text-sm text-destructive">{workspaceError}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Example: `/home/thetanav/c/p/edit`
+                  </p>
+                )}
+              </div>
+            </CardContent>
+
+            <CardFooter className="justify-end gap-2">
+              <Button
+                type="submit"
+                disabled={!draftWorkspacePath.trim() || isValidatingWorkspace}
+              >
+                {isValidatingWorkspace ? "Opening..." : "Open workspace"}
+              </Button>
+            </CardFooter>
+          </form>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <WorkspaceChat
+      key={workspacePath}
+      workspacePath={workspacePath}
+      onChangeWorkspace={handleWorkspaceReset}
+    />
+  );
+}
+
+function WorkspaceChat({
+  workspacePath,
+  onChangeWorkspace,
+}: {
+  workspacePath: string;
+  onChangeWorkspace: () => void;
+}) {
   const [input, setInput] = useState("");
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
-  const [showFilePane] = useState(true);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const lastSyncedSessionIdRef = useRef<string | null>(null);
-  const previousStatusRef = useRef<string>("ready");
-
-  const currentSession = useMemo(
-    () => sessions.find((session) => session.id === currentSessionId) || null,
-    [currentSessionId, sessions],
-  );
-
-  const workspacePath = currentSession?.path ?? "";
-
-  async function refreshSessions() {
-    const nextSessions = sortSessionsByUpdatedAt(
-      await requestJSON<ChatSession[]>("/api/history"),
-    );
-
-    setSessions(nextSessions);
-    setCurrentSessionId((prev) => {
-      if (prev && nextSessions.some((session) => session.id === prev)) {
-        return prev;
-      }
-
-      return nextSessions[0]?.id ?? null;
-    });
-
-    return nextSessions;
-  }
-
-  async function createSession(
-    workspacePathValue: string,
-    name?: string,
-  ): Promise<ChatSession> {
-    const existingForPath = sessions.filter(
-      (session) => session.path === workspacePathValue,
-    );
-    const now = Date.now();
-
-    const newSession: ChatSession = {
-      id: makeSessionId(),
-      name: name
-        ? name.length > 40
-          ? name.slice(0, 40) + "..."
-          : name + "..."
-        : `Chat ${existingForPath.length + 1}`,
-      path: workspacePathValue,
-      messages: [],
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    setSessions((prev) => sortSessionsByUpdatedAt([newSession, ...prev]));
-    setCurrentSessionId(newSession.id);
-
-    try {
-      await requestJSON<{ success: boolean }>("/api/history", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(newSession),
-      });
-    } catch (error) {
-      console.error("Failed to create session:", error);
-    }
-
-    return newSession;
-  }
-
-  function selectSession(id: string) {
-    setCurrentSessionId(id);
-  }
-
-  async function deleteSession(id: string) {
-    const session = sessions.find((item) => item.id === id);
-    if (!session) return;
-
-    setSessions((prev) => {
-      const next = prev.filter((item) => item.id !== id);
-
-      if (currentSessionId === id) {
-        setCurrentSessionId(next[0]?.id ?? null);
-      }
-
-      return next;
-    });
-
-    try {
-      await requestJSON<{ success: boolean }>("/api/history", {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          sessionPath: session.path,
-          sessionId: session.id,
-        }),
-      });
-    } catch (error) {
-      console.error("Failed to delete session:", error);
-      await refreshSessions().catch((refreshError) =>
-        console.error(
-          "Failed to refresh sessions after delete error:",
-          refreshError,
-        ),
-      );
-    }
-  }
-
-  function setMessagesForSession(sessionId: string, messages: ChatMessage[]) {
-    setSessions((prev) => {
-      let updated = false;
-
-      const next = prev.map((session) => {
-        if (session.id !== sessionId) return session;
-
-        updated = true;
-        return {
-          ...session,
-          messages,
-          updatedAt: Date.now(),
-        };
-      });
-
-      return updated ? sortSessionsByUpdatedAt(next) : prev;
-    });
-  }
-
-  function persistCurrentSession(messagesToPersist: UIMessage[]) {
-    if (!currentSession) return;
-
-    const storedMessages = toStoredMessages(messagesToPersist);
-
-    setMessagesForSession(currentSession.id, storedMessages);
-  }
 
   const {
     messages,
-    setMessages,
     sendMessage,
     status,
     addToolApprovalResponse,
@@ -236,74 +179,12 @@ export default function ChatPage() {
       api: "/api/chat",
       body: {
         path: workspacePath,
-        sessionId: currentSession?.id,
-        sessionName: currentSession?.name,
       },
     }),
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
   });
 
   const isActive = status === "streaming" || status === "submitted";
-
-  useEffect(() => {
-    async function loadSessions() {
-      try {
-        await refreshSessions();
-      } catch (error) {
-        console.error("Failed to load sessions:", error);
-      } finally {
-        setIsLoaded(true);
-      }
-    }
-
-    void loadSessions();
-  }, []);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-
-    if (requestedChatId) {
-      const targetSession = sessions.find(
-        (session) => session.id === requestedChatId,
-      );
-
-      if (targetSession) {
-        if (currentSession?.id !== targetSession.id) {
-          selectSession(targetSession.id);
-        }
-        return;
-      }
-    }
-
-    if (!currentSession && sessions.length > 0) {
-      const nextSession = sessions[0];
-      selectSession(nextSession.id);
-      router.replace(`/?chat=${nextSession.id}`);
-    }
-  }, [currentSession, isLoaded, requestedChatId, router, sessions]);
-
-  useEffect(() => {
-    const sessionId = currentSession?.id ?? null;
-
-    if (lastSyncedSessionIdRef.current === sessionId) return;
-
-    lastSyncedSessionIdRef.current = sessionId;
-    setMessages(currentSession ? toUIMessages(currentSession.messages) : []);
-  }, [currentSession, setMessages]);
-
-  useEffect(() => {
-    const previousStatus = previousStatusRef.current;
-    previousStatusRef.current = status;
-
-    if (!currentSession) return;
-
-    if (
-      status === "ready" &&
-      (previousStatus === "streaming" || previousStatus === "submitted")
-    ) {
-      persistCurrentSession(messages);
-    }
-  }, [currentSession, messages, status]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -319,49 +200,9 @@ export default function ChatPage() {
     )}px`;
   }, [input]);
 
-  const currentChatLabel = useMemo(() => {
-    if (!currentSession) return "No chat selected";
-    return `${currentSession.name} · ${currentSession.path}`;
-  }, [currentSession]);
-
-  async function handleCreateChat(path?: string) {
-    const basePath =
-      path ||
-      currentSession?.path ||
-      sessions[0]?.path ||
-      "/home/thetanav/Code/project/edit";
-
-    const session = await createSession(basePath);
-    setSelectedFile(undefined);
-    setMessages([]);
-    router.push(`/?chat=${session.id}`);
-  }
-
-  async function handleCreateFolder(path: string) {
-    const session = await createSession(path);
-    return session;
-  }
-
-  function handleOpenSession(sessionId: string) {
-    selectSession(sessionId);
-    setSelectedFile(undefined);
-    router.push(`/?chat=${sessionId}`);
-  }
-
   async function handleSend() {
     const value = input.trim();
     if (!value || isActive || !workspacePath) return;
-
-    if (!currentSession) {
-      const sessionName =
-        value.length > 40 ? value.slice(0, 40) + "..." : value + "...";
-      const created = await createSession(
-        "/home/thetanav/Code/project/edit",
-        sessionName,
-      );
-      router.push(`/?chat=${created.id}`);
-      return;
-    }
 
     setInput("");
     await sendMessage({
@@ -371,39 +212,36 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-screen bg-background text-foreground">
-      <ChatsBar
-        workspacePath={workspacePath}
-        sessions={sessions}
-        currentSessionId={currentSession?.id ?? null}
-        onCreateChatAction={(path) => {
-          void handleCreateChat(path);
-        }}
-        onCreateFolderAction={handleCreateFolder}
-        onOpenSessionAction={(sessionId) => {
-          handleOpenSession(sessionId);
-        }}
-        onDeleteSessionAction={(sessionId) => {
-          void deleteSession(sessionId);
-        }}
-      />
-
-      <main className="flex-1 min-w-0 flex flex-col">
-        <div className="flex-1 min-h-0 flex">
-          <section className="flex-1 min-w-0 flex flex-col relative select-none">
-            <div className="border-b px-3 py-2 flex items-center justify-between gap-2 bg-background/80 backdrop-blur-sm">
-              <div className="text-[11px] text-muted-foreground truncate">
-                {currentChatLabel}
+      <main className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1">
+          <section className="relative flex min-w-0 flex-1 flex-col select-none">
+            <div className="flex items-center justify-between gap-3 border-b bg-background/80 px-3 py-2 backdrop-blur-sm">
+              <div className="min-w-0">
+                <div className="text-[11px] text-muted-foreground">
+                  Workspace
+                </div>
+                <div className="truncate text-xs">{workspacePath}</div>
               </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onChangeWorkspace}
+                disabled={isActive}
+              >
+                <PencilLine className="size-4" />
+                Change
+              </Button>
             </div>
 
             <div
               ref={scrollRef}
-              className="flex-1 overflow-y-auto px-4 py-6 relative"
+              className="relative flex-1 overflow-y-auto px-4 py-6"
             >
               {messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center">
-                  <div className="text-center space-y-3">
-                    <div className="mx-auto size-14 rounded-2xl border bg-card flex items-center justify-center">
+                  <div className="space-y-3 text-center">
+                    <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border bg-card">
                       <Code className="size-6 text-primary" />
                     </div>
                     <div className="space-y-1">
@@ -411,14 +249,14 @@ export default function ChatPage() {
                         What do you want to build?
                       </h1>
                       <p className="text-sm text-muted-foreground">
-                        Start a chat for the current workspace and I&apos;ll
-                        help you edit code.
+                        Start a chat for this workspace and I&apos;ll help you
+                        edit code.
                       </p>
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="max-w-3xl mx-auto space-y-1 select-text">
+                <div className="mx-auto max-w-3xl space-y-1 select-text">
                   {messages.map((message, index) => (
                     <div key={message.id || index}>
                       {message.role === "user" ? (
@@ -430,7 +268,7 @@ export default function ChatPage() {
                               return (
                                 <p
                                   key={partIndex}
-                                  className="text-sm leading-relaxed whitespace-pre-wrap"
+                                  className="whitespace-pre-wrap text-sm leading-relaxed"
                                 >
                                   {part.text}
                                 </p>
@@ -467,13 +305,11 @@ export default function ChatPage() {
             </div>
           </section>
 
-          {showFilePane && (
-            <FileBar
-              rootPath={workspacePath}
-              selectedFile={selectedFile}
-              onFileSelect={setSelectedFile}
-            />
-          )}
+          <FileBar
+            rootPath={workspacePath}
+            selectedFile={selectedFile}
+            onFileSelect={setSelectedFile}
+          />
         </div>
       </main>
     </div>
