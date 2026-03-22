@@ -7,8 +7,10 @@ import {
   type UIMessage,
 } from "ai";
 import { ollama } from "ollama-ai-provider-v2";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/db/index";
+import { chatSessions, chatMessages } from "@/db/schema";
 import { createTools, DEFAULT_IGNORE_PATTERNS } from "@/lib/tool";
+import { eq, asc, desc, and } from "drizzle-orm";
 
 type ChatRole = "user" | "assistant";
 
@@ -31,23 +33,6 @@ type ChatSessionPayload = {
 type HistoryDeletePayload = {
   sessionPath?: string;
   sessionId?: string;
-};
-
-type StoredChatMessage = {
-  messageId: string;
-  role: string;
-  content: string;
-  timestamp: Date;
-  position: number;
-};
-
-type StoredChatSession = {
-  id: string;
-  name: string;
-  path: string;
-  createdAt: Date;
-  updatedAt: Date;
-  messages: StoredChatMessage[];
 };
 
 function isChatSession(value: unknown): value is ChatSessionPayload {
@@ -74,22 +59,6 @@ function isChatSession(value: unknown): value is ChatSessionPayload {
       typeof item.timestamp === "number"
     );
   });
-}
-
-function toHistoryResponse(session: StoredChatSession) {
-  return {
-    id: session.id,
-    name: session.name,
-    path: session.path,
-    createdAt: session.createdAt.getTime(),
-    updatedAt: session.updatedAt.getTime(),
-    messages: session.messages.map((message) => ({
-      id: message.messageId,
-      role: message.role as ChatRole,
-      content: message.content,
-      timestamp: message.timestamp.getTime(),
-    })),
-  };
 }
 
 function extractTextFromMessages(messages: UIMessage[]): ChatMessagePayload[] {
@@ -139,16 +108,28 @@ const historyDeleteSchema = t.Object({
 
 export const serverApp = new Elysia({ prefix: "/api" })
   .get("/history", async () => {
-    const sessions = (await prisma.chatSession.findMany({
-      orderBy: { updatedAt: "desc" },
-      include: {
-        messages: {
-          orderBy: { position: "asc" },
+    const sessions = await db.query.chatSessions.findMany({
+      with: {
+        chatMessages: {
+          orderBy: [asc(chatMessages.position)],
         },
       },
-    })) as StoredChatSession[];
+      orderBy: [desc(chatSessions.updatedAt)],
+    });
 
-    return sessions.map(toHistoryResponse);
+    return sessions.map((session) => ({
+      id: session.id,
+      name: session.name,
+      path: session.path,
+      createdAt: session.createdAt.getTime(),
+      updatedAt: session.updatedAt.getTime(),
+      messages: session.chatMessages.map((m) => ({
+        id: m.messageId,
+        role: m.role as ChatRole,
+        content: m.content,
+        timestamp: m.timestamp.getTime(),
+      })),
+    }));
   })
   .post(
     "/history",
@@ -158,30 +139,36 @@ export const serverApp = new Elysia({ prefix: "/api" })
         return { error: "Invalid session payload" };
       }
 
-      await prisma.chatSession.upsert({
-        where: { id: body.id },
-        create: {
+      const existing = await db.query.chatSessions.findFirst({
+        where: eq(chatSessions.id, body.id),
+      });
+
+      if (existing) {
+        await db
+          .update(chatSessions)
+          .set({
+            name: body.name,
+            path: body.path,
+            updatedAt: new Date(body.updatedAt),
+          })
+          .where(eq(chatSessions.id, body.id));
+      } else {
+        await db.insert(chatSessions).values({
           id: body.id,
           name: body.name,
           path: body.path,
           createdAt: new Date(body.createdAt),
           updatedAt: new Date(body.updatedAt),
-        },
-        update: {
-          name: body.name,
-          path: body.path,
-          createdAt: new Date(body.createdAt),
-          updatedAt: new Date(body.updatedAt),
-        },
-      });
+        });
+      }
 
-      await prisma.chatMessage.deleteMany({
-        where: { sessionId: body.id },
-      });
+      await db
+        .delete(chatMessages)
+        .where(eq(chatMessages.sessionId, body.id));
 
       if (body.messages.length > 0) {
-        await prisma.chatMessage.createMany({
-          data: body.messages.map((message, index) => ({
+        await db.insert(chatMessages).values(
+          body.messages.map((message, index) => ({
             messageId: message.id,
             role: message.role,
             content: message.content,
@@ -189,7 +176,7 @@ export const serverApp = new Elysia({ prefix: "/api" })
             position: index,
             sessionId: body.id,
           })),
-        });
+        );
       }
 
       return { success: true };
@@ -203,21 +190,24 @@ export const serverApp = new Elysia({ prefix: "/api" })
     async ({ body }) => {
       const { sessionPath, sessionId } = body as HistoryDeletePayload;
 
-      if (sessionPath && sessionId) {
-        await prisma.chatSession.deleteMany({
-          where: {
-            id: sessionId,
-            path: sessionPath,
-          },
-        });
-
+      if (sessionId) {
+        await db
+          .delete(chatSessions)
+          .where(
+            sessionPath
+              ? and(
+                  eq(chatSessions.id, sessionId),
+                  eq(chatSessions.path, sessionPath),
+                )
+              : eq(chatSessions.id, sessionId),
+          );
         return { success: true };
       }
 
       if (sessionPath) {
-        await prisma.chatSession.deleteMany({
-          where: { path: sessionPath },
-        });
+        await db
+          .delete(chatSessions)
+          .where(eq(chatSessions.path, sessionPath));
       }
 
       return { success: true };
@@ -247,29 +237,36 @@ export const serverApp = new Elysia({ prefix: "/api" })
           );
           const now = Date.now();
 
-          await prisma.chatSession.upsert({
-            where: { id: body.sessionId },
-            create: {
-              id: body.sessionId,
+          const existing = await db.query.chatSessions.findFirst({
+            where: eq(chatSessions.id, body.sessionId!),
+          });
+
+          if (existing) {
+            await db
+              .update(chatSessions)
+              .set({
+                name: body.sessionName,
+                path: body.path,
+                updatedAt: new Date(now),
+              })
+              .where(eq(chatSessions.id, body.sessionId!));
+          } else {
+            await db.insert(chatSessions).values({
+              id: body.sessionId!,
               name: body.sessionName,
               path: body.path,
               createdAt: new Date(now),
               updatedAt: new Date(now),
-            },
-            update: {
-              name: body.sessionName,
-              path: body.path,
-              updatedAt: new Date(now),
-            },
-          });
+            });
+          }
 
-          await prisma.chatMessage.deleteMany({
-            where: { sessionId: body.sessionId },
-          });
+          await db
+            .delete(chatMessages)
+            .where(eq(chatMessages.sessionId, body.sessionId!));
 
           if (storedMessages.length > 0) {
-            await prisma.chatMessage.createMany({
-              data: storedMessages.map((message, index) => ({
+            await db.insert(chatMessages).values(
+              storedMessages.map((message, index) => ({
                 messageId: message.id,
                 role: message.role,
                 content: message.content,
@@ -277,7 +274,7 @@ export const serverApp = new Elysia({ prefix: "/api" })
                 position: index,
                 sessionId: body.sessionId!,
               })),
-            });
+            );
           }
         },
       });

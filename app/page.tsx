@@ -91,6 +91,7 @@ export default function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastSyncedSessionIdRef = useRef<string | null>(null);
+  const previousStatusRef = useRef<string>("ready");
 
   const currentSession = useMemo(
     () => sessions.find((session) => session.id === currentSessionId) || null,
@@ -116,33 +117,6 @@ export default function ChatPage() {
     return nextSessions;
   }
 
-  async function saveSessionPayload(session: ChatSession) {
-    const normalizedSession: ChatSession = {
-      ...session,
-      messages: [...session.messages],
-      updatedAt: session.updatedAt || Date.now(),
-    };
-
-    setSessions((prev) => {
-      const exists = prev.some((item) => item.id === normalizedSession.id);
-      const next = exists
-        ? prev.map((item) =>
-            item.id === normalizedSession.id ? normalizedSession : item,
-          )
-        : [normalizedSession, ...prev];
-
-      return sortSessionsByUpdatedAt(next);
-    });
-
-    await requestJSON<{ success: boolean }>("/api/history", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(normalizedSession),
-    });
-  }
-
   async function createSession(
     workspacePathValue: string,
     name?: string,
@@ -154,7 +128,11 @@ export default function ChatPage() {
 
     const newSession: ChatSession = {
       id: makeSessionId(),
-      name: name || `Chat ${existingForPath.length + 1}`,
+      name: name
+        ? name.length > 40
+          ? name.slice(0, 40) + "..."
+          : name + "..."
+        : `Chat ${existingForPath.length + 1}`,
       path: workspacePathValue,
       messages: [],
       createdAt: now,
@@ -238,6 +216,14 @@ export default function ChatPage() {
     });
   }
 
+  function persistCurrentSession(messagesToPersist: UIMessage[]) {
+    if (!currentSession) return;
+
+    const storedMessages = toStoredMessages(messagesToPersist);
+
+    setMessagesForSession(currentSession.id, storedMessages);
+  }
+
   const {
     messages,
     setMessages,
@@ -306,21 +292,18 @@ export default function ChatPage() {
   }, [currentSession, setMessages]);
 
   useEffect(() => {
-    if (!currentSession || isActive) return;
-    setMessagesForSession(currentSession.id, toStoredMessages(messages));
-  }, [currentSession, isActive, messages]);
+    const previousStatus = previousStatusRef.current;
+    previousStatusRef.current = status;
 
-  useEffect(() => {
-    if (!currentSession || isActive || messages.length === 0) return;
+    if (!currentSession) return;
 
-    void saveSessionPayload({
-      ...currentSession,
-      messages: toStoredMessages(messages),
-      updatedAt: Date.now(),
-    }).catch((error) => {
-      console.error("Failed to save session:", error);
-    });
-  }, [currentSession, isActive, messages]);
+    if (
+      status === "ready" &&
+      (previousStatus === "streaming" || previousStatus === "submitted")
+    ) {
+      persistCurrentSession(messages);
+    }
+  }, [currentSession, messages, status]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -370,7 +353,12 @@ export default function ChatPage() {
     if (!value || isActive || !workspacePath) return;
 
     if (!currentSession) {
-      const created = await createSession("/home/thetanav/Code/project/edit");
+      const sessionName =
+        value.length > 40 ? value.slice(0, 40) + "..." : value + "...";
+      const created = await createSession(
+        "/home/thetanav/Code/project/edit",
+        sessionName,
+      );
       router.push(`/?chat=${created.id}`);
       return;
     }
