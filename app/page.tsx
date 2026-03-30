@@ -5,18 +5,19 @@ import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
 } from "ai";
-import { Code, FolderOpen, Loader2, PencilLine } from "lucide-react";
+import { Code, Loader2, PencilLine } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 
 import ChatInput from "@/components/chat-input";
+import CommitButton from "@/components/commit-button";
 import FileBar from "@/components/file-bar";
+import { FileViewer } from "@/components/file-viewer";
 import Loader from "@/components/loader";
 import MessageUI from "@/components/message";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
@@ -186,6 +187,19 @@ function WorkspaceChat({
     )}px`;
   }, [input]);
 
+  useEffect(() => {
+    if (!selectedFile) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSelectedFile(undefined);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedFile]);
+
   async function handleSend() {
     const value = input.trim();
     if (!value || isActive || !workspacePath) return;
@@ -209,14 +223,17 @@ function WorkspaceChat({
                 <div className="truncate text-xs">{workspacePath}</div>
               </div>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onChangeWorkspace}
-                disabled={isActive}>
-                <PencilLine className="size-4" />
-                Change
-              </Button>
+              <div className="flex gap-1">
+                <CommitButton workspacePath={workspacePath} isBusy={isActive} />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onChangeWorkspace}
+                  disabled={isActive}>
+                  <PencilLine className="size-4" />
+                  Change
+                </Button>
+              </div>
             </div>
 
             <div
@@ -240,7 +257,7 @@ function WorkspaceChat({
                   </div>
                 </div>
               ) : (
-                <div className="mx-auto max-w-3xl space-y-1 select-text">
+                <div className="mx-auto max-w-5xl space-y-1 select-text">
                   {messages.map((message, index) => (
                     <div key={message.id || index}>
                       {message.role === "user" ? (
@@ -295,6 +312,24 @@ function WorkspaceChat({
           />
         </div>
       </main>
+
+      {selectedFile ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4">
+          <button
+            type="button"
+            aria-label="Close file viewer"
+            className="absolute inset-0"
+            onClick={() => setSelectedFile(undefined)}
+          />
+
+          <div className="relative z-10 h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-400">
+            <FileViewer
+              filePath={selectedFile}
+              onClose={() => setSelectedFile(undefined)}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

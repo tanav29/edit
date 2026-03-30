@@ -1,4 +1,4 @@
-import { ArrowUp, Square } from "lucide-react";
+import { ArrowUp, Box, Square } from "lucide-react";
 import type { RefObject } from "react";
 
 import { Button } from "./ui/button";
@@ -43,7 +43,10 @@ export default function ChatInput({
           rows={3}
           className="ml-1 max-h-50 flex-1 resize-none bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
         />
-        <div className="flex h-full items-end gap-2">
+        <div className="flex h-full items-end gap-1">
+          <Button variant={"outline"} size={"icon-sm"}>
+            <Box />
+          </Button>
           <Button
             size="icon-sm"
             onClick={() => {
@@ -55,8 +58,7 @@ export default function ChatInput({
               void handleSend();
             }}
             disabled={isActive ? !stop : !input.trim()}
-            className="rounded-lg shrink-0"
-          >
+            className="rounded-lg shrink-0">
             {isActive ? (
               <Square className="size-3 fill-current" />
             ) : (
