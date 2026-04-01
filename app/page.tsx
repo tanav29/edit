@@ -4,9 +4,10 @@ import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
+  type UIMessage,
 } from "ai";
 import { Code, Loader2, PencilLine } from "lucide-react";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { nanoid } from "nanoid";
 import { useQueryState } from "nuqs";
@@ -158,36 +159,116 @@ function WorkspaceChat({
   const [input, setInput] = useState("");
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
   const [session, setSession] = useQueryState("s");
+  const [hydratedMessages, setHydratedMessages] = useState<UIMessage[] | null>(
+    null,
+  );
+  const [isHydratingSession, setIsHydratingSession] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { messages, sendMessage, status, addToolApprovalResponse, stop } =
-    useChat({
-      transport: new DefaultChatTransport({
-        api: "/api/chat",
-        body: {
-          path: workspacePath,
+  const persistMessages = useCallback(
+    async (nextMessages: UIMessage[]) => {
+      if (!session || !workspacePath) return;
+
+      await fetch("/api/chats", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      }),
-      onFinish: () => {
-        // save to sqlite
-        console.log(messages);
+        body: JSON.stringify({
+          sessionId: session,
+          path: workspacePath,
+          messages: nextMessages,
+        }),
+      });
+    },
+    [session, workspacePath],
+  );
+
+  const {
+    messages,
+    setMessages,
+    sendMessage,
+    status,
+    addToolApprovalResponse,
+    stop,
+  } = useChat<UIMessage>({
+    id: session ?? undefined,
+    messages: [],
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      body: {
+        path: workspacePath,
+        sessionId: session,
       },
-      sendAutomaticallyWhen:
-        lastAssistantMessageIsCompleteWithApprovalResponses,
-    });
+    }),
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+  });
 
   const isActive = status === "streaming" || status === "submitted";
+  const isSessionLoading =
+    !session || isHydratingSession || hydratedMessages === null;
 
   useEffect(() => {
     if (!session) {
-      setSession(nanoid());
-    } else {
-      console.log("session:", session);
-      console.log("load previous messages for this session from sqlite");
+      void setSession(nanoid());
     }
-  }, []);
+  }, [session, setSession]);
+
+  useEffect(() => {
+    if (!session || !workspacePath) return;
+
+    const sessionId = session;
+
+    let cancelled = false;
+
+    async function hydrateSession() {
+      setIsHydratingSession(true);
+      setHydratedMessages(null);
+
+      try {
+        const response = await fetch(`/api/chats?s=${sessionId}`);
+
+        if (!response.ok) {
+          throw new Error("Failed to load chat session");
+        }
+
+        const data = (await response.json()) as { messages?: UIMessage[] };
+        if (!cancelled) {
+          setHydratedMessages(
+            Array.isArray(data.messages) ? data.messages : [],
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setHydratedMessages([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsHydratingSession(false);
+        }
+      }
+    }
+
+    void hydrateSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session, workspacePath]);
+
+  useEffect(() => {
+    if (hydratedMessages === null) return;
+
+    setMessages(hydratedMessages);
+  }, [hydratedMessages, setMessages]);
+
+  useEffect(() => {
+    if (isSessionLoading || status !== "ready") return;
+
+    void persistMessages(messages);
+  }, [isSessionLoading, messages, persistMessages, status]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -218,7 +299,7 @@ function WorkspaceChat({
 
   async function handleSend() {
     const value = input.trim();
-    if (!value || isActive || !workspacePath) return;
+    if (!value || isActive || !workspacePath || isSessionLoading) return;
 
     setInput("");
     await sendMessage({
@@ -255,7 +336,11 @@ function WorkspaceChat({
             <div
               ref={scrollRef}
               className="relative flex-1 overflow-y-auto px-4 py-6">
-              {messages.length === 0 ? (
+              {isSessionLoading ? (
+                <div className="flex h-full items-center justify-center">
+                  <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center">
                   <div className="space-y-3 text-center">
                     <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border bg-card">
@@ -315,7 +400,7 @@ function WorkspaceChat({
                 input={input}
                 setInput={setInput}
                 handleSend={handleSend}
-                isActive={isActive}
+                isActive={isActive || isSessionLoading}
                 stop={stop}
               />
             </div>
