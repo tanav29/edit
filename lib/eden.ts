@@ -1,9 +1,9 @@
 import { treaty } from "@elysiajs/eden";
-import { app } from "../app/api/[[...slugs]]/route";
+type App = typeof import("../app/api/[[...slugs]]/route").app;
 
 // .api to enter /api prefix
 export const api =
-  // process is defined on server side and build time
-  typeof process !== "undefined"
-    ? treaty(app).api
-    : treaty<typeof app>("localhost:3000").api;
+  typeof window === "undefined"
+    ? treaty<App>(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000")
+        .api
+    : treaty<App>(window.location.origin).api;

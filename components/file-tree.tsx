@@ -4,6 +4,13 @@ import { useEffect, useState } from "react";
 import { ChevronRight, File, Folder, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+interface FileTreeBarProps {
+  rootPath?: string;
+  selectedFile?: string;
+  isOpen: boolean;
+  onFileSelect: (file: string | undefined) => void;
+}
+
 interface FileTreeProps {
   rootPath: string;
   onFileSelect: (file: string | undefined) => void;
@@ -17,47 +24,70 @@ interface FileNode {
   children?: FileNode[];
 }
 
-export function FileTree({
+export default function FileTreeBar({
+  rootPath,
+  selectedFile,
+  isOpen,
+  onFileSelect,
+}: FileTreeBarProps) {
+  return (
+    <aside
+      className={cn(
+        "shrink-0 min-h-0 flex-col border-l transition-all duration-200 ease-out",
+        isOpen
+          ? "flex w-64 translate-x-0 opacity-100"
+          : "pointer-events-none flex w-0 translate-x-3 opacity-0 overflow-hidden border-l-0",
+      )}
+    >
+      <div className="flex-1 min-h-0 overflow-hidden">
+        {rootPath ? (
+          <FileTree
+            key={rootPath}
+            rootPath={rootPath}
+            selectedFile={selectedFile}
+            onFileSelect={onFileSelect}
+          />
+        ) : (
+          <div className="p-3 text-xs text-muted-foreground">
+            Select or create a chat to browse files
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function FileTree({
   rootPath,
   onFileSelect,
   selectedFile,
 }: FileTreeProps) {
-  const [rootNode, setRootNode] = useState<FileNode | null>(null);
+  const [rootNode, setRootNode] = useState<FileNode | null | undefined>(
+    undefined,
+  );
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadDirectory(rootPath);
-  }, [rootPath]);
-
-  async function loadDirectory(path: string) {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
-      const data = await res.json();
-      setRootNode(data);
-    } catch (error) {
-      console.error("Failed to load files:", error);
-    } finally {
-      setLoading(false);
-    }
+  async function fetchNode(path: string): Promise<FileNode> {
+    const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
+    return res.json();
   }
 
+  useEffect(() => {
+    void fetchNode(rootPath)
+      .then(setRootNode)
+      .catch((error) => {
+        console.error("Failed to load files:", error);
+        setRootNode(null);
+      });
+  }, [rootPath]);
+
   async function loadChildDirectory(node: FileNode) {
-    if (
-      node.type !== "directory" ||
-      !node.children ||
-      node.children.length > 0
-    ) {
+    if (node.type !== "directory" || !node.children || node.children.length > 0) {
       return;
     }
 
     try {
-      const res = await fetch(
-        `/api/files?path=${encodeURIComponent(node.path)}`,
-      );
-      const data = await res.json();
-
+      const data = await fetchNode(node.path);
       setRootNode((prev) => {
         if (!prev) return prev;
         return updateNodeChildren(prev, node.path, data.children || []);
@@ -88,20 +118,20 @@ export function FileTree({
     return node;
   }
 
-  function toggleDir(node: FileNode) {
+  function toggleDirectory(node: FileNode) {
     setExpandedDirs((prev) => {
       const next = new Set(prev);
       if (next.has(node.path)) {
         next.delete(node.path);
       } else {
         next.add(node.path);
-        loadChildDirectory(node);
+        void loadChildDirectory(node);
       }
       return next;
     });
   }
 
-  if (loading) {
+  if (rootNode === undefined) {
     return <div className="p-3 text-xs text-muted-foreground">Loading...</div>;
   }
 
@@ -118,7 +148,7 @@ export function FileTree({
         depth={0}
         expandedDirs={expandedDirs}
         selectedFile={selectedFile}
-        onToggle={toggleDir}
+        onToggle={toggleDirectory}
         onSelect={onFileSelect}
       />
     </div>

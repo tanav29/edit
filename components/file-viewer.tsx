@@ -1,21 +1,17 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { File, X, Loader2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Editor } from "@monaco-editor/react"
+import { File, X, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Editor } from "@monaco-editor/react";
+import { useQuery } from "@tanstack/react-query";
 
 interface FileViewerProps {
-  filePath: string
-  onClose: () => void
+  filePath: string;
+  onClose: () => void;
 }
 
 export function FileViewer({ filePath, onClose }: FileViewerProps) {
-  const [content, setContent] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const extension = filePath.split(".").pop() || ""
+  const extension = filePath.split(".").pop() || "";
   const language =
     extension === "ts" || extension === "tsx"
       ? "typescript"
@@ -29,38 +25,26 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
               ? "css"
               : extension === "html"
                 ? "html"
-                : "text"
+                : "text";
 
-  useEffect(() => {
-    async function fetchFile() {
-      setLoading(true)
-      setError(null)
-      try {
-        const res = await fetch(`/api/files/content?path=${encodeURIComponent(filePath)}`)
-        if (!res.ok) throw new Error("Failed to load file")
-        const data = await res.json()
-        setContent(data.content)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load file")
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchFile()
-  }, [filePath])
+  const {
+    data: content,
+    isLoading: loading,
+    isError: error,
+  } = useQuery({
+    queryKey: ["files", filePath],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/files/content?path=${encodeURIComponent(filePath)}`,
+      );
+      if (!res.ok) throw new Error("Failed to load file");
+      const data = await res.json();
+      return data;
+    },
+  });
 
   return (
     <div className="flex flex-col h-full bg-background border rounded-xl overflow-hidden shadow-2xl">
-      <div className="flex items-center justify-between p-3 border-b bg-muted/30">
-        <div className="flex items-center gap-2 min-w-0">
-          <File className="size-4 text-muted-foreground shrink-0" />
-          <span className="text-sm font-medium truncate">{filePath.split("/").pop()}</span>
-        </div>
-        <Button variant="ghost" size="icon-xs" onClick={onClose} className="size-7">
-          <X className="size-4" />
-        </Button>
-      </div>
       <div className="flex-1 relative">
         {loading ? (
           <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
@@ -94,5 +78,5 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
         </div>
       </div>
     </div>
-  )
+  );
 }

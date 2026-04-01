@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { chats } from "@/db/schema";
 import { getTitleFromMessages } from "@/lib/utils";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
 
@@ -16,7 +16,13 @@ import { ollama } from "ollama-ai-provider-v2";
 
 import { createTools, DEFAULT_IGNORE_PATTERNS } from "@/lib/tool";
 
+export const runtime = "nodejs";
+
 export const app = new Elysia({ prefix: "/api" })
+  .get("/sessions", async () => {
+    const rows = await db.select().from(chats);
+    return rows;
+  })
   .get("/store/:id", async ({ params }) => {
     // this api returns the chat session if it exists, otherwise returns null
     if (!params.id) {
@@ -90,6 +96,18 @@ export const app = new Elysia({ prefix: "/api" })
       }),
     },
   )
+  .get("/del/:id", async ({ params }) => {
+    if (!params.id) {
+      return {
+        ok: false,
+        msg: "sessionId and workspace are required",
+      };
+    }
+
+    await db.delete(chats).where(eq(chats.id, params.id));
+
+    return { ok: true };
+  })
   .post(
     "/chat",
     async ({ body }) => {

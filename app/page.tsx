@@ -6,14 +6,23 @@ import {
   lastAssistantMessageIsCompleteWithApprovalResponses,
   type UIMessage,
 } from "ai";
-import { Code, Loader2, PencilLine } from "lucide-react";
+import {
+  Code,
+  Loader2,
+  PanelRightClose,
+  PanelRightOpen,
+  X,
+} from "lucide-react";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { nanoid } from "nanoid";
 import { useQueryState } from "nuqs";
+import ChatSidebar, {
+  type ChatSessionSummary,
+} from "@/components/chat-sidebar";
 import ChatInput from "@/components/chat-input";
 import CommitButton from "@/components/commit-button";
-import FileBar from "@/components/file-bar";
+import FileTreeBar from "@/components/file-tree";
 import { FileViewer } from "@/components/file-viewer";
 import Loader from "@/components/loader";
 import MessageUI from "@/components/message";
@@ -26,12 +35,19 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { getTitleFromMessages } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const WORKSPACE_STORAGE_KEY = "edit.workspace-path";
 
 export default function ChatPage() {
   const [workspacePath, setWorkspacePath] = useState("");
   const [draftWorkspacePath, setDraftWorkspacePath] = useState("");
+  const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
   const [isWorkspaceReady, setIsWorkspaceReady] = useState(false);
   const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(true);
   const [isValidatingWorkspace, setIsValidatingWorkspace] = useState(false);
@@ -85,24 +101,47 @@ export default function ChatPage() {
     window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
     setWorkspacePath("");
     setDraftWorkspacePath("");
+    setPendingSessionId(null);
     setWorkspaceError(null);
     setIsWorkspaceReady(false);
   }
 
+  const handleOpenWorkspaceChat = useCallback(
+    (nextWorkspacePath: string, sessionId: string) => {
+      window.localStorage.setItem(WORKSPACE_STORAGE_KEY, nextWorkspacePath);
+      setWorkspacePath(nextWorkspacePath);
+      setDraftWorkspacePath(nextWorkspacePath);
+      setWorkspaceError(null);
+      setIsWorkspaceReady(true);
+      setPendingSessionId(sessionId);
+    },
+    [],
+  );
+
+  const handleInitialSessionApplied = useCallback(() => {
+    setPendingSessionId(null);
+  }, []);
+
   if (isWorkspaceLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background text-foreground">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      <div className="relative flex h-screen items-center justify-center overflow-hidden bg-background text-foreground">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(120,120,120,0.12),transparent_55%)]" />
+        <Loader2 className="relative z-10 size-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   if (!isWorkspaceReady || !workspacePath) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
-        <Card className="w-full max-w-lg gap-0">
-          <CardHeader>
-            <CardTitle>Choose a workspace</CardTitle>
+      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 text-foreground">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(120,120,120,0.12),transparent_40%),radial-gradient(circle_at_80%_80%,rgba(90,90,90,0.08),transparent_35%)]" />
+
+        <Card className="relative z-10 w-full max-w-xl gap-0 border-border/70 bg-card/95 shadow-xl backdrop-blur">
+          <CardHeader className="space-y-2">
+            <CardTitle className="text-xl">Open workspace</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Pick a project folder to start chatting and editing files.
+            </p>
           </CardHeader>
 
           <form onSubmit={handleWorkspaceSubmit}>
@@ -110,6 +149,7 @@ export default function ChatPage() {
               <div className="space-y-3">
                 <Input
                   autoFocus
+                  className="h-11"
                   value={draftWorkspacePath}
                   onChange={(event) => {
                     setDraftWorkspacePath(event.target.value);
@@ -130,6 +170,7 @@ export default function ChatPage() {
             <CardFooter className="justify-end gap-2">
               <Button
                 type="submit"
+                className="h-9 px-4"
                 disabled={!draftWorkspacePath.trim() || isValidatingWorkspace}>
                 {isValidatingWorkspace ? "Opening..." : "Open workspace"}
               </Button>
@@ -144,6 +185,9 @@ export default function ChatPage() {
     <WorkspaceChat
       key={workspacePath}
       workspacePath={workspacePath}
+      initialSessionId={pendingSessionId}
+      onOpenWorkspaceChat={handleOpenWorkspaceChat}
+      onInitialSessionApplied={handleInitialSessionApplied}
       onChangeWorkspace={handleWorkspaceReset}
     />
   );
@@ -151,9 +195,15 @@ export default function ChatPage() {
 
 function WorkspaceChat({
   workspacePath,
+  initialSessionId,
+  onOpenWorkspaceChat,
+  onInitialSessionApplied,
   onChangeWorkspace,
 }: {
   workspacePath: string;
+  initialSessionId: string | null;
+  onOpenWorkspaceChat: (workspacePath: string, sessionId: string) => void;
+  onInitialSessionApplied: () => void;
   onChangeWorkspace: () => void;
 }) {
   const [input, setInput] = useState("");
@@ -163,6 +213,15 @@ function WorkspaceChat({
     null,
   );
   const [isHydratingSession, setIsHydratingSession] = useState(false);
+  const [chatSessions, setChatSessions] = useState<ChatSessionSummary[]>([]);
+  const [isChatListLoading, setIsChatListLoading] = useState(true);
+  const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
+  const [newChatWorkspacePath, setNewChatWorkspacePath] = useState("");
+  const [newChatWorkspaceError, setNewChatWorkspaceError] = useState<
+    string | null
+  >(null);
+  const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
+  const [isFileBarOpen, setIsFileBarOpen] = useState(true);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -181,6 +240,37 @@ function WorkspaceChat({
           workspace: workspacePath,
           messages: nextMessages,
         }),
+      });
+
+      const nextTitle = getTitleFromMessages(nextMessages);
+      const now = Date.now();
+
+      setChatSessions((current) => {
+        const existingIndex = current.findIndex(
+          (chat) => chat.id === session && chat.workspacePath === workspacePath,
+        );
+
+        if (existingIndex === -1) {
+          return [
+            {
+              id: session,
+              workspacePath,
+              title: nextTitle,
+              createdAt: now,
+              updatedAt: now,
+            },
+            ...current,
+          ];
+        }
+
+        const next = [...current];
+        next[existingIndex] = {
+          ...next[existingIndex],
+          workspacePath,
+          title: nextTitle,
+          updatedAt: now,
+        };
+        return next;
       });
     },
     [session, workspacePath],
@@ -215,6 +305,17 @@ function WorkspaceChat({
       void setSession(nanoid());
     }
   }, [session, setSession]);
+
+  useEffect(() => {
+    if (!initialSessionId) return;
+
+    if (session === initialSessionId) {
+      onInitialSessionApplied();
+      return;
+    }
+
+    void setSession(initialSessionId);
+  }, [initialSessionId, onInitialSessionApplied, session, setSession]);
 
   useEffect(() => {
     if (!session || !workspacePath) return;
@@ -325,115 +426,185 @@ function WorkspaceChat({
     });
   }
 
+  function handleNewChat() {
+    setNewChatWorkspacePath(workspacePath);
+    setNewChatWorkspaceError(null);
+    setIsNewChatModalOpen(true);
+  }
+
+  function handleCloseNewChatModal() {
+    if (isCreatingNewChat) return;
+    setIsNewChatModalOpen(false);
+    setNewChatWorkspaceError(null);
+  }
+
+  async function handleCreateNewChat(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextWorkspacePath = newChatWorkspacePath.trim();
+    if (!nextWorkspacePath || isCreatingNewChat) return;
+
+    setIsCreatingNewChat(true);
+    setNewChatWorkspaceError(null);
+
+    try {
+      const response = await fetch(
+        `/api/files?path=${encodeURIComponent(nextWorkspacePath)}`,
+      );
+      const data = (await response.json()) as {
+        error?: string;
+        type?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to open workspace");
+      }
+
+      if (data.type !== "directory") {
+        throw new Error("Workspace path must point to a directory");
+      }
+
+      setSelectedFile(undefined);
+      setHydratedMessages([]);
+      setMessages([]);
+
+      const nextSessionId = nanoid();
+      onOpenWorkspaceChat(nextWorkspacePath, nextSessionId);
+
+      setIsNewChatModalOpen(false);
+      setNewChatWorkspaceError(null);
+    } catch (error) {
+      setNewChatWorkspaceError(
+        error instanceof Error ? error.message : "Failed to open workspace",
+      );
+    } finally {
+      setIsCreatingNewChat(false);
+    }
+  }
+
   return (
-    <div className="flex h-screen bg-background text-foreground">
-      <main className="flex min-w-0 flex-1 flex-col">
+    <div className="relative flex h-screen overflow-hidden bg-background text-foreground">
+      <div className="pointer-events-none absolute inset-0" />
+      <ChatSidebar onNewChat={handleNewChat} />
+
+      <main className="relative z-10 flex min-w-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1">
           <section className="relative flex min-w-0 flex-1 flex-col select-none">
-            <div className="flex items-center justify-between gap-3 border-b bg-background/80 px-3 py-2 backdrop-blur-sm">
-              <div className="min-w-0">
-                <div className="text-[11px] text-muted-foreground">
-                  Workspace
+            <div className="flex items-center justify-between gap-3 border-b border-border/70 bg-background/80 px-3 py-2 backdrop-blur-sm">
+              <div className="min-w-0 space-y-0.5">
+                <div className="truncate text-sm font-medium">
+                  {workspacePath}
                 </div>
-                <div className="truncate text-xs">{workspacePath}</div>
               </div>
 
-              <div className="flex gap-1">
+              <div className="flex items-center gap-1 rounded-md">
                 <CommitButton workspacePath={workspacePath} isBusy={isActive} />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onChangeWorkspace}
-                  disabled={isActive}>
-                  <PencilLine className="size-4" />
-                  Change
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      aria-label="Toggle file tree"
+                      onClick={() => setIsFileBarOpen((prev) => !prev)}>
+                      {isFileBarOpen ? (
+                        <PanelRightClose className="size-4" />
+                      ) : (
+                        <PanelRightOpen className="size-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Toggle file tree</TooltipContent>
+                </Tooltip>
               </div>
             </div>
 
-            <div
-              ref={scrollRef}
-              className="relative flex-1 overflow-y-auto px-4 py-6">
-              {isSessionLoading ? (
-                <div className="flex h-full items-center justify-center">
-                  <Loader2 className="size-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : messages.length === 0 ? (
-                <div className="flex h-full items-center justify-center">
-                  <div className="space-y-3 text-center">
-                    <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border bg-card">
-                      <Code className="size-6 text-primary" />
+            <div className="flex min-h-0 flex-1">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <div
+                  ref={scrollRef}
+                  className="relative flex-1 overflow-y-auto px-4 py-6">
+                  {isSessionLoading ? (
+                    <div className="flex h-full items-center justify-center">
+                      <Loader2 className="size-6 animate-spin text-muted-foreground" />
                     </div>
-                    <div className="space-y-1">
-                      <h1 className="text-xl font-semibold">
-                        What do you want to build?
-                      </h1>
-                      <p className="text-sm text-muted-foreground">
-                        Start a chat for this workspace and I&apos;ll help you
-                        edit code.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="mx-auto max-w-5xl space-y-1 select-text">
-                  {messages.map((message, index) => (
-                    <div key={message.id || index}>
-                      {message.role === "user" ? (
-                        <div className="flex justify-end py-2">
-                          <div className="max-w-[85%] rounded-2xl rounded-br-md border border-primary/20 bg-primary/15 px-4 py-2.5">
-                            {message.parts.map((part, partIndex) => {
-                              if (part.type !== "text") return null;
-
-                              return (
-                                <p
-                                  key={partIndex}
-                                  className="whitespace-pre-wrap text-sm leading-relaxed">
-                                  {part.text}
-                                </p>
-                              );
-                            })}
-                          </div>
+                  ) : messages.length === 0 ? (
+                    <div className="flex h-full items-center justify-center">
+                      <div className="w-full max-w-md space-y-4 rounded-2xl border border-border/70 bg-card/70 p-8 text-center shadow-sm backdrop-blur-sm">
+                        <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border bg-card">
+                          <Code className="size-6 text-primary" />
                         </div>
-                      ) : (
-                        <MessageUI
-                          parts={message.parts}
-                          addToolApprovalResponseAction={
-                            addToolApprovalResponse
-                          }
-                          onFileClickAction={setSelectedFile}
-                        />
-                      )}
+                        <div className="space-y-1">
+                          <h1 className="text-xl font-semibold">
+                            What do you want to build?
+                          </h1>
+                          <p className="text-sm text-muted-foreground">
+                            Start a chat for this workspace and I&apos;ll help
+                            you edit code.
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  ))}
+                  ) : (
+                    <div className="mx-auto w-full max-w-5xl space-y-1 select-text">
+                      {messages.map((message, index) => (
+                        <div key={message.id || index}>
+                          {message.role === "user" ? (
+                            <div className="flex justify-end py-2">
+                              <div className="max-w-[85%] rounded-2xl rounded-br-md border border-primary/25 bg-primary/12 px-4 py-2.5 shadow-sm">
+                                {message.parts.map((part, partIndex) => {
+                                  if (part.type !== "text") return null;
 
-                  {isActive && <Loader />}
+                                  return (
+                                    <p
+                                      key={partIndex}
+                                      className="whitespace-pre-wrap text-sm leading-relaxed">
+                                      {part.text}
+                                    </p>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : (
+                            <MessageUI
+                              parts={message.parts}
+                              addToolApprovalResponseAction={
+                                addToolApprovalResponse
+                              }
+                              onFileClickAction={setSelectedFile}
+                            />
+                          )}
+                        </div>
+                      ))}
+
+                      {isActive && <Loader />}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            <div className="bg-background p-2">
-              <ChatInput
-                textareaRef={textareaRef}
-                input={input}
-                setInput={setInput}
-                handleSend={handleSend}
-                isActive={isActive || isSessionLoading}
-                stop={stop}
+                <div className="border-t border-border/70 bg-background/85 p-2 backdrop-blur-sm">
+                  <ChatInput
+                    textareaRef={textareaRef}
+                    input={input}
+                    setInput={setInput}
+                    handleSend={handleSend}
+                    isActive={isActive || isSessionLoading}
+                    stop={stop}
+                  />
+                </div>
+              </div>
+              <FileTreeBar
+                rootPath={workspacePath}
+                selectedFile={selectedFile}
+                isOpen={isFileBarOpen}
+                onFileSelect={setSelectedFile}
               />
             </div>
           </section>
-
-          <FileBar
-            rootPath={workspacePath}
-            selectedFile={selectedFile}
-            onFileSelect={setSelectedFile}
-          />
         </div>
       </main>
 
       {selectedFile ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm">
           <button
             type="button"
             aria-label="Close file viewer"
@@ -449,6 +620,63 @@ function WorkspaceChat({
           </div>
         </div>
       ) : null}
+
+      {isNewChatModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm">
+          <button
+            type="button"
+            aria-label="Close new chat modal"
+            className="absolute inset-0"
+            onClick={handleCloseNewChatModal}
+          />
+
+          <Card className="relative z-10 w-full max-w-lg gap-0 border-border/70 shadow-xl">
+            <CardHeader>
+              <CardTitle>New chat workspace</CardTitle>
+            </CardHeader>
+
+            <form onSubmit={handleCreateNewChat}>
+              <CardContent>
+                <div className="space-y-3">
+                  <Input
+                    autoFocus
+                    value={newChatWorkspacePath}
+                    onChange={(event) => {
+                      setNewChatWorkspacePath(event.target.value);
+                      if (newChatWorkspaceError) setNewChatWorkspaceError(null);
+                    }}
+                    placeholder="/absolute/path/to/project"
+                  />
+                  {newChatWorkspaceError ? (
+                    <p className="text-sm text-destructive">
+                      {newChatWorkspaceError}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Choose where the new chat should run.
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+
+              <CardFooter className="justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCloseNewChatModal}
+                  disabled={isCreatingNewChat}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={!newChatWorkspacePath.trim() || isCreatingNewChat}>
+                  {isCreatingNewChat ? "Creating..." : "Create chat"}
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
