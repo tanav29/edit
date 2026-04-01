@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
-    "dev": "bun --bun next dev",
+    "dev": "portless edit bun --bun next dev",
     "build": "bun --bun next build",
     "start": "bun --bun next start",
     "lint": "eslint"
@@ -34,6 +34,7 @@
     "lucide-react": "^0.575.0",
     "motion": "^12.34.0",
     "next": "16.1.6",
+    "nuqs": "^2.8.9",
     "ollama-ai-provider-v2": "^3.3.0",
     "qrcode.react": "^4.2.0",
     "radix-ui": "^1.4.3",
@@ -55,6 +56,7 @@
     "elysia": "^1.4.28",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "portless": "^0.9.1",
     "prisma": "^7.4.2",
     "shadcn": "^3.8.5",
     "tailwindcss": "^4",

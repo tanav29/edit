@@ -8,6 +8,8 @@ import {
 import { Code, Loader2, PencilLine } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 
+import { nanoid } from "nanoid";
+import { useQueryState } from "nuqs";
 import ChatInput from "@/components/chat-input";
 import CommitButton from "@/components/commit-button";
 import FileBar from "@/components/file-bar";
@@ -155,6 +157,7 @@ function WorkspaceChat({
 }) {
   const [input, setInput] = useState("");
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
+  const [session, setSession] = useQueryState("s");
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -167,11 +170,24 @@ function WorkspaceChat({
           path: workspacePath,
         },
       }),
+      onFinish: () => {
+        // save to sqlite
+        console.log(messages);
+      },
       sendAutomaticallyWhen:
         lastAssistantMessageIsCompleteWithApprovalResponses,
     });
 
   const isActive = status === "streaming" || status === "submitted";
+
+  useEffect(() => {
+    if (!session) {
+      setSession(nanoid());
+    } else {
+      console.log("session:", session);
+      console.log("load previous messages for this session from sqlite");
+    }
+  }, []);
 
   useEffect(() => {
     if (!scrollRef.current) return;
