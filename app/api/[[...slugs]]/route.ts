@@ -17,7 +17,8 @@ import { ollama } from "ollama-ai-provider-v2";
 import { createTools, DEFAULT_IGNORE_PATTERNS } from "@/lib/tool";
 
 export const app = new Elysia({ prefix: "/api" })
-  .get("/history/:id", async ({ params }) => {
+  .get("/store/:id", async ({ params }) => {
+    // this api returns the chat session if it exists, otherwise returns null
     if (!params.id) {
       return { ok: false, msg: "sessionId and path are required" };
     }
@@ -32,7 +33,7 @@ export const app = new Elysia({ prefix: "/api" })
     return chat;
   })
   .post(
-    "/history",
+    "/store",
     async ({ body }) => {
       // this api creates or updates the chat session
       const messages = Array.isArray(body.messages) ? body.messages : undefined;

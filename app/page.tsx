@@ -171,14 +171,14 @@ function WorkspaceChat({
     async (nextMessages: UIMessage[]) => {
       if (!session || !workspacePath) return;
 
-      await fetch("/api/chats", {
+      await fetch("/api/store", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          sessionId: session,
-          path: workspacePath,
+          id: session,
+          workspace: workspacePath,
           messages: nextMessages,
         }),
       });
@@ -228,17 +228,35 @@ function WorkspaceChat({
       setHydratedMessages(null);
 
       try {
-        const response = await fetch(`/api/chats?s=${sessionId}`);
+        const response = await fetch(
+          `/api/store/${encodeURIComponent(sessionId)}`,
+        );
 
         if (!response.ok) {
           throw new Error("Failed to load chat session");
         }
 
-        const data = (await response.json()) as { messages?: UIMessage[] };
+        const data = (await response.json()) as {
+          messages?: UIMessage[] | string;
+        } | null;
+
+        let parsedMessages: UIMessage[] = [];
+
+        if (data && Array.isArray(data.messages)) {
+          parsedMessages = data.messages;
+        } else if (data && typeof data.messages === "string") {
+          try {
+            const decoded = JSON.parse(data.messages) as unknown;
+            if (Array.isArray(decoded)) {
+              parsedMessages = decoded as UIMessage[];
+            }
+          } catch {
+            parsedMessages = [];
+          }
+        }
+
         if (!cancelled) {
-          setHydratedMessages(
-            Array.isArray(data.messages) ? data.messages : [],
-          );
+          setHydratedMessages(parsedMessages);
         }
       } catch {
         if (!cancelled) {
