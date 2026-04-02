@@ -21,7 +21,7 @@ export default function ChatInput({
   stop,
 }: ChatInputProps) {
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-4xl mx-auto">
       <div className="flex items-end gap-2 rounded-xl border bg-card p-2 transition-colors focus-within:border-muted-foreground/50">
         <textarea
           ref={textareaRef}

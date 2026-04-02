@@ -15,6 +15,7 @@ import { useQueryState } from "nuqs";
 import { toast } from "sonner";
 import { api } from "@/lib/eden";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Image from "next/image";
 
 export type ChatSessionSummary = {
   id: string;
@@ -29,7 +30,11 @@ function formatLabel(value: string | null) {
   return normalized && normalized.length > 0 ? normalized : "New chat";
 }
 
-export default function ChatSidebar({ onNewChat }: any) {
+export default function ChatSidebar({
+  onNewChat,
+}: {
+  onNewChat: (workspacePath?: string) => void;
+}) {
   const queryClient = useQueryClient();
   const {
     data: sessions,
@@ -43,7 +48,6 @@ export default function ChatSidebar({ onNewChat }: any) {
     },
   });
   const [session, setSession] = useQueryState("s");
-  const [deletingChatId, setDeletingChatId] = useState<string | null>(null);
 
   const activeSessionId = session ?? null;
 
@@ -140,7 +144,10 @@ export default function ChatSidebar({ onNewChat }: any) {
                   <span className="truncate flex-1" title={group.path}>
                     {group.path}
                   </span>
-                  <button>
+                  <button
+                    type="button"
+                    onClick={() => onNewChat(group.path)}
+                    aria-label={`New chat in ${group.path}`}>
                     <Plus className="size-3 opacity-70 active:opacity-100 cursor-pointer" />
                   </button>
                 </div>

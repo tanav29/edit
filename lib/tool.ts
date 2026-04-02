@@ -32,6 +32,98 @@ interface FileEntry {
   children?: FileEntry[];
 }
 
+type SearchResult = {
+  title: string;
+  url: string;
+  snippet: string;
+};
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+function ensureHttpUrl(input: string): URL {
+  const url = new URL(input);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("Only HTTP(S) URLs are supported");
+  }
+  return url;
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ");
+}
+
+function stripHtml(html: string): string {
+  return decodeHtmlEntities(
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+}
+
+async function fetchWithTimeout(
+  url: string,
+  timeoutMs = 15000,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "user-agent": "Mozilla/5.0 (compatible; EditBot/1.0)",
+      },
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function parseDuckDuckGoResults(
+  html: string,
+  maxResults: number,
+): SearchResult[] {
+  const results: SearchResult[] = [];
+
+  const pattern =
+    /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?(?:<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>|<div[^>]*class="[^"]*result__snippet[^"]*"[^>]*>)([\s\S]*?)(?:<\/a>|<\/div>)/gi;
+
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(html)) && results.length < maxResults) {
+    const rawUrl = decodeHtmlEntities(match[1] || "");
+    const title = stripHtml(match[2] || "");
+    const snippet = stripHtml(match[3] || "");
+
+    let cleanedUrl = rawUrl;
+    if (cleanedUrl.startsWith("//")) {
+      cleanedUrl = `https:${cleanedUrl}`;
+    } else if (cleanedUrl.startsWith("/l/?")) {
+      const redirect = new URL(`https://duckduckgo.com${cleanedUrl}`);
+      const target = redirect.searchParams.get("uddg");
+      if (target) cleanedUrl = decodeURIComponent(target);
+    }
+
+    if (!title || !cleanedUrl) continue;
+
+    results.push({ title, url: cleanedUrl, snippet });
+  }
+
+  return results;
+}
+
 function getFiles(dirPath: string, ignorePatterns: string[]): FileEntry[] {
   try {
     const entries = fs.readdirSync(dirPath, { withFileTypes: true });
@@ -99,7 +191,7 @@ export function createTools(workspacePath: string) {
             total: matches.length,
           };
         } catch (error) {
-          return { error: String(error) };
+          return { error: errorMessage(error) };
         }
       },
     }),
@@ -142,7 +234,7 @@ export function createTools(workspacePath: string) {
             size: fs.statSync(fullPath).size,
           };
         } catch (error) {
-          return { error: String(error) };
+          return { error: errorMessage(error) };
         }
       },
     }),
@@ -183,7 +275,7 @@ export function createTools(workspacePath: string) {
             linesRemoved: existed ? previousLineCount : 0,
           };
         } catch (error) {
-          return { error: String(error) };
+          return { error: errorMessage(error) };
         }
       },
       needsApproval: true,
@@ -207,16 +299,133 @@ export function createTools(workspacePath: string) {
             maxBuffer: 10 * 1024 * 1024,
           });
           return { stdout: output, path: cwd };
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const withOutput = error as {
+            stdout?: string;
+            stderr?: string;
+            message?: string;
+          };
           return {
-            stdout: error.stdout || "",
-            stderr: error.stderr || "",
-            error: error.message,
+            stdout: withOutput.stdout || "",
+            stderr: withOutput.stderr || "",
+            error: withOutput.message || errorMessage(error),
             path: workspacePath,
           };
         }
       },
       needsApproval: true,
+    }),
+
+    web: tool({
+      description: "Search the web and return top results",
+      inputSchema: zodSchema(
+        z.object({
+          query: z.string().min(1).describe("The search query"),
+          maxResults: z
+            .number()
+            .int()
+            .min(1)
+            .max(10)
+            .optional()
+            .describe("Maximum number of results to return (default: 5)"),
+        }),
+      ),
+      execute: async ({ query, maxResults = 5 }) => {
+        try {
+          const searchUrl = `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+          const response = await fetchWithTimeout(searchUrl, 15000);
+
+          if (!response.ok) {
+            throw new Error(
+              `Search request failed with status ${response.status}`,
+            );
+          }
+
+          const html = await response.text();
+          const results = parseDuckDuckGoResults(html, maxResults);
+
+          if (results.length === 0) {
+            return {
+              query,
+              results: [],
+              total: 0,
+              message: "No results parsed from search response",
+            };
+          }
+
+          return {
+            query,
+            results,
+            total: results.length,
+            provider: "duckduckgo",
+          };
+        } catch (error) {
+          return { error: errorMessage(error), query, results: [], total: 0 };
+        }
+      },
+    }),
+
+    scrape: tool({
+      description: "Fetch and extract readable content from a web page",
+      inputSchema: zodSchema(
+        z.object({
+          url: z.string().url().describe("The page URL to scrape"),
+          maxChars: z
+            .number()
+            .int()
+            .min(500)
+            .max(50000)
+            .optional()
+            .describe("Max extracted content length (default: 8000)"),
+        }),
+      ),
+      execute: async ({ url, maxChars = 8000 }) => {
+        try {
+          const validatedUrl = ensureHttpUrl(url);
+          const response = await fetchWithTimeout(
+            validatedUrl.toString(),
+            20000,
+          );
+
+          if (!response.ok) {
+            throw new Error(`Failed to fetch page: HTTP ${response.status}`);
+          }
+
+          const contentType = response.headers.get("content-type") || "";
+          const raw = await response.text();
+
+          if (!/html/i.test(contentType)) {
+            return {
+              url: validatedUrl.toString(),
+              contentType,
+              content: raw.slice(0, maxChars),
+              truncated: raw.length > maxChars,
+              length: raw.length,
+            };
+          }
+
+          const titleMatch = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+          const descriptionMatch = raw.match(
+            /<meta[^>]*name=["']description["'][^>]*content=["']([\s\S]*?)["'][^>]*>/i,
+          );
+
+          const textContent = stripHtml(raw);
+
+          return {
+            url: validatedUrl.toString(),
+            title: titleMatch ? stripHtml(titleMatch[1]) : null,
+            description: descriptionMatch
+              ? decodeHtmlEntities(descriptionMatch[1]).trim()
+              : null,
+            contentType,
+            content: textContent.slice(0, maxChars),
+            truncated: textContent.length > maxChars,
+            length: textContent.length,
+          };
+        } catch (error) {
+          return { error: errorMessage(error), url };
+        }
+      },
     }),
   };
 }

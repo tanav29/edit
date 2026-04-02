@@ -13,7 +13,14 @@ import {
   PanelRightOpen,
   X,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { nanoid } from "nanoid";
 import { useQueryState } from "nuqs";
@@ -426,8 +433,19 @@ function WorkspaceChat({
     });
   }
 
-  function handleNewChat() {
-    setNewChatWorkspacePath(workspacePath);
+  const currentSessionTitle = useMemo(() => {
+    if (!session) return "New chat";
+
+    const activeChat = chatSessions.find((chat) => chat.id === session);
+    const savedTitle = activeChat?.title?.trim();
+
+    if (savedTitle) return savedTitle;
+
+    return getTitleFromMessages(messages);
+  }, [chatSessions, messages, session]);
+
+  function handleNewChat(nextWorkspacePath?: string) {
+    setNewChatWorkspacePath(nextWorkspacePath ?? workspacePath);
     setNewChatWorkspaceError(null);
     setIsNewChatModalOpen(true);
   }
@@ -493,7 +511,7 @@ function WorkspaceChat({
             <div className="flex items-center justify-between gap-3 border-b border-border/70 bg-background/80 px-3 py-2 backdrop-blur-sm">
               <div className="min-w-0 space-y-0.5">
                 <div className="truncate text-sm font-medium">
-                  {workspacePath}
+                  {currentSessionTitle}
                 </div>
               </div>
 
@@ -545,7 +563,7 @@ function WorkspaceChat({
                       </div>
                     </div>
                   ) : (
-                    <div className="mx-auto w-full max-w-5xl space-y-1 select-text">
+                    <div className="mx-auto w-full max-w-4xl space-y-1 select-text">
                       {messages.map((message, index) => (
                         <div key={message.id || index}>
                           {message.role === "user" ? (
@@ -581,7 +599,7 @@ function WorkspaceChat({
                   )}
                 </div>
 
-                <div className="border-t border-border/70 bg-background/85 p-2 backdrop-blur-sm">
+                <div className="bg-background/85 p-2 pt-0">
                   <ChatInput
                     textareaRef={textareaRef}
                     input={input}

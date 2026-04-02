@@ -22,9 +22,10 @@ import {
   Loader2,
   File,
   CircleX,
+  ScrollText,
+  Asterisk,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useHotkey } from "@tanstack/react-hotkeys";
 
 import { Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
@@ -53,9 +54,12 @@ type FilePathInput = {
   filePath: string;
 };
 
-type CommandInput = {
-  command: string;
-};
+function getInputString(input: unknown, key: string): string | undefined {
+  if (typeof input !== "object" || input === null) return undefined;
+
+  const value = (input as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : undefined;
+}
 
 function hasFilePathInput(input: unknown): input is FilePathInput {
   return (
@@ -63,15 +67,6 @@ function hasFilePathInput(input: unknown): input is FilePathInput {
     input !== null &&
     "filePath" in input &&
     typeof (input as FilePathInput).filePath === "string"
-  );
-}
-
-function hasCommandInput(input: unknown): input is CommandInput {
-  return (
-    typeof input === "object" &&
-    input !== null &&
-    "command" in input &&
-    typeof (input as CommandInput).command === "string"
   );
 }
 
@@ -93,7 +88,7 @@ export default function MessageUI({
       switch (part.type) {
         case "text":
           return (
-            <div key={key} className="text-sm">
+            <div key={key} className="text-md">
               <Streamdown
                 className="chat-markdown my-2"
                 mode="static"
@@ -157,6 +152,11 @@ function ToolPart({
   onFileClickAction?: (path: string) => void;
 }) {
   const toolName = part.type.replace("tool-", "");
+  const filePath = getInputString(part.input, "filePath");
+  const pattern = getInputString(part.input, "pattern");
+  const command = getInputString(part.input, "command");
+  const query = getInputString(part.input, "query");
+  const url = getInputString(part.input, "url");
 
   const toolOutput = useMemo(
     () => <ToolOutput toolName={toolName} output={part.output} />,
@@ -234,7 +234,7 @@ function ToolPart({
             onFileClickAction(part.input.filePath);
           }
         }}
-        className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90 select-none cursor-pointer">
+        className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90 select-none cursor-pointer outline-none">
         {part.state == "output-available" ||
         part.state == "output-denied" ||
         part.state == "approval-responded" ||
@@ -244,10 +244,38 @@ function ToolPart({
             {part.state === "output-denied" && <CircleX className="size-3" />}
             {part.state === "output-available" && (
               <>
-                {toolName == "read" && <BookSearch className="size-3" />}
-                {toolName == "bash" && <TerIcon className="size-3" />}
-                {toolName == "write" && <PenLine className="size-3" />}
-                {toolName == "web-search" && <Globe className="size-3" />}
+                {toolName == "read" && (
+                  <span className="text-muted-foreground/90 flex items-center gap-1">
+                    <BookSearch className="size-3" /> Read &quot;
+                    {filePath}
+                    &quot;
+                  </span>
+                )}
+                {toolName == "glob" && (
+                  <span className="text-muted-foreground/90 flex items-center gap-1">
+                    <Asterisk className="size-3" /> Glob &quot;{pattern}&quot;
+                  </span>
+                )}
+                {toolName == "bash" && (
+                  <span className="text-muted-foreground/90 flex items-center gap-1">
+                    <TerIcon className="size-3" /> Bash &quot;{command}&quot;
+                  </span>
+                )}
+                {toolName == "write" && (
+                  <span className="text-muted-foreground/90 flex items-center gap-1">
+                    <PenLine className="size-3" /> Write &quot;{filePath}&quot;
+                  </span>
+                )}
+                {toolName == "webSearch" && (
+                  <span className="text-muted-foreground/90 flex items-center gap-1">
+                    <Globe className="size-3" /> Web &quot;{query}&quot;
+                  </span>
+                )}
+                {toolName == "scrapePage" && (
+                  <span className="text-muted-foreground/90 flex gap-1 items-center">
+                    <ScrollText className="size-3" /> Scrape &quot;{url}&quot;
+                  </span>
+                )}
               </>
             )}
             {part.state === "approval-responded" && !part.approval.approved && (
@@ -257,21 +285,6 @@ function ToolPart({
         ) : (
           <Loader2 className="size-3 animate-spin" />
         )}
-        {part.title && <span>{part.title}</span>}
-        {(() => {
-          const input = part.input;
-          if (hasFilePathInput(input)) {
-            return (
-              <span className="text-muted-foreground/90">{input.filePath}</span>
-            );
-          }
-          if (hasCommandInput(input)) {
-            return (
-              <span className="text-muted-foreground/90">{input.command}</span>
-            );
-          }
-          return null;
-        })()}
         {(() => {
           if (
             part.state === "output-available" &&
@@ -305,9 +318,7 @@ function ToolPart({
           return null;
         })()}
       </summary>
-      <div className="text-xs overflow-y-auto overflow-x-hidden wrap-break-word animate-fade-in mt-2">
-        {toolOutput}
-      </div>
+      <div className="mt-2">{toolOutput}</div>
     </details>
   );
 }
@@ -412,7 +423,7 @@ const ToolOutput = React.memo(function ToolOutput({
   }
 
   return (
-    <pre className="tool-card rounded-lg p-3.5 max-h-48">
+    <pre className="tool-card rounded-lg p-3.5 max-h-48 text-xs overflow-y-auto wrap-break-word">
       {JSON.stringify(output, null, 2)}
     </pre>
   );
