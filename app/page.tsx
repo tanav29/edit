@@ -9,6 +9,7 @@ import {
 import {
   Code,
   FileDiff as FileDiffIcon,
+  FolderOpen,
   Loader2,
   PanelRightClose,
   PanelRightOpen,
@@ -54,6 +55,37 @@ import {
 } from "@/components/ui/tooltip";
 
 const WORKSPACE_STORAGE_KEY = "edit.workspace-path";
+const WORKSPACE_RECENTS_STORAGE_KEY = "edit.workspace-recents";
+const MAX_RECENT_WORKSPACES = 6;
+
+function getRecentWorkspaces(): string[] {
+  try {
+    const raw = window.localStorage.getItem(WORKSPACE_RECENTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((value): value is string => typeof value === "string");
+  } catch {
+    return [];
+  }
+}
+
+function pushRecentWorkspace(nextPath: string): string[] {
+  const normalizedPath = nextPath.trim();
+  if (!normalizedPath) return getRecentWorkspaces();
+
+  const deduped = [
+    normalizedPath,
+    ...getRecentWorkspaces().filter((path) => path !== normalizedPath),
+  ].slice(0, MAX_RECENT_WORKSPACES);
+
+  window.localStorage.setItem(
+    WORKSPACE_RECENTS_STORAGE_KEY,
+    JSON.stringify(deduped),
+  );
+
+  return deduped;
+}
 
 const MemoMessageUI = memo(MessageUI);
 
@@ -120,6 +152,7 @@ function buildSessionDiffs(messages: UIMessage[]): SessionFileDiff[] {
 export default function ChatPage() {
   const [workspacePath, setWorkspacePath] = useState("");
   const [draftWorkspacePath, setDraftWorkspacePath] = useState("");
+  const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>([]);
   const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
   const [isWorkspaceReady, setIsWorkspaceReady] = useState(false);
   const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(true);
@@ -130,6 +163,7 @@ export default function ChatPage() {
     const savedPath = window.localStorage.getItem(WORKSPACE_STORAGE_KEY) ?? "";
     setWorkspacePath(savedPath);
     setDraftWorkspacePath(savedPath);
+    setRecentWorkspaces(getRecentWorkspaces());
     setIsWorkspaceReady(Boolean(savedPath));
     setIsWorkspaceLoading(false);
   }, []);
@@ -158,6 +192,7 @@ export default function ChatPage() {
       }
 
       window.localStorage.setItem(WORKSPACE_STORAGE_KEY, nextPath);
+      setRecentWorkspaces(pushRecentWorkspace(nextPath));
       setWorkspacePath(nextPath);
       setIsWorkspaceReady(true);
     } catch (error) {
@@ -182,6 +217,7 @@ export default function ChatPage() {
   const handleOpenWorkspaceChat = useCallback(
     (nextWorkspacePath: string, sessionId: string) => {
       window.localStorage.setItem(WORKSPACE_STORAGE_KEY, nextWorkspacePath);
+      setRecentWorkspaces(pushRecentWorkspace(nextWorkspacePath));
       setWorkspacePath(nextWorkspacePath);
       setDraftWorkspacePath(nextWorkspacePath);
       setWorkspaceError(null);
@@ -237,6 +273,28 @@ export default function ChatPage() {
                     Example: `/home/thetanav/c/p/edit`
                   </p>
                 )}
+
+                {recentWorkspaces.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-muted-foreground">Recent workspaces</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {recentWorkspaces.map((path) => (
+                        <Button
+                          key={path}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="max-w-full"
+                          onClick={() => {
+                            setDraftWorkspacePath(path);
+                            setWorkspaceError(null);
+                          }}>
+                          <span className="truncate">{path}</span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </CardContent>
 
@@ -258,26 +316,29 @@ export default function ChatPage() {
     <WorkspaceChat
       key={workspacePath}
       workspacePath={workspacePath}
+      recentWorkspaces={recentWorkspaces}
       initialSessionId={pendingSessionId}
       onOpenWorkspaceChat={handleOpenWorkspaceChat}
       onInitialSessionApplied={handleInitialSessionApplied}
-      onChangeWorkspace={handleWorkspaceReset}
+      onChangeWorkspaceAction={handleWorkspaceReset}
     />
   );
 }
 
 function WorkspaceChat({
   workspacePath,
+  recentWorkspaces,
   initialSessionId,
   onOpenWorkspaceChat,
   onInitialSessionApplied,
-  onChangeWorkspace,
+  onChangeWorkspaceAction,
 }: {
   workspacePath: string;
+  recentWorkspaces: string[];
   initialSessionId: string | null;
   onOpenWorkspaceChat: (workspacePath: string, sessionId: string) => void;
   onInitialSessionApplied: () => void;
-  onChangeWorkspace: () => void;
+  onChangeWorkspaceAction: () => void;
 }) {
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
   const [session, setSession] = useQueryState("s");
@@ -286,7 +347,6 @@ function WorkspaceChat({
   );
   const [isHydratingSession, setIsHydratingSession] = useState(false);
   const [chatSessions, setChatSessions] = useState<ChatSessionSummary[]>([]);
-  const [isChatListLoading, setIsChatListLoading] = useState(true);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [newChatWorkspacePath, setNewChatWorkspacePath] = useState("");
   const [newChatWorkspaceError, setNewChatWorkspaceError] = useState<
@@ -635,6 +695,19 @@ function WorkspaceChat({
                     <Button
                       type="button"
                       variant="outline"
+                      size="icon-sm"
+                      aria-label="Change workspace"
+                      onClick={onChangeWorkspaceAction}>
+                      <FolderOpen className="size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Change workspace</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
                       size="sm"
                       className="h-8 gap-1.5 px-2"
                       onClick={() => setIsSessionDiffDrawerOpen((prev) => !prev)}
@@ -782,6 +855,27 @@ function WorkspaceChat({
                       Choose where the new chat should run.
                     </p>
                   )}
+                  {recentWorkspaces.length > 0 ? (
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-muted-foreground">Recent workspaces</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {recentWorkspaces.map((path) => (
+                          <Button
+                            key={path}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="max-w-full"
+                            onClick={() => {
+                              setNewChatWorkspacePath(path);
+                              setNewChatWorkspaceError(null);
+                            }}>
+                            <span className="truncate">{path}</span>
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </CardContent>
 

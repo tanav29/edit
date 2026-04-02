@@ -85,6 +85,12 @@ export default function ChatSidebar({
 
   async function handleDeleteChat(chat: ChatSessionSummary) {
     if (!chat.id) return;
+
+    const confirmed = window.confirm(
+      `Delete this session?\n\n${formatLabel(chat.title)}`,
+    );
+    if (!confirmed) return;
+
     const res = await api.del({ id: chat.id }).get();
     if (res.data?.ok) {
       if (activeSessionId === chat.id) {

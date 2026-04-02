@@ -1,6 +1,7 @@
 "use client";
 
 import { GitCommit } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -19,8 +20,17 @@ export default function CommitButton({
   workspacePath,
   isBusy,
 }: CommitButtonProps) {
+  const [isCommitting, setIsCommitting] = useState(false);
+
   async function handleCommit() {
-    if (!workspacePath || isBusy) return;
+    if (!workspacePath || isBusy || isCommitting) return;
+
+    const confirmed = window.confirm(
+      "Commit all current changes in this workspace? This will stage and commit everything.",
+    );
+    if (!confirmed) return;
+
+    setIsCommitting(true);
 
     const loadingToast = toast.loading("Committing all changes...");
 
@@ -54,6 +64,8 @@ export default function CommitButton({
           id: loadingToast,
         },
       );
+    } finally {
+      setIsCommitting(false);
     }
   }
 
@@ -64,12 +76,12 @@ export default function CommitButton({
           variant="outline"
           size="icon-sm"
           onClick={handleCommit}
-          disabled={isBusy}>
+          disabled={isBusy || isCommitting}>
           <GitCommit />
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        <p>{isBusy ? "Busy" : "Commit all changes"}</p>
+        <p>{isBusy ? "Busy" : isCommitting ? "Committing" : "Commit all changes"}</p>
       </TooltipContent>
     </Tooltip>
   );

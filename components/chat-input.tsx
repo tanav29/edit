@@ -1,4 +1,4 @@
-import { ArrowUp, Box, Square } from "lucide-react";
+import { ArrowUp, Square } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { Button } from "./ui/button";
@@ -49,14 +49,16 @@ export default function ChatInput({
               void handleSend();
             }
           }}
-          placeholder="Send a message..."
+          placeholder={
+            isActive
+              ? "Assistant is responding. Press Stop to interrupt"
+              : "Ask for edits, commands, or debugging help"
+          }
+          title="Press Enter to send. Shift+Enter for a new line."
           rows={3}
           className="ml-1 max-h-50 flex-1 resize-none bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
         />
         <div className="flex h-full items-end gap-1">
-          <Button variant={"outline"} size={"icon-sm"}>
-            <Box />
-          </Button>
           <Button
             size="icon-sm"
             onClick={() => {
@@ -67,6 +69,8 @@ export default function ChatInput({
 
               void handleSend();
             }}
+            title={isActive ? "Stop generation" : "Send message"}
+            aria-label={isActive ? "Stop generation" : "Send message"}
             disabled={isActive ? !stop : !input.trim()}
             className="rounded-lg shrink-0">
             {isActive ? (
