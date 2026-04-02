@@ -172,7 +172,10 @@ function matchesPattern(filePath: string, pattern: string): boolean {
   return filePath.includes(pattern);
 }
 
-function getPatchStats(patch: string): { additions: number; deletions: number } {
+function getPatchStats(patch: string): {
+  additions: number;
+  deletions: number;
+} {
   let additions = 0;
   let deletions = 0;
 
@@ -317,7 +320,6 @@ export function createTools(workspacePath: string) {
           return { error: errorMessage(error) };
         }
       },
-      needsApproval: true,
     }),
 
     bash: tool({

@@ -1,25 +1,35 @@
 import { ArrowUp, Box, Square } from "lucide-react";
-import type { RefObject } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { Button } from "./ui/button";
 
 type ChatInputProps = {
-  textareaRef: RefObject<HTMLTextAreaElement | null>;
-  input: string;
-  setInput: (value: string) => void;
-  handleSend: () => void | Promise<void>;
+  onSend: (value: string) => void | Promise<void>;
   isActive: boolean;
   stop?: () => void;
 };
 
 export default function ChatInput({
-  textareaRef,
-  input,
-  setInput,
-  handleSend,
+  onSend,
   isActive,
   stop,
 }: ChatInputProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [input, setInput] = useState("");
+
+  useEffect(() => {
+    if (!textareaRef.current) return;
+    textareaRef.current.style.height = "auto";
+    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+  }, [input]);
+
+  async function handleSend() {
+    const value = input.trim();
+    if (!value || isActive) return;
+    setInput("");
+    await onSend(value);
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex items-end gap-2 rounded-xl border bg-card p-2 transition-colors focus-within:border-muted-foreground/50">
@@ -27,7 +37,7 @@ export default function ChatInput({
           ref={textareaRef}
           value={input}
           onChange={(event) => setInput(event.target.value)}
-          onKeyDown={(event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+          onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
 

@@ -12,9 +12,9 @@ import {
   Loader2,
   PanelRightClose,
   PanelRightOpen,
-  X,
 } from "lucide-react";
 import {
+  memo,
   FormEvent,
   useCallback,
   useEffect,
@@ -54,6 +54,8 @@ import {
 } from "@/components/ui/tooltip";
 
 const WORKSPACE_STORAGE_KEY = "edit.workspace-path";
+
+const MemoMessageUI = memo(MessageUI);
 
 function buildSessionDiffs(messages: UIMessage[]): SessionFileDiff[] {
   const byPath = new Map<string, SessionFileDiff>();
@@ -277,7 +279,6 @@ function WorkspaceChat({
   onInitialSessionApplied: () => void;
   onChangeWorkspace: () => void;
 }) {
-  const [input, setInput] = useState("");
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
   const [session, setSession] = useQueryState("s");
   const [hydratedMessages, setHydratedMessages] = useState<UIMessage[] | null>(
@@ -299,7 +300,6 @@ function WorkspaceChat({
   >();
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const persistMessages = useCallback(
     async (nextMessages: UIMessage[]) => {
@@ -470,15 +470,6 @@ function WorkspaceChat({
   }, [messages, isActive]);
 
   useEffect(() => {
-    if (!textareaRef.current) return;
-    textareaRef.current.style.height = "auto";
-    textareaRef.current.style.height = `${Math.min(
-      textareaRef.current.scrollHeight,
-      200,
-    )}px`;
-  }, [input]);
-
-  useEffect(() => {
     if (!selectedFile) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -491,11 +482,9 @@ function WorkspaceChat({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selectedFile]);
 
-  async function handleSend() {
-    const value = input.trim();
+  async function handleSend(value: string) {
     if (!value || isActive || !workspacePath || isSessionLoading) return;
 
-    setInput("");
     await sendMessage({
       text: value,
     });
@@ -513,6 +502,42 @@ function WorkspaceChat({
   }, [chatSessions, messages, session]);
 
   const sessionDiffs = useMemo(() => buildSessionDiffs(messages), [messages]);
+
+  const renderedMessages = useMemo(
+    () =>
+      messages.map((message, index) => (
+        <div key={message.id || index}>
+          {message.role === "user" ? (
+            <div className="flex justify-end py-2">
+              <div className="max-w-[85%] rounded-2xl rounded-br-md border border-primary/25 bg-primary/12 px-4 py-2.5 shadow-sm">
+                {message.parts.map((part, partIndex) => {
+                  if (part.type !== "text") return null;
+
+                  return (
+                    <p
+                      key={partIndex}
+                      className="whitespace-pre-wrap text-sm leading-relaxed">
+                      {part.text}
+                    </p>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <MemoMessageUI
+              parts={message.parts}
+              addToolApprovalResponseAction={addToolApprovalResponse}
+              onFileClickAction={setSelectedFile}
+              onWriteDiffOpenAction={(filePath) => {
+                setSelectedSessionDiffPath(filePath);
+                setIsSessionDiffDrawerOpen(true);
+              }}
+            />
+          )}
+        </div>
+      )),
+    [addToolApprovalResponse, messages],
+  );
 
   useEffect(() => {
     if (sessionDiffs.length === 0) {
@@ -596,7 +621,7 @@ function WorkspaceChat({
       <main className="relative z-10 flex min-w-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1">
           <section className="relative flex min-w-0 flex-1 flex-col select-none">
-            <div className="flex items-center justify-between gap-3 border-b border-border/70 bg-background/80 px-3 py-2 backdrop-blur-sm">
+            <div className="flex items-center justify-between gap-3 border-b border-border/70 bg-background/95 px-3 py-2">
               <div className="min-w-0 space-y-0.5">
                 <div className="truncate text-sm font-medium">
                   {currentSessionTitle}
@@ -652,39 +677,7 @@ function WorkspaceChat({
                     </div>
                   ) : (
                     <div className="mx-auto w-full max-w-4xl space-y-1 select-text">
-                      {messages.map((message, index) => (
-                        <div key={message.id || index}>
-                          {message.role === "user" ? (
-                            <div className="flex justify-end py-2">
-                              <div className="max-w-[85%] rounded-2xl rounded-br-md border border-primary/25 bg-primary/12 px-4 py-2.5 shadow-sm">
-                                {message.parts.map((part, partIndex) => {
-                                  if (part.type !== "text") return null;
-
-                                  return (
-                                    <p
-                                      key={partIndex}
-                                      className="whitespace-pre-wrap text-sm leading-relaxed">
-                                      {part.text}
-                                    </p>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ) : (
-                            <MessageUI
-                              parts={message.parts}
-                              addToolApprovalResponseAction={
-                                addToolApprovalResponse
-                              }
-                              onFileClickAction={setSelectedFile}
-                              onWriteDiffOpenAction={(filePath) => {
-                                setSelectedSessionDiffPath(filePath);
-                                setIsSessionDiffDrawerOpen(true);
-                              }}
-                            />
-                          )}
-                        </div>
-                      ))}
+                      {renderedMessages}
 
                       {isActive && <Loader />}
                     </div>
@@ -693,10 +686,7 @@ function WorkspaceChat({
 
                 <div className="bg-background/85 p-2 pt-0">
                   <ChatInput
-                    textareaRef={textareaRef}
-                    input={input}
-                    setInput={setInput}
-                    handleSend={handleSend}
+                    onSend={handleSend}
                     isActive={isActive || isSessionLoading}
                     stop={stop}
                   />
@@ -714,7 +704,7 @@ function WorkspaceChat({
       </main>
 
       {selectedFile ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4">
           <button
             type="button"
             aria-label="Close file viewer"
@@ -742,7 +732,7 @@ function WorkspaceChat({
       <Button
         type="button"
         variant="outline"
-        className="fixed bottom-5 right-5 z-30 h-10 rounded-full border-border/80 bg-background/90 pl-3 pr-2 shadow-lg backdrop-blur"
+        className="fixed bottom-5 right-5 z-30 h-10 rounded-full border-border/80 bg-background/95 pl-3 pr-2 shadow-md"
         onClick={() => setIsSessionDiffDrawerOpen((prev) => !prev)}
         disabled={sessionDiffs.length === 0}>
         <span className="mr-2 flex items-center gap-1 text-xs">
@@ -755,7 +745,7 @@ function WorkspaceChat({
       </Button>
 
       {isNewChatModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4">
           <button
             type="button"
             aria-label="Close new chat modal"

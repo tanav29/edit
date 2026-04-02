@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useState } from "react";
 import { ChevronRight, File, Folder, FolderOpen } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 
 interface FileTreeBarProps {
@@ -22,6 +23,27 @@ interface FileNode {
   path: string;
   type: "file" | "directory";
   children?: FileNode[];
+}
+
+function updateNodeChildren(
+  node: FileNode,
+  targetPath: string,
+  children: FileNode[],
+): FileNode {
+  if (node.path === targetPath) {
+    return { ...node, children };
+  }
+
+  if (node.children) {
+    return {
+      ...node,
+      children: node.children.map((child) =>
+        updateNodeChildren(child, targetPath, children),
+      ),
+    };
+  }
+
+  return node;
 }
 
 export default function FileTreeBar({
@@ -57,24 +79,35 @@ export default function FileTreeBar({
 }
 
 function FileTree({ rootPath, onFileSelect, selectedFile }: FileTreeProps) {
-  const [rootNode, setRootNode] = useState<FileNode | null | undefined>(
-    undefined,
-  );
+  const queryClient = useQueryClient();
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
 
-  async function fetchNode(path: string): Promise<FileNode> {
-    const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
-    return res.json();
-  }
+  const {
+    data: rootNode,
+    isLoading,
+  } = useQuery<FileNode>({
+    queryKey: ["file-tree", rootPath],
+    queryFn: async () => {
+      const res = await fetch(`/api/files?path=${encodeURIComponent(rootPath)}`);
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(payload?.error || "Failed to load files");
+      }
+      return (await res.json()) as FileNode;
+    },
+    enabled: Boolean(rootPath),
+  });
 
-  useEffect(() => {
-    void fetchNode(rootPath)
-      .then(setRootNode)
-      .catch((error) => {
-        console.error("Failed to load files:", error);
-        setRootNode(null);
-      });
-  }, [rootPath]);
+  let treeRoot: FileNode | null = rootNode ?? null;
+  if (treeRoot) {
+    for (const path of expandedDirs) {
+      const cached = queryClient.getQueryData<FileNode>(["file-tree", path]);
+      if (!cached?.children) continue;
+      treeRoot = updateNodeChildren(treeRoot, path, cached.children);
+    }
+  }
 
   async function loadChildDirectory(node: FileNode) {
     if (
@@ -86,35 +119,25 @@ function FileTree({ rootPath, onFileSelect, selectedFile }: FileTreeProps) {
     }
 
     try {
-      const data = await fetchNode(node.path);
-      setRootNode((prev) => {
-        if (!prev) return prev;
-        return updateNodeChildren(prev, node.path, data.children || []);
+      const data = await queryClient.fetchQuery<FileNode>({
+        queryKey: ["file-tree", node.path],
+        queryFn: async () => {
+          const res = await fetch(`/api/files?path=${encodeURIComponent(node.path)}`);
+          if (!res.ok) {
+            const payload = (await res.json().catch(() => null)) as
+              | { error?: string }
+              | null;
+            throw new Error(payload?.error || "Failed to load directory");
+          }
+          return (await res.json()) as FileNode;
+        },
       });
+      if (data.children) {
+        queryClient.setQueryData(["file-tree", node.path], data);
+      }
     } catch (error) {
       console.error("Failed to load directory:", error);
     }
-  }
-
-  function updateNodeChildren(
-    node: FileNode,
-    targetPath: string,
-    children: FileNode[],
-  ): FileNode {
-    if (node.path === targetPath) {
-      return { ...node, children };
-    }
-
-    if (node.children) {
-      return {
-        ...node,
-        children: node.children.map((child) =>
-          updateNodeChildren(child, targetPath, children),
-        ),
-      };
-    }
-
-    return node;
   }
 
   function toggleDirectory(node: FileNode) {
@@ -130,11 +153,11 @@ function FileTree({ rootPath, onFileSelect, selectedFile }: FileTreeProps) {
     });
   }
 
-  if (rootNode === undefined) {
+  if (isLoading) {
     return <div className="p-3 text-xs text-muted-foreground">Loading...</div>;
   }
 
-  if (!rootNode) {
+  if (!treeRoot) {
     return (
       <div className="p-3 text-xs text-muted-foreground">No files found</div>
     );
@@ -143,7 +166,7 @@ function FileTree({ rootPath, onFileSelect, selectedFile }: FileTreeProps) {
   return (
     <div className="text-xs font-mono">
       <FileTreeNode
-        node={rootNode}
+        node={treeRoot}
         depth={0}
         expandedDirs={expandedDirs}
         selectedFile={selectedFile}
@@ -154,7 +177,7 @@ function FileTree({ rootPath, onFileSelect, selectedFile }: FileTreeProps) {
   );
 }
 
-function FileTreeNode({
+const FileTreeNode = memo(function FileTreeNode({
   node,
   depth,
   expandedDirs,
@@ -224,4 +247,4 @@ function FileTreeNode({
       )}
     </div>
   );
-}
+});
