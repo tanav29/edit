@@ -77,23 +77,25 @@ function buildSessionDiffs(messages: UIMessage[]): SessionFileDiff[] {
         typeof out.filePath === "string" && out.filePath.trim().length > 0
           ? out.filePath
           : undefined;
-      const newContent =
-        typeof out.newContent === "string" ? out.newContent : undefined;
-      const previousContent =
-        typeof out.previousContent === "string" ? out.previousContent : "";
+      const patch = typeof out.patch === "string" ? out.patch : undefined;
+      const additions =
+        typeof out.patchAdditions === "number" ? out.patchAdditions : 0;
+      const deletions =
+        typeof out.patchDeletions === "number" ? out.patchDeletions : 0;
       const action = out.action === "created" ? "created" : "edited";
 
-      if (!filePath || newContent === undefined) continue;
+      if (!filePath || !patch) continue;
 
       const existing = byPath.get(filePath);
 
       if (!existing) {
         byPath.set(filePath, {
           filePath,
-          oldContent: previousContent,
-          newContent,
+          patch,
           edits: 1,
           action,
+          additions,
+          deletions,
           updatedAt: cursor,
         });
         continue;
@@ -101,8 +103,10 @@ function buildSessionDiffs(messages: UIMessage[]): SessionFileDiff[] {
 
       byPath.set(filePath, {
         ...existing,
-        newContent,
+        patch,
         edits: existing.edits + 1,
+        additions,
+        deletions,
         updatedAt: cursor,
       });
     }

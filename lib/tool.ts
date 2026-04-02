@@ -2,6 +2,7 @@ import { tool, zodSchema } from "ai";
 import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
+import { createTwoFilesPatch } from "diff";
 import z from "zod";
 
 export const DEFAULT_IGNORE_PATTERNS = [
@@ -171,6 +172,28 @@ function matchesPattern(filePath: string, pattern: string): boolean {
   return filePath.includes(pattern);
 }
 
+function getPatchStats(patch: string): { additions: number; deletions: number } {
+  let additions = 0;
+  let deletions = 0;
+
+  for (const line of patch.split("\n")) {
+    if (line.startsWith("+++") || line.startsWith("---")) {
+      continue;
+    }
+
+    if (line.startsWith("+")) {
+      additions += 1;
+      continue;
+    }
+
+    if (line.startsWith("-")) {
+      deletions += 1;
+    }
+  }
+
+  return { additions, deletions };
+}
+
 export function createTools(workspacePath: string) {
   return {
     glob: tool({
@@ -268,6 +291,15 @@ export function createTools(workspacePath: string) {
 
           fs.writeFileSync(fullPath, content, "utf-8");
           const newLineCount = content.split("\n").length;
+          const relativePath =
+            path.relative(workspacePath, fullPath) || path.basename(fullPath);
+          const patch = createTwoFilesPatch(
+            relativePath,
+            relativePath,
+            previousContent,
+            content,
+          );
+          const stats = getPatchStats(patch);
 
           return {
             filePath: fullPath,
@@ -276,8 +308,9 @@ export function createTools(workspacePath: string) {
             newLineCount,
             linesAdded: newLineCount - previousLineCount,
             linesRemoved: existed ? previousLineCount : 0,
-            previousContent,
-            newContent: content,
+            patch,
+            patchAdditions: stats.additions,
+            patchDeletions: stats.deletions,
             editCount: existed ? 1 : 0,
           };
         } catch (error) {

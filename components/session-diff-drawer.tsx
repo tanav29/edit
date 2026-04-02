@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { MultiFileDiff } from "@pierre/diffs/react";
+import { PatchDiff } from "@pierre/diffs/react";
 import { FileDiff, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -9,10 +9,11 @@ import { Button } from "@/components/ui/button";
 
 export type SessionFileDiff = {
   filePath: string;
-  oldContent: string;
-  newContent: string;
+  patch: string;
   edits: number;
   action: "created" | "edited";
+  additions: number;
+  deletions: number;
   updatedAt: number;
 };
 
@@ -99,7 +100,7 @@ export default function SessionDiffDrawer({
                     onClick={() => onSelectFile(item.filePath)}>
                     <span className="max-w-80 truncate">{item.filePath}</span>
                     <span className="text-[10px] opacity-70">
-                      {item.edits}x
+                      +{item.additions} -{item.deletions}
                     </span>
                   </button>
                 );
@@ -107,18 +108,7 @@ export default function SessionDiffDrawer({
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto p-2">
-              {selectedDiff ? (
-                <MultiFileDiff
-                  oldFile={{
-                    name: selectedDiff.filePath,
-                    contents: selectedDiff.oldContent,
-                  }}
-                  newFile={{
-                    name: selectedDiff.filePath,
-                    contents: selectedDiff.newContent,
-                  }}
-                />
-              ) : null}
+              {selectedDiff ? <PatchDiff patch={selectedDiff.patch} /> : null}
             </div>
           </>
         )}
