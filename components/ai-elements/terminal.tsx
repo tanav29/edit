@@ -65,11 +65,22 @@ export function TerminalActions({ children }: { children: React.ReactNode }) {
   return <div className="flex items-center gap-1">{children}</div>;
 }
 
-export function TerminalStatus() {
+export function TerminalStatus({
+  label = "Ready",
+  failed = false,
+}: {
+  label?: string;
+  failed?: boolean;
+}) {
   return (
     <div className="flex items-center gap-1.5">
-      <div className="size-2 rounded-full bg-emerald-500" />
-      <span className="text-[10px] text-muted-foreground">Ready</span>
+      <div
+        className={cn(
+          "size-2 rounded-full",
+          failed ? "bg-red-500" : "bg-emerald-500",
+        )}
+      />
+      <span className="text-[10px] text-muted-foreground">{label}</span>
     </div>
   );
 }

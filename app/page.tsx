@@ -47,11 +47,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { getTitleFromMessages } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 const WORKSPACE_STORAGE_KEY = "edit.workspace-path";
 const WORKSPACE_RECENTS_STORAGE_KEY = "edit.workspace-recents";
@@ -347,6 +342,7 @@ function WorkspaceChat({
   >();
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const requestedInitialSessionRef = useRef<string | null>(null);
 
   const persistMessages = useCallback(
     async (nextMessages: UIMessage[]) => {
@@ -418,6 +414,12 @@ function WorkspaceChat({
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
   });
 
+  const setMessagesRef = useRef(setMessages);
+
+  useEffect(() => {
+    setMessagesRef.current = setMessages;
+  }, [setMessages]);
+
   const isActive = status === "streaming" || status === "submitted";
   const isSessionLoading =
     isHydratingSession || (Boolean(session) && hydratedMessages === null);
@@ -427,16 +429,22 @@ function WorkspaceChat({
 
     if (session === initialSessionId) {
       onInitialSessionApplied();
+      requestedInitialSessionRef.current = null;
       return;
     }
 
+    if (requestedInitialSessionRef.current === initialSessionId) {
+      return;
+    }
+
+    requestedInitialSessionRef.current = initialSessionId;
     void setSession(initialSessionId);
   }, [initialSessionId, onInitialSessionApplied, session, setSession]);
 
   useEffect(() => {
     if (!session) {
       setHydratedMessages([]);
-      setMessages([]);
+      setMessagesRef.current([]);
       return;
     }
 
@@ -497,13 +505,13 @@ function WorkspaceChat({
     return () => {
       cancelled = true;
     };
-  }, [session, workspacePath, setMessages]);
+  }, [session, workspacePath]);
 
   useEffect(() => {
     if (hydratedMessages === null) return;
 
-    setMessages(hydratedMessages);
-  }, [hydratedMessages, setMessages]);
+    setMessagesRef.current(hydratedMessages);
+  }, [hydratedMessages]);
 
   useEffect(() => {
     if (isSessionLoading || status !== "ready") return;
@@ -679,40 +687,32 @@ function WorkspaceChat({
 
               <div className="flex items-center gap-1 rounded-md">
                 <CommitButton workspacePath={workspacePath} isBusy={isActive} />
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 gap-1.5 px-2"
-                      onClick={() => setIsSessionDiffDrawerOpen((prev) => !prev)}
-                      disabled={sessionDiffs.length === 0}>
-                      <FileDiffIcon className="size-3.5" />
-                      <span className="text-xs">Diffs</span>
-                      <span className="rounded-full border border-border/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                        {sessionDiffs.length}
-                      </span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Toggle session diffs</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="icon-sm"
-                      aria-label="Toggle file tree"
-                      onClick={() => setIsFileBarOpen((prev) => !prev)}>
-                      {isFileBarOpen ? (
-                        <PanelRightClose className="size-4" />
-                      ) : (
-                        <PanelRightOpen className="size-4" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Toggle file tree</TooltipContent>
-                </Tooltip>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  title="Toggle session diffs"
+                  className="h-8 gap-1.5 px-2"
+                  onClick={() => setIsSessionDiffDrawerOpen((prev) => !prev)}
+                  disabled={sessionDiffs.length === 0}>
+                  <FileDiffIcon className="size-3.5" />
+                  <span className="text-xs">Diffs</span>
+                  <span className="rounded-full border border-border/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    {sessionDiffs.length}
+                  </span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  title="Toggle file tree"
+                  aria-label="Toggle file tree"
+                  onClick={() => setIsFileBarOpen((prev) => !prev)}>
+                  {isFileBarOpen ? (
+                    <PanelRightClose className="size-4" />
+                  ) : (
+                    <PanelRightOpen className="size-4" />
+                  )}
+                </Button>
               </div>
             </div>
 

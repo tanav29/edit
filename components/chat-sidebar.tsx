@@ -5,12 +5,6 @@ import { ChevronRight, Folder, Plus, Shell, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useQueryState } from "nuqs";
 import { toast } from "sonner";
 import { api } from "@/lib/eden";
@@ -27,6 +21,10 @@ export type ChatSessionSummary = {
 function formatLabel(value: string | null) {
   const normalized = value?.trim();
   return normalized && normalized.length > 0 ? normalized : "New chat";
+}
+
+function comparePath(valueA: string, valueB: string) {
+  return valueA.localeCompare(valueB, undefined, { sensitivity: "base" });
 }
 
 export default function ChatSidebar({
@@ -73,7 +71,8 @@ export default function ChatSidebar({
       .sort((a, b) => {
         const aLatest = a.chats[0]?.updatedAt ?? 0;
         const bLatest = b.chats[0]?.updatedAt ?? 0;
-        return bLatest - aLatest;
+        if (bLatest !== aLatest) return bLatest - aLatest;
+        return comparePath(a.path, b.path);
       });
   }, [sessions]);
 
@@ -111,23 +110,17 @@ export default function ChatSidebar({
           <p className="text-sm font-medium">Sessions</p>
         </div>
 
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                size="icon-sm"
-                variant="outline"
-                onClick={() => {
-                  refetch();
-                  onNewChat();
-                }}>
-                <Plus className="size-4" />
-                <span className="sr-only">New chat</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">New chat</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <Button
+          size="icon-sm"
+          variant="outline"
+          title="New chat"
+          onClick={() => {
+            refetch();
+            onNewChat();
+          }}>
+          <Plus className="size-4" />
+          <span className="sr-only">New chat</span>
+        </Button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
@@ -150,7 +143,7 @@ export default function ChatSidebar({
                     <button
                       type="button"
                       className={cn(
-                        "flex flex-1 items-center gap-1.5 rounded-md px-1 py-1 text-[11px] text-muted-foreground",
+                        "flex flex-1 items-center gap-1.5 rounded-md px-0 py-1 text-[11px] text-muted-foreground",
                         group.path === workspacePath && "text-foreground",
                       )}
                       onClick={() =>

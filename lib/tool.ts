@@ -1,5 +1,5 @@
 import { tool, zodSchema } from "ai";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { createTwoFilesPatch } from "diff";
@@ -310,7 +310,7 @@ export function createTools(workspacePath: string) {
             previousLineCount,
             newLineCount,
             linesAdded: newLineCount - previousLineCount,
-            linesRemoved: existed ? previousLineCount : 0,
+            linesRemoved: stats.deletions,
             patch,
             patchAdditions: stats.additions,
             patchDeletions: stats.deletions,
@@ -333,23 +333,42 @@ export function createTools(workspacePath: string) {
       execute: async ({ command, timeout }) => {
         try {
           const cwd = workspacePath;
-          const output = execSync(command, {
+          const result = spawnSync(command, {
             cwd,
-            encoding: "utf-8",
+            encoding: "utf8",
+            shell: true,
             timeout: timeout || 60000,
             maxBuffer: 10 * 1024 * 1024,
           });
-          return { stdout: output, path: cwd };
-        } catch (error: unknown) {
-          const withOutput = error as {
-            stdout?: string;
-            stderr?: string;
-            message?: string;
-          };
+
+          const truncated =
+            result.error instanceof Error &&
+            "code" in result.error &&
+            (result.error as { code?: string }).code === "ENOBUFS";
+
+          const stdout = result.stdout ?? "";
+          const stderr = result.stderr ?? "";
+          const exitCode = typeof result.status === "number" ? result.status : -1;
+
           return {
-            stdout: withOutput.stdout || "",
-            stderr: withOutput.stderr || "",
-            error: withOutput.message || errorMessage(error),
+            stdout,
+            stderr,
+            exitCode,
+            signal: result.signal ?? null,
+            success: exitCode === 0,
+            truncated,
+            path: cwd,
+            error: result.error ? errorMessage(result.error) : undefined,
+          };
+        } catch (error: unknown) {
+          return {
+            stdout: "",
+            stderr: "",
+            exitCode: -1,
+            success: false,
+            signal: null,
+            truncated: false,
+            error: errorMessage(error),
             path: workspacePath,
           };
         }

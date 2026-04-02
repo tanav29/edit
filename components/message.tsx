@@ -280,12 +280,12 @@ function ToolPart({
                     <PenLine className="size-3" /> Write &quot;{filePath}&quot;
                   </span>
                 )}
-                {toolName == "webSearch" && (
+                {toolName == "web" && (
                   <span className="text-muted-foreground/90 flex items-center gap-1">
                     <Globe className="size-3" /> Web &quot;{query}&quot;
                   </span>
                 )}
-                {toolName == "scrapePage" && (
+                {toolName == "scrape" && (
                   <span className="text-muted-foreground/90 flex gap-1 items-center">
                     <ScrollText className="size-3" /> Scrape &quot;{url}&quot;
                   </span>
@@ -415,19 +415,44 @@ const ToolOutput = React.memo(function ToolOutput({
     );
   }
 
-  if (toolName === "bash" && data.stdout) {
+  if (toolName === "bash") {
+    const stdout = typeof data.stdout === "string" ? data.stdout : "";
+    const stderr = typeof data.stderr === "string" ? data.stderr : "";
+    const hasExitCode = typeof data.exitCode === "number";
+    const hasOutput = stdout.length > 0 || stderr.length > 0;
+    const statusText = hasExitCode
+      ? data.exitCode === 0
+        ? "Success"
+        : `Exit ${String(data.exitCode)}`
+      : "Ready";
+    const mergedOutput = [
+      stdout.trimEnd(),
+      stderr.trimEnd() ? `\n[stderr]\n${stderr.trimEnd()}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    if (!hasOutput && !hasExitCode) {
+      return null;
+    }
+
     return (
       <Terminal
         autoScroll={false}
         isStreaming={false}
         onClear={() => {}}
-        output={String(data.stdout)}>
+        output={mergedOutput || "(no output)"}>
         <TerminalHeader>
           <TerminalTitle>{String(data.path)}</TerminalTitle>
           <div className="flex items-center gap-1">
-            <TerminalStatus />
+            <TerminalStatus label={statusText} failed={hasExitCode && data.exitCode !== 0} />
             <TerminalActions>
-              <TerminalCopyButton onCopyAction={() => {}} />
+              <TerminalCopyButton
+                onCopyAction={() => {
+                  if (typeof navigator === "undefined") return;
+                  void navigator.clipboard.writeText(mergedOutput || "");
+                }}
+              />
             </TerminalActions>
           </div>
         </TerminalHeader>

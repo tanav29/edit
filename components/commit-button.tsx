@@ -5,11 +5,6 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 type CommitButtonProps = {
   workspacePath: string;
@@ -70,19 +65,13 @@ export default function CommitButton({
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="outline"
-          size="icon-sm"
-          onClick={handleCommit}
-          disabled={isBusy || isCommitting}>
-          <GitCommit />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>
-        <p>{isBusy ? "Busy" : isCommitting ? "Committing" : "Commit all changes"}</p>
-      </TooltipContent>
-    </Tooltip>
+    <Button
+      variant="outline"
+      size="icon-sm"
+      title={isBusy ? "Busy" : isCommitting ? "Committing" : "Commit all changes"}
+      onClick={handleCommit}
+      disabled={isBusy || isCommitting}>
+      <GitCommit />
+    </Button>
   );
 }
