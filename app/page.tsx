@@ -9,7 +9,6 @@ import {
 import {
   Code,
   FileDiff as FileDiffIcon,
-  FolderOpen,
   Loader2,
   PanelRightClose,
   PanelRightOpen,
@@ -205,15 +204,6 @@ export default function ChatPage() {
     }
   }
 
-  function handleWorkspaceReset() {
-    window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
-    setWorkspacePath("");
-    setDraftWorkspacePath("");
-    setPendingSessionId(null);
-    setWorkspaceError(null);
-    setIsWorkspaceReady(false);
-  }
-
   const handleOpenWorkspaceChat = useCallback(
     (nextWorkspacePath: string, sessionId: string) => {
       window.localStorage.setItem(WORKSPACE_STORAGE_KEY, nextWorkspacePath);
@@ -320,7 +310,6 @@ export default function ChatPage() {
       initialSessionId={pendingSessionId}
       onOpenWorkspaceChat={handleOpenWorkspaceChat}
       onInitialSessionApplied={handleInitialSessionApplied}
-      onChangeWorkspaceAction={handleWorkspaceReset}
     />
   );
 }
@@ -331,14 +320,12 @@ function WorkspaceChat({
   initialSessionId,
   onOpenWorkspaceChat,
   onInitialSessionApplied,
-  onChangeWorkspaceAction,
 }: {
   workspacePath: string;
   recentWorkspaces: string[];
   initialSessionId: string | null;
   onOpenWorkspaceChat: (workspacePath: string, sessionId: string) => void;
   onInitialSessionApplied: () => void;
-  onChangeWorkspaceAction: () => void;
 }) {
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
   const [session, setSession] = useQueryState("s");
@@ -433,13 +420,7 @@ function WorkspaceChat({
 
   const isActive = status === "streaming" || status === "submitted";
   const isSessionLoading =
-    !session || isHydratingSession || hydratedMessages === null;
-
-  useEffect(() => {
-    if (!session) {
-      void setSession(nanoid());
-    }
-  }, [session, setSession]);
+    isHydratingSession || (Boolean(session) && hydratedMessages === null);
 
   useEffect(() => {
     if (!initialSessionId) return;
@@ -453,6 +434,12 @@ function WorkspaceChat({
   }, [initialSessionId, onInitialSessionApplied, session, setSession]);
 
   useEffect(() => {
+    if (!session) {
+      setHydratedMessages([]);
+      setMessages([]);
+      return;
+    }
+
     if (!session || !workspacePath) return;
 
     const sessionId = session;
@@ -510,7 +497,7 @@ function WorkspaceChat({
     return () => {
       cancelled = true;
     };
-  }, [session, workspacePath]);
+  }, [session, workspacePath, setMessages]);
 
   useEffect(() => {
     if (hydratedMessages === null) return;
@@ -543,7 +530,9 @@ function WorkspaceChat({
   }, [selectedFile]);
 
   async function handleSend(value: string) {
-    if (!value || isActive || !workspacePath || isSessionLoading) return;
+    if (!value || isActive || !workspacePath || isSessionLoading || !session) {
+      return;
+    }
 
     await sendMessage({
       text: value,
@@ -551,7 +540,7 @@ function WorkspaceChat({
   }
 
   const currentSessionTitle = useMemo(() => {
-    if (!session) return "New chat";
+    if (!session) return "Select a session";
 
     const activeChat = chatSessions.find((chat) => chat.id === session);
     const savedTitle = activeChat?.title?.trim();
@@ -695,19 +684,6 @@ function WorkspaceChat({
                     <Button
                       type="button"
                       variant="outline"
-                      size="icon-sm"
-                      aria-label="Change workspace"
-                      onClick={onChangeWorkspaceAction}>
-                      <FolderOpen className="size-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Change workspace</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
                       size="sm"
                       className="h-8 gap-1.5 px-2"
                       onClick={() => setIsSessionDiffDrawerOpen((prev) => !prev)}
@@ -757,12 +733,22 @@ function WorkspaceChat({
                         </div>
                         <div className="space-y-1">
                           <h1 className="text-xl font-semibold">
-                            What do you want to build?
+                            {session
+                              ? "What do you want to build?"
+                              : "Open an existing session or start a new one"}
                           </h1>
                           <p className="text-sm text-muted-foreground">
-                            Start a chat for this workspace and I&apos;ll help
-                            you edit code.
+                            {session
+                              ? "Start a chat for this workspace and I&apos;ll help you edit code."
+                              : "Use the sidebar to revisit previous chats, or create a new chat when you are ready."}
                           </p>
+                          {!session ? (
+                            <div className="pt-2">
+                              <Button size="sm" onClick={() => handleNewChat(workspacePath)}>
+                                New chat
+                              </Button>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -779,6 +765,7 @@ function WorkspaceChat({
                   <ChatInput
                     onSend={handleSend}
                     isActive={isActive || isSessionLoading}
+                    isDisabled={!session}
                     stop={stop}
                   />
                 </div>

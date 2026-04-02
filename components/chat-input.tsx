@@ -6,12 +6,14 @@ import { Button } from "./ui/button";
 type ChatInputProps = {
   onSend: (value: string) => void | Promise<void>;
   isActive: boolean;
+  isDisabled?: boolean;
   stop?: () => void;
 };
 
 export default function ChatInput({
   onSend,
   isActive,
+  isDisabled = false,
   stop,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -25,7 +27,7 @@ export default function ChatInput({
 
   async function handleSend() {
     const value = input.trim();
-    if (!value || isActive) return;
+    if (!value || isActive || isDisabled) return;
     setInput("");
     await onSend(value);
   }
@@ -38,24 +40,31 @@ export default function ChatInput({
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
 
-              if (isActive) {
-                stop?.();
-                return;
+                if (isActive) {
+                  stop?.();
+                  return;
+                }
+
+                if (isDisabled) {
+                  return;
+                }
+
+                void handleSend();
               }
-
-              void handleSend();
+            }}
+            placeholder={
+              isDisabled
+                ? "Select a session or click New chat to start"
+                : isActive
+                  ? "Assistant is responding. Press Stop to interrupt"
+                  : "Ask for edits, commands, or debugging help"
             }
-          }}
-          placeholder={
-            isActive
-              ? "Assistant is responding. Press Stop to interrupt"
-              : "Ask for edits, commands, or debugging help"
-          }
           title="Press Enter to send. Shift+Enter for a new line."
           rows={3}
+          disabled={isDisabled}
           className="ml-1 max-h-50 flex-1 resize-none bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
         />
         <div className="flex h-full items-end gap-1">
@@ -71,7 +80,7 @@ export default function ChatInput({
             }}
             title={isActive ? "Stop generation" : "Send message"}
             aria-label={isActive ? "Stop generation" : "Send message"}
-            disabled={isActive ? !stop : !input.trim()}
+            disabled={isDisabled || (isActive ? !stop : !input.trim())}
             className="rounded-lg shrink-0">
             {isActive ? (
               <Square className="size-3 fill-current" />
