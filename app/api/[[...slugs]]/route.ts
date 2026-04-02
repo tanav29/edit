@@ -20,7 +20,16 @@ export const runtime = "nodejs";
 
 export const app = new Elysia({ prefix: "/api" })
   .get("/sessions", async () => {
-    const rows = await db.select().from(chats);
+    const rows = await db
+      .select({
+        id: chats.id,
+        workspacePath: chats.workspacePath,
+        title: chats.title,
+        createdAt: chats.createdAt,
+        updatedAt: chats.updatedAt,
+      })
+      .from(chats)
+      .orderBy(desc(chats.updatedAt));
     return rows;
   })
   .get("/store/:id", async ({ params }) => {

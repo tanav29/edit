@@ -633,6 +633,24 @@ function WorkspaceChat({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5 px-2"
+                      onClick={() => setIsSessionDiffDrawerOpen((prev) => !prev)}
+                      disabled={sessionDiffs.length === 0}>
+                      <FileDiffIcon className="size-3.5" />
+                      <span className="text-xs">Diffs</span>
+                      <span className="rounded-full border border-border/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                        {sessionDiffs.length}
+                      </span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Toggle session diffs</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
                       variant="outline"
                       size="icon-sm"
                       aria-label="Toggle file tree"
@@ -728,21 +746,6 @@ function WorkspaceChat({
         onClose={() => setIsSessionDiffDrawerOpen(false)}
         onSelectFile={setSelectedSessionDiffPath}
       />
-
-      <Button
-        type="button"
-        variant="outline"
-        className="fixed bottom-5 right-5 z-30 h-10 rounded-full border-border/80 bg-background/95 pl-3 pr-2 shadow-md"
-        onClick={() => setIsSessionDiffDrawerOpen((prev) => !prev)}
-        disabled={sessionDiffs.length === 0}>
-        <span className="mr-2 flex items-center gap-1 text-xs">
-          <FileDiffIcon className="size-3.5" />
-          Diffs
-        </span>
-        <span className="rounded-full border border-border/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-          {sessionDiffs.length}
-        </span>
-      </Button>
 
       {isNewChatModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4">

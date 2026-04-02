@@ -8,6 +8,13 @@
       "when": 1775047819497,
       "tag": "0000_acoustic_star_brand",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1775134372321,
+      "tag": "0001_happy_la_nuit",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Folder, Plus, Shell, Trash2 } from "lucide-react";
+import { ChevronRight, Folder, Plus, Shell, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,6 @@ import { useQueryState } from "nuqs";
 import { toast } from "sonner";
 import { api } from "@/lib/eden";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import Image from "next/image";
 
 export type ChatSessionSummary = {
   id: string;
@@ -48,6 +47,9 @@ export default function ChatSidebar({
     },
   });
   const [session, setSession] = useQueryState("s");
+  const [collapsedPaths, setCollapsedPaths] = useState<Record<string, boolean>>(
+    {},
+  );
 
   const activeSessionId = session ?? null;
 
@@ -133,26 +135,50 @@ export default function ChatSidebar({
           </div>
         ) : (
           <div className="space-y-3">
-            {groupedSessions.map((group) => (
-              <div key={group.path} className="space-y-1">
-                <div
-                  className={cn(
-                    "flex items-center gap-1.5 px-2 py-1 text-[11px] text-muted-foreground",
-                    group.path === workspacePath && "text-foreground",
-                  )}>
-                  <Folder className="size-3" />
-                  <span className="truncate flex-1" title={group.path}>
-                    {group.path}
-                  </span>
+            {groupedSessions.map((group) => {
+              const isCollapsed = Boolean(collapsedPaths[group.path]);
+
+              return (
+                <div key={group.path} className="space-y-1">
+                <div className="flex items-center gap-1 px-1">
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex flex-1 items-center gap-1.5 rounded-md px-1 py-1 text-[11px] text-muted-foreground hover:bg-accent/40",
+                      group.path === workspacePath && "text-foreground",
+                    )}
+                    onClick={() =>
+                      setCollapsedPaths((current) => ({
+                        ...current,
+                        [group.path]: !current[group.path],
+                      }))
+                    }
+                    aria-expanded={!isCollapsed}>
+                    <ChevronRight
+                      className={cn(
+                        "size-3 transition-transform",
+                        !isCollapsed && "rotate-90",
+                      )}
+                    />
+                    <Folder className="size-3" />
+                    <span className="truncate flex-1 text-left" title={group.path}>
+                      {group.path}
+                    </span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => onNewChat(group.path)}
+                    className="rounded p-1 hover:bg-accent/50"
                     aria-label={`New chat in ${group.path}`}>
                     <Plus className="size-3 opacity-70 active:opacity-100 cursor-pointer" />
                   </button>
                 </div>
 
-                <div className="space-y-1">
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isCollapsed && "hidden",
+                  )}>
                   {group.chats.map((chat) => {
                     const isActive = chat.id === activeSessionId;
 
@@ -184,7 +210,8 @@ export default function ChatSidebar({
                   })}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
