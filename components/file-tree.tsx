@@ -33,12 +33,11 @@ export default function FileTreeBar({
   return (
     <aside
       className={cn(
-        "shrink-0 min-h-0 flex-col border-l transition-all duration-200 ease-out",
+        "shrink-0 min-h-0 z-50 flex-col border-l transition-all duration-200 ease-out",
         isOpen
           ? "flex w-64 translate-x-0 opacity-100"
           : "pointer-events-none flex w-0 translate-x-3 opacity-0 overflow-hidden border-l-0",
-      )}
-    >
+      )}>
       <div className="flex-1 min-h-0 overflow-hidden">
         {rootPath ? (
           <FileTree
@@ -57,11 +56,7 @@ export default function FileTreeBar({
   );
 }
 
-function FileTree({
-  rootPath,
-  onFileSelect,
-  selectedFile,
-}: FileTreeProps) {
+function FileTree({ rootPath, onFileSelect, selectedFile }: FileTreeProps) {
   const [rootNode, setRootNode] = useState<FileNode | null | undefined>(
     undefined,
   );
@@ -82,7 +77,11 @@ function FileTree({
   }, [rootPath]);
 
   async function loadChildDirectory(node: FileNode) {
-    if (node.type !== "directory" || !node.children || node.children.length > 0) {
+    if (
+      node.type !== "directory" ||
+      !node.children ||
+      node.children.length > 0
+    ) {
       return;
     }
 
@@ -188,8 +187,7 @@ function FileTreeNode({
           } else {
             onSelect(node.path);
           }
-        }}
-      >
+        }}>
         {isDirectory ? (
           <>
             <ChevronRight

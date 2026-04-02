@@ -173,20 +173,13 @@
 
 /* ── Streamdown prose styling ─────────────────────────────── */
 .chat-markdown {
-  line-height: 1.65;
+  line-height: 1;
   word-break: break-word;
-}
-
-.chat-markdown p {
-  margin-bottom: 0.5em;
-}
-
-.chat-markdown p:last-child {
-  margin-bottom: 0;
 }
 
 .chat-markdown pre {
   overflow-x: auto;
+  font-style: var(--font-mono);
 }
 
 .chat-markdown code:not(pre code) {
@@ -194,7 +187,6 @@
   padding: 0.15em 0.4em;
   border-radius: 4px;
   font-size: 0.88em;
-  color: oklch(0.8 0.1 250);
 }
 
 .chat-markdown ul,

@@ -74,10 +74,12 @@ export default function MessageUI({
   parts,
   addToolApprovalResponseAction,
   onFileClickAction,
+  onWriteDiffOpenAction,
 }: {
   parts: MessagePart[];
   addToolApprovalResponseAction: (response: ToolApprovalResponse) => void;
   onFileClickAction?: (path: string) => void;
+  onWriteDiffOpenAction?: (path: string) => void;
 }) {
   useJsonRenderMessage(parts);
 
@@ -132,13 +134,19 @@ export default function MessageUI({
                 part={part as ToolUIPart}
                 addToolApprovalResponseAction={addToolApprovalResponseAction}
                 onFileClickAction={onFileClickAction}
+                onWriteDiffOpenAction={onWriteDiffOpenAction}
               />
             );
           }
           return null;
       }
     });
-  }, [parts, addToolApprovalResponseAction, onFileClickAction]);
+  }, [
+    parts,
+    addToolApprovalResponseAction,
+    onFileClickAction,
+    onWriteDiffOpenAction,
+  ]);
   return <>{renderedParts}</>;
 }
 
@@ -146,10 +154,12 @@ function ToolPart({
   part,
   addToolApprovalResponseAction,
   onFileClickAction,
+  onWriteDiffOpenAction,
 }: {
   part: ToolUIPart;
   addToolApprovalResponseAction: (response: ToolApprovalResponse) => void;
   onFileClickAction?: (path: string) => void;
+  onWriteDiffOpenAction?: (path: string) => void;
 }) {
   const toolName = part.type.replace("tool-", "");
   const filePath = getInputString(part.input, "filePath");
@@ -230,6 +240,10 @@ function ToolPart({
     <details>
       <summary
         onClick={() => {
+          if (toolName === "write" && hasFilePathInput(part.input)) {
+            onWriteDiffOpenAction?.(part.input.filePath);
+            return;
+          }
           if (hasFilePathInput(part.input) && onFileClickAction) {
             onFileClickAction(part.input.filePath);
           }

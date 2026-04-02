@@ -259,8 +259,11 @@ export function createTools(workspacePath: string) {
           }
 
           const existed = fs.existsSync(fullPath);
+          const previousContent = existed
+            ? fs.readFileSync(fullPath, "utf-8")
+            : "";
           const previousLineCount = existed
-            ? fs.readFileSync(fullPath, "utf-8").split("\n").length
+            ? previousContent.split("\n").length
             : 0;
 
           fs.writeFileSync(fullPath, content, "utf-8");
@@ -273,6 +276,9 @@ export function createTools(workspacePath: string) {
             newLineCount,
             linesAdded: newLineCount - previousLineCount,
             linesRemoved: existed ? previousLineCount : 0,
+            previousContent,
+            newContent: content,
+            editCount: existed ? 1 : 0,
           };
         } catch (error) {
           return { error: errorMessage(error) };

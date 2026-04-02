@@ -8,6 +8,7 @@ import {
 } from "ai";
 import {
   Code,
+  FileDiff as FileDiffIcon,
   Loader2,
   PanelRightClose,
   PanelRightOpen,
@@ -33,6 +34,9 @@ import FileTreeBar from "@/components/file-tree";
 import { FileViewer } from "@/components/file-viewer";
 import Loader from "@/components/loader";
 import MessageUI from "@/components/message";
+import SessionDiffDrawer, {
+  type SessionFileDiff,
+} from "@/components/session-diff-drawer";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -50,6 +54,62 @@ import {
 } from "@/components/ui/tooltip";
 
 const WORKSPACE_STORAGE_KEY = "edit.workspace-path";
+
+function buildSessionDiffs(messages: UIMessage[]): SessionFileDiff[] {
+  const byPath = new Map<string, SessionFileDiff>();
+  let cursor = 0;
+
+  for (const message of messages) {
+    if (!Array.isArray(message.parts)) continue;
+
+    for (const part of message.parts as Array<Record<string, unknown>>) {
+      cursor += 1;
+
+      if (part.type !== "tool-write" || part.state !== "output-available") {
+        continue;
+      }
+
+      const output = part.output;
+      if (!output || typeof output !== "object") continue;
+
+      const out = output as Record<string, unknown>;
+      const filePath =
+        typeof out.filePath === "string" && out.filePath.trim().length > 0
+          ? out.filePath
+          : undefined;
+      const newContent =
+        typeof out.newContent === "string" ? out.newContent : undefined;
+      const previousContent =
+        typeof out.previousContent === "string" ? out.previousContent : "";
+      const action = out.action === "created" ? "created" : "edited";
+
+      if (!filePath || newContent === undefined) continue;
+
+      const existing = byPath.get(filePath);
+
+      if (!existing) {
+        byPath.set(filePath, {
+          filePath,
+          oldContent: previousContent,
+          newContent,
+          edits: 1,
+          action,
+          updatedAt: cursor,
+        });
+        continue;
+      }
+
+      byPath.set(filePath, {
+        ...existing,
+        newContent,
+        edits: existing.edits + 1,
+        updatedAt: cursor,
+      });
+    }
+  }
+
+  return [...byPath.values()];
+}
 
 export default function ChatPage() {
   const [workspacePath, setWorkspacePath] = useState("");
@@ -229,6 +289,10 @@ function WorkspaceChat({
   >(null);
   const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
   const [isFileBarOpen, setIsFileBarOpen] = useState(true);
+  const [isSessionDiffDrawerOpen, setIsSessionDiffDrawerOpen] = useState(false);
+  const [selectedSessionDiffPath, setSelectedSessionDiffPath] = useState<
+    string | undefined
+  >();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -444,6 +508,24 @@ function WorkspaceChat({
     return getTitleFromMessages(messages);
   }, [chatSessions, messages, session]);
 
+  const sessionDiffs = useMemo(() => buildSessionDiffs(messages), [messages]);
+
+  useEffect(() => {
+    if (sessionDiffs.length === 0) {
+      setSelectedSessionDiffPath(undefined);
+      return;
+    }
+
+    if (
+      selectedSessionDiffPath &&
+      sessionDiffs.some((diff) => diff.filePath === selectedSessionDiffPath)
+    ) {
+      return;
+    }
+
+    setSelectedSessionDiffPath(sessionDiffs[0]?.filePath);
+  }, [selectedSessionDiffPath, sessionDiffs]);
+
   function handleNewChat(nextWorkspacePath?: string) {
     setNewChatWorkspacePath(nextWorkspacePath ?? workspacePath);
     setNewChatWorkspaceError(null);
@@ -485,6 +567,8 @@ function WorkspaceChat({
       setSelectedFile(undefined);
       setHydratedMessages([]);
       setMessages([]);
+      setIsSessionDiffDrawerOpen(false);
+      setSelectedSessionDiffPath(undefined);
 
       const nextSessionId = nanoid();
       onOpenWorkspaceChat(nextWorkspacePath, nextSessionId);
@@ -589,6 +673,10 @@ function WorkspaceChat({
                                 addToolApprovalResponse
                               }
                               onFileClickAction={setSelectedFile}
+                              onWriteDiffOpenAction={(filePath) => {
+                                setSelectedSessionDiffPath(filePath);
+                                setIsSessionDiffDrawerOpen(true);
+                              }}
                             />
                           )}
                         </div>
@@ -638,6 +726,29 @@ function WorkspaceChat({
           </div>
         </div>
       ) : null}
+
+      <SessionDiffDrawer
+        isOpen={isSessionDiffDrawerOpen}
+        diffs={sessionDiffs}
+        selectedFilePath={selectedSessionDiffPath}
+        onClose={() => setIsSessionDiffDrawerOpen(false)}
+        onSelectFile={setSelectedSessionDiffPath}
+      />
+
+      <Button
+        type="button"
+        variant="outline"
+        className="fixed bottom-5 right-5 z-30 h-10 rounded-full border-border/80 bg-background/90 pl-3 pr-2 shadow-lg backdrop-blur"
+        onClick={() => setIsSessionDiffDrawerOpen((prev) => !prev)}
+        disabled={sessionDiffs.length === 0}>
+        <span className="mr-2 flex items-center gap-1 text-xs">
+          <FileDiffIcon className="size-3.5" />
+          Diffs
+        </span>
+        <span className="rounded-full border border-border/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+          {sessionDiffs.length}
+        </span>
+      </Button>
 
       {isNewChatModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm">
