@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-import { Streamdown } from "streamdown";
+import { Streamdown, type CodeHighlighterPlugin } from "streamdown";
 import { code } from "@streamdown/code";
 import { mermaid } from "@streamdown/mermaid";
 import { math } from "@streamdown/math";
@@ -94,7 +94,7 @@ export default function MessageUI({
               <Streamdown
                 className="chat-markdown my-2"
                 mode="static"
-                plugins={{ code, mermaid, math, cjk }}
+                plugins={{ code: code as unknown as CodeHighlighterPlugin, mermaid, math, cjk }}
                 shikiTheme={["github-light", "github-dark"]}
                 mermaid={{ config: { theme: "dark" } }}
                 isAnimating={part.state === "streaming"}>

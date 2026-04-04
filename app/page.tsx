@@ -24,6 +24,7 @@ import {
 } from "react";
 
 import { nanoid } from "nanoid";
+import { useQueryClient } from "@tanstack/react-query";
 import { useQueryState } from "nuqs";
 import ChatSidebar, {
   type ChatSessionSummary,
@@ -344,12 +345,13 @@ function WorkspaceChat({
     string | undefined
   >();
 
+  const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
   const requestedInitialSessionRef = useRef<string | null>(null);
 
   const persistMessages = useCallback(
     async (nextMessages: UIMessage[]) => {
-      if (!session || !workspacePath) return;
+      if (!session || !workspacePath || nextMessages.length === 0) return;
 
       await fetch("/api/store", {
         method: "POST",
@@ -362,6 +364,8 @@ function WorkspaceChat({
           messages: nextMessages,
         }),
       });
+
+      void queryClient.invalidateQueries({ queryKey: ["sessions"] });
 
       const nextTitle = getTitleFromMessages(nextMessages);
       const now = Date.now();
@@ -394,7 +398,7 @@ function WorkspaceChat({
         return next;
       });
     },
-    [session, workspacePath],
+    [session, workspacePath, queryClient],
   );
 
   const {
