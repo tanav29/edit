@@ -2,12 +2,15 @@ import { ArrowUp, Square } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { Button } from "./ui/button";
+import ModeSelect from "./modeselect";
 
 type ChatInputProps = {
   onSend: (value: string) => void | Promise<void>;
   isActive: boolean;
   isDisabled?: boolean;
   stop?: () => void;
+  build: boolean;
+  onBuildChange: (value: boolean) => void;
 };
 
 export default function ChatInput({
@@ -15,6 +18,8 @@ export default function ChatInput({
   isActive,
   isDisabled = false,
   stop,
+  build,
+  onBuildChange,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
@@ -40,34 +45,35 @@ export default function ChatInput({
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
 
-                if (isActive) {
-                  stop?.();
-                  return;
-                }
-
-                if (isDisabled) {
-                  return;
-                }
-
-                void handleSend();
+              if (isActive) {
+                stop?.();
+                return;
               }
-            }}
-            placeholder={
-              isDisabled
-                ? "Select a session or click New chat to start"
-                : isActive
-                  ? "Assistant is responding. Press Stop to interrupt"
-                  : "Ask for edits, commands, or debugging help"
+
+              if (isDisabled) {
+                return;
+              }
+
+              void handleSend();
             }
+          }}
+          placeholder={
+            isDisabled
+              ? "Select a session or click New chat to start"
+              : isActive
+                ? "Assistant is responding. Press Stop to interrupt"
+                : "Ask for edits, commands, or debugging help"
+          }
           title="Press Enter to send. Shift+Enter for a new line."
           rows={3}
           disabled={isDisabled}
           className="ml-1 max-h-50 flex-1 resize-none bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
         />
         <div className="flex h-full items-end gap-1">
+          <ModeSelect build={build} setBuild={onBuildChange} />
           <Button
             size="icon-sm"
             onClick={() => {

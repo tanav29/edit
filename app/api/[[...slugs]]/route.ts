@@ -138,6 +138,7 @@ export const app = new Elysia({ prefix: "/api" })
         system: [
           "You are OpenCode, an expert coding assistant.",
           `Working directory: ${body.path}`,
+          `Mode: ${body.build ? "build" : "plan"}`,
           "Core behavior:",
           "- Follow the user's latest request precisely.",
           "- Prefer repository conventions over novelty.",
@@ -168,6 +169,7 @@ export const app = new Elysia({ prefix: "/api" })
       body: z.object({
         messages: z.array(z.any()) as z.ZodType<UIMessage[]>,
         path: z.string(),
+        build: z.boolean().optional(),
       }),
     },
   );

@@ -261,7 +261,9 @@ export default function ChatPage() {
 
                 {recentWorkspaces.length > 0 ? (
                   <div className="space-y-1.5">
-                    <p className="text-xs text-muted-foreground">Recent workspaces</p>
+                    <p className="text-xs text-muted-foreground">
+                      Recent workspaces
+                    </p>
                     <div className="flex flex-wrap gap-1.5">
                       {recentWorkspaces.map((path) => (
                         <Button
@@ -337,6 +339,7 @@ function WorkspaceChat({
   const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
   const [isFileBarOpen, setIsFileBarOpen] = useState(true);
   const [isSessionDiffDrawerOpen, setIsSessionDiffDrawerOpen] = useState(false);
+  const [build, setBuild] = useState(true);
   const [selectedSessionDiffPath, setSelectedSessionDiffPath] = useState<
     string | undefined
   >();
@@ -409,6 +412,7 @@ function WorkspaceChat({
       body: {
         path: workspacePath,
         sessionId: session,
+        build,
       },
     }),
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
@@ -542,9 +546,16 @@ function WorkspaceChat({
       return;
     }
 
-    await sendMessage({
-      text: value,
-    });
+    await sendMessage(
+      {
+        text: value,
+      },
+      {
+        body: {
+          build,
+        },
+      },
+    );
   }
 
   const currentSessionTitle = useMemo(() => {
@@ -744,7 +755,9 @@ function WorkspaceChat({
                           </p>
                           {!session ? (
                             <div className="pt-2">
-                              <Button size="sm" onClick={() => handleNewChat(workspacePath)}>
+                              <Button
+                                size="sm"
+                                onClick={() => handleNewChat(workspacePath)}>
                                 New chat
                               </Button>
                             </div>
@@ -767,6 +780,8 @@ function WorkspaceChat({
                     isActive={isActive || isSessionLoading}
                     isDisabled={!session}
                     stop={stop}
+                    build={build}
+                    onBuildChange={setBuild}
                   />
                 </div>
               </div>
@@ -844,7 +859,9 @@ function WorkspaceChat({
                   )}
                   {recentWorkspaces.length > 0 ? (
                     <div className="space-y-1.5">
-                      <p className="text-xs text-muted-foreground">Recent workspaces</p>
+                      <p className="text-xs text-muted-foreground">
+                        Recent workspaces
+                      </p>
                       <div className="flex flex-wrap gap-1.5">
                         {recentWorkspaces.map((path) => (
                           <Button
