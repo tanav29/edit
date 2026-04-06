@@ -32,21 +32,29 @@ export const app = new Elysia({ prefix: "/api" })
       .orderBy(desc(chats.updatedAt));
     return rows;
   })
-  .get("/store/:id", async ({ params }) => {
-    // this api returns the chat session if it exists, otherwise returns null
-    if (!params.id) {
-      return { ok: false, msg: "sessionId and path are required" };
-    }
+  .get(
+    "/store/:id",
+    async ({ params }) => {
+      // this api returns the chat session if it exists, otherwise returns null
+      if (!params.id) {
+        return { ok: false, msg: "sessionId and path are required" };
+      }
 
-    const chat = await db
-      .select()
-      .from(chats)
-      .where(eq(chats.id, params.id))
-      .limit(1)
-      .then((rows) => rows[0]);
+      const chat = await db
+        .select()
+        .from(chats)
+        .where(eq(chats.id, params.id))
+        .limit(1)
+        .then((rows) => rows[0]);
 
-    return chat;
-  })
+      return chat;
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+    },
+  )
   .post(
     "/store",
     async ({ body }) => {
@@ -70,10 +78,11 @@ export const app = new Elysia({ prefix: "/api" })
         .where(
           and(eq(chats.id, body.id), eq(chats.workspacePath, body.workspace)),
         )
-        .limit(1)
-        .then((rows) => rows[0]);
+        .limit(1);
+      console.log("Existing chat session", existing);
 
       if (!existing) {
+        console.log("Inserting new chat session", body.id);
         await db.insert(chats).values({
           id: body.id,
           workspacePath: body.workspace,
@@ -83,6 +92,7 @@ export const app = new Elysia({ prefix: "/api" })
           updatedAt: now,
         });
       } else {
+        console.log("Updating existing chat session", body.id);
         await db
           .update(chats)
           .set({
