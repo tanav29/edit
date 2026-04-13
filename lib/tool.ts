@@ -5,6 +5,9 @@ import * as path from "path";
 import { createTwoFilesPatch } from "diff";
 import z from "zod";
 
+const DEFAULT_READ_LINE_LIMIT = 250;
+const MAX_GREP_RESULTS = 200;
+
 export const DEFAULT_IGNORE_PATTERNS = [
   "node_modules",
   ".git",
@@ -197,6 +200,140 @@ function getPatchStats(patch: string): {
   return { additions, deletions };
 }
 
+function resolveWorkspacePath(workspacePath: string, targetPath?: string): string {
+  const workspaceRoot = path.resolve(workspacePath);
+  const resolvedTarget = targetPath
+    ? path.resolve(workspaceRoot, targetPath)
+    : workspaceRoot;
+  const relative = path.relative(workspaceRoot, resolvedTarget);
+
+  if (
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) {
+    throw new Error("Path must stay inside the selected workspace");
+  }
+
+  return resolvedTarget;
+}
+
+function getRelativeWorkspacePath(workspacePath: string, targetPath: string): string {
+  return path.relative(path.resolve(workspacePath), targetPath) || ".";
+}
+
+function getPatchedWriteResult(params: {
+  workspacePath: string;
+  fullPath: string;
+  previousContent: string;
+  nextContent: string;
+  existed: boolean;
+  editCount?: number;
+  action?: "created" | "edited";
+}) {
+  const {
+    workspacePath,
+    fullPath,
+    previousContent,
+    nextContent,
+    existed,
+    editCount = existed ? 1 : 0,
+    action = existed ? "edited" : "created",
+  } = params;
+  const previousLineCount = existed ? previousContent.split("\n").length : 0;
+  const newLineCount = nextContent.split("\n").length;
+  const relativePath =
+    getRelativeWorkspacePath(workspacePath, fullPath) || path.basename(fullPath);
+  const patch = createTwoFilesPatch(
+    relativePath,
+    relativePath,
+    previousContent,
+    nextContent,
+  );
+  const stats = getPatchStats(patch);
+
+  return {
+    filePath: fullPath,
+    relativePath,
+    action,
+    previousLineCount,
+    newLineCount,
+    linesAdded: newLineCount - previousLineCount,
+    linesRemoved: stats.deletions,
+    patch,
+    patchAdditions: stats.additions,
+    patchDeletions: stats.deletions,
+    editCount,
+  };
+}
+
+type GrepMatch = {
+  filePath: string;
+  line: number;
+  column: number;
+  text: string;
+};
+
+function grepWorkspace(params: {
+  workspacePath: string;
+  pattern: string;
+  glob?: string;
+  maxResults: number;
+}): GrepMatch[] {
+  const { workspacePath, pattern, glob, maxResults } = params;
+  const rgArgs = [
+    "--line-number",
+    "--column",
+    "--color",
+    "never",
+    "--no-heading",
+    "--smart-case",
+    "--max-count",
+    String(maxResults),
+  ];
+
+  if (glob) {
+    rgArgs.push("--glob", glob);
+  }
+
+  rgArgs.push(pattern, workspacePath);
+
+  const rgResult = spawnSync("rg", rgArgs, {
+    cwd: workspacePath,
+    encoding: "utf8",
+    maxBuffer: 5 * 1024 * 1024,
+  });
+
+  if (rgResult.error) {
+    throw rgResult.error;
+  }
+
+  if (rgResult.status !== 0 && rgResult.status !== 1) {
+    throw new Error(rgResult.stderr || "ripgrep failed");
+  }
+
+  if (!rgResult.stdout.trim()) {
+    return [];
+  }
+
+  return rgResult.stdout
+    .trim()
+    .split("\n")
+    .slice(0, maxResults)
+    .map((line) => {
+      const match = line.match(/^(.*?):(\d+):(\d+):(.*)$/);
+      if (!match) return null;
+
+      return {
+        filePath: match[1],
+        line: Number(match[2]),
+        column: Number(match[3]),
+        text: match[4],
+      };
+    })
+    .filter((match): match is GrepMatch => match !== null);
+}
+
 export function createTools(workspacePath: string) {
   return {
     glob: tool({
@@ -236,9 +373,7 @@ export function createTools(workspacePath: string) {
       ),
       execute: async ({ filePath, offset, limit }) => {
         try {
-          const fullPath = path.isAbsolute(filePath)
-            ? filePath
-            : path.join(workspacePath, filePath);
+          const fullPath = resolveWorkspacePath(workspacePath, filePath);
 
           if (!fs.existsSync(fullPath)) {
             return { error: `File not found: ${fullPath}` };
@@ -247,17 +382,20 @@ export function createTools(workspacePath: string) {
           const content = fs.readFileSync(fullPath, "utf-8");
           const lines = content.split("\n");
           const totalLines = lines.length;
-
+          const requestedLimit = limit ?? DEFAULT_READ_LINE_LIMIT;
           const startOffset = offset ? offset - 1 : 0;
-          const endOffset = limit ? startOffset + limit : lines.length;
+          const endOffset = Math.min(startOffset + requestedLimit, lines.length);
           const selectedLines = lines.slice(startOffset, endOffset);
 
           return {
             filePath: fullPath,
+            relativePath: getRelativeWorkspacePath(workspacePath, fullPath),
             content: selectedLines.join("\n"),
             range: `${startOffset + 1}-${endOffset}`,
             totalLines,
             size: fs.statSync(fullPath).size,
+            truncated: endOffset < totalLines,
+            defaultLimitApplied: limit == null,
           };
         } catch (error) {
           return { error: errorMessage(error) };
@@ -275,9 +413,7 @@ export function createTools(workspacePath: string) {
       ),
       execute: async ({ filePath, content }) => {
         try {
-          const fullPath = path.isAbsolute(filePath)
-            ? filePath
-            : path.join(workspacePath, filePath);
+          const fullPath = resolveWorkspacePath(workspacePath, filePath);
 
           const dir = path.dirname(fullPath);
           if (!fs.existsSync(dir)) {
@@ -288,33 +424,115 @@ export function createTools(workspacePath: string) {
           const previousContent = existed
             ? fs.readFileSync(fullPath, "utf-8")
             : "";
-          const previousLineCount = existed
-            ? previousContent.split("\n").length
-            : 0;
-
           fs.writeFileSync(fullPath, content, "utf-8");
-          const newLineCount = content.split("\n").length;
-          const relativePath =
-            path.relative(workspacePath, fullPath) || path.basename(fullPath);
-          const patch = createTwoFilesPatch(
-            relativePath,
-            relativePath,
+          return getPatchedWriteResult({
+            workspacePath,
+            fullPath,
             previousContent,
-            content,
-          );
-          const stats = getPatchStats(patch);
+            nextContent: content,
+            existed,
+          });
+        } catch (error) {
+          return { error: errorMessage(error) };
+        }
+      },
+    }),
+
+    edit: tool({
+      description:
+        "Apply an exact text replacement inside an existing file. Use this for targeted edits instead of overwriting the whole file.",
+      inputSchema: zodSchema(
+        z.object({
+          filePath: z.string().describe("The path to the file to edit"),
+          oldText: z
+            .string()
+            .min(1)
+            .describe("Exact existing text to replace"),
+          newText: z.string().describe("Replacement text"),
+          replaceAll: z
+            .boolean()
+            .optional()
+            .describe("Replace every exact match instead of only the first"),
+        }),
+      ),
+      execute: async ({ filePath, oldText, newText, replaceAll = false }) => {
+        try {
+          const fullPath = resolveWorkspacePath(workspacePath, filePath);
+
+          if (!fs.existsSync(fullPath)) {
+            return { error: `File not found: ${fullPath}` };
+          }
+
+          const original = fs.readFileSync(fullPath, "utf-8");
+          const occurrences = original.split(oldText).length - 1;
+
+          if (occurrences === 0) {
+            return {
+              error:
+                "Exact match not found. Read the file again and use a more precise oldText snippet.",
+            };
+          }
+
+          const nextContent = replaceAll
+            ? original.split(oldText).join(newText)
+            : original.replace(oldText, newText);
+
+          fs.writeFileSync(fullPath, nextContent, "utf-8");
 
           return {
-            filePath: fullPath,
-            action: existed ? "edited" : "created",
-            previousLineCount,
-            newLineCount,
-            linesAdded: newLineCount - previousLineCount,
-            linesRemoved: stats.deletions,
-            patch,
-            patchAdditions: stats.additions,
-            patchDeletions: stats.deletions,
-            editCount: existed ? 1 : 0,
+            ...getPatchedWriteResult({
+              workspacePath,
+              fullPath,
+              previousContent: original,
+              nextContent,
+              existed: true,
+              editCount: replaceAll ? occurrences : 1,
+            }),
+            replacements: replaceAll ? occurrences : 1,
+            occurrencesFound: occurrences,
+          };
+        } catch (error) {
+          return { error: errorMessage(error) };
+        }
+      },
+    }),
+
+    grep: tool({
+      description:
+        "Search file contents in the workspace. Use this before reading or editing when you need to find symbols, strings, or code patterns.",
+      inputSchema: zodSchema(
+        z.object({
+          pattern: z.string().min(1).describe("Text or regex pattern to search"),
+          glob: z
+            .string()
+            .optional()
+            .describe("Optional file glob filter such as '*.ts' or 'app/**'"),
+          maxResults: z
+            .number()
+            .int()
+            .min(1)
+            .max(MAX_GREP_RESULTS)
+            .optional()
+            .describe("Maximum number of matches to return"),
+        }),
+      ),
+      execute: async ({ pattern, glob, maxResults = 50 }) => {
+        try {
+          const matches = grepWorkspace({
+            workspacePath,
+            pattern,
+            glob,
+            maxResults,
+          }).map((match) => ({
+            ...match,
+            relativePath: getRelativeWorkspacePath(workspacePath, match.filePath),
+          }));
+
+          return {
+            pattern,
+            glob: glob ?? null,
+            total: matches.length,
+            matches,
           };
         } catch (error) {
           return { error: errorMessage(error) };
@@ -332,7 +550,7 @@ export function createTools(workspacePath: string) {
       ),
       execute: async ({ command, timeout }) => {
         try {
-          const cwd = workspacePath;
+          const cwd = resolveWorkspacePath(workspacePath);
           const result = spawnSync(command, {
             cwd,
             encoding: "utf8",

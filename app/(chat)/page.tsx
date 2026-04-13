@@ -13,15 +13,7 @@ import {
   PanelRightClose,
   PanelRightOpen,
 } from "lucide-react";
-import {
-  memo,
-  FormEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { memo, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import { useQueryState } from "nuqs";
 import ChatSidebar from "@/components/chat-sidebar";
@@ -38,7 +30,6 @@ import { Button } from "@/components/ui/button";
 import { getTitleFromMessages } from "@/lib/utils";
 import { api } from "@/lib/eden";
 import { useQuery } from "@tanstack/react-query";
-import { id } from "zod/v4/locales";
 
 const MemoMessageUI = memo(MessageUI);
 
@@ -103,13 +94,22 @@ function buildSessionDiffs(messages: UIMessage[]): SessionFileDiff[] {
 }
 
 export default function Page() {
-  const [session, setSession] = useQueryState("s");
+  return (
+    <Suspense fallback={<div className="h-screen bg-background" />}>
+      <ChatPage />
+    </Suspense>
+  );
+}
+
+function ChatPage() {
+  const [session] = useQueryState("s");
   const [workspace, setWorkspace] = useState<string | null>(null);
   const [isFileBarOpen, setIsFileBarOpen] = useState(true);
   const [isSessionDiffDrawerOpen, setIsSessionDiffDrawerOpen] = useState(false);
   const [selectedSessionDiffPath, setSelectedSessionDiffPath] = useState<
     string | undefined
   >();
+  const [selectedFile, setSelectedFile] = useState<string | undefined>();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { isLoading: isSessionLoading } = useQuery({
@@ -119,39 +119,37 @@ export default function Page() {
       const res = await fetch(`/api/store/${session}`);
       const data = await res.json();
       setWorkspace(data.workspace);
-      console.log("Loaded session data", data);
       return data.messages;
     },
     enabled: Boolean(session),
   });
 
-  const {
-    messages,
-    setMessages,
-    sendMessage,
-    status,
-    addToolApprovalResponse,
-    stop,
-  } = useChat<UIMessage>({
-    id: session ?? undefined,
-    messages: [],
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      body: {
-        path: workspace,
-        sessionId: session,
+  const { messages, sendMessage, status, addToolApprovalResponse, stop } =
+    useChat<UIMessage>({
+      id: session ?? undefined,
+      messages: [],
+      transport: new DefaultChatTransport({
+        api: "/api/chat",
+        body: {
+          path: workspace,
+          sessionId: session,
+        },
+      }),
+      onData: () => {},
+      onFinish: async () => {
+        if (!session || !workspace) {
+          return;
+        }
+
+        await api.store.post({
+          id: session,
+          workspace: workspace,
+          messages: messages,
+        });
       },
-    }),
-    onData: () => {},
-    onFinish: async () => {
-      await api.store.post({
-        id: session!,
-        workspace: workspace,
-        messages: messages,
-      });
-    },
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
-  });
+      sendAutomaticallyWhen:
+        lastAssistantMessageIsCompleteWithApprovalResponses,
+    });
 
   const isActive = status === "streaming" || status === "submitted";
 
@@ -172,14 +170,8 @@ export default function Page() {
 
   const currentSessionTitle = useMemo(() => {
     if (!session) return "Select a session";
-
-    const activeChat = chatSessions.find((chat) => chat.id === session);
-    const savedTitle = activeChat?.title?.trim();
-
-    if (savedTitle) return savedTitle;
-
     return getTitleFromMessages(messages);
-  }, [chatSessions, messages, session]);
+  }, [messages, session]);
 
   const renderedMessages = useMemo(
     () =>
@@ -252,7 +244,10 @@ export default function Page() {
               </div>
 
               <div className="flex items-center gap-1 rounded-md">
-                <CommitButton workspacePath={workspace} isBusy={isActive} />
+                <CommitButton
+                  workspacePath={workspace ?? ""}
+                  isBusy={isActive}
+                />
                 <Button
                   type="button"
                   variant="outline"
@@ -293,30 +288,10 @@ export default function Page() {
                     </div>
                   ) : messages.length === 0 ? (
                     <div className="flex h-full items-center justify-center">
-                      <div className="w-full max-w-md space-y-4 rounded-2xl border border-border/70 bg-card/70 p-8 text-center shadow-sm backdrop-blur-sm">
-                        <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border bg-card">
-                          <Code className="size-6 text-primary" />
-                        </div>
+                      <div className="w-full max-w-md text-center flex flex-col items-center justify-center gap-4">
+                        <Code className="size-10 text-primary" />
                         <div className="space-y-1">
-                          <h1 className="text-xl font-semibold">
-                            {session
-                              ? "What do you want to build?"
-                              : "Open an existing session or start a new one"}
-                          </h1>
-                          <p className="text-sm text-muted-foreground">
-                            {session
-                              ? "Start a chat for this workspace and I&apos;ll help you edit code."
-                              : "Use the sidebar to revisit previous chats, or create a new chat when you are ready."}
-                          </p>
-                          {!session ? (
-                            <div className="pt-2">
-                              <Button
-                                size="sm"
-                                onClick={() => handleNewChat(workspace)}>
-                                New chat
-                              </Button>
-                            </div>
-                          ) : null}
+                          <h1 className="text-xl font-semibold">Lets build</h1>
                         </div>
                       </div>
                     </div>
@@ -351,6 +326,23 @@ export default function Page() {
         onClose={() => setIsSessionDiffDrawerOpen(false)}
         onSelectFile={setSelectedSessionDiffPath}
       />
+
+      {selectedFile ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4">
+          <button
+            type="button"
+            aria-label="Close file viewer"
+            className="absolute inset-0"
+            onClick={() => setSelectedFile(undefined)}
+          />
+          <div className="relative z-10 h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-6xl">
+            <FileViewer
+              filePath={selectedFile}
+              onClose={() => setSelectedFile(undefined)}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

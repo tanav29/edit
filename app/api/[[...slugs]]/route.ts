@@ -79,10 +79,8 @@ export const app = new Elysia({ prefix: "/api" })
           and(eq(chats.id, body.id), eq(chats.workspacePath, body.workspace)),
         )
         .limit(1);
-      console.log("Existing chat session", existing);
 
-      if (!existing) {
-        console.log("Inserting new chat session", body.id);
+      if (existing.length === 0) {
         await db.insert(chats).values({
           id: body.id,
           workspacePath: body.workspace,
@@ -92,7 +90,6 @@ export const app = new Elysia({ prefix: "/api" })
           updatedAt: now,
         });
       } else {
-        console.log("Updating existing chat session", body.id);
         await db
           .update(chats)
           .set({
@@ -154,8 +151,11 @@ export const app = new Elysia({ prefix: "/api" })
           "- Make minimal, high-confidence changes.",
           "- Be concise and direct.",
           "Execution policy:",
-          "- For non-trivial requests, first inspect relevant files then execute changes in small steps.",
-          "- Prefer tools over speculation. Read/search before writing.",
+          "- For non-trivial requests, inspect first, then edit in small reversible steps.",
+          "- Prefer grep or glob to locate code before reading files.",
+          "- Prefer read with focused ranges instead of reading entire large files.",
+          "- Prefer edit for targeted changes inside existing files.",
+          "- Use write to create new files or replace a file only when a targeted edit is not practical.",
           "- Use bash for terminal tasks only, not file editing.",
           "- When user intent is clear enough, act without asking extra permission.",
           "- Ask only if ambiguity would materially change the implementation.",

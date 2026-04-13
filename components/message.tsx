@@ -280,6 +280,16 @@ function ToolPart({
                     <PenLine className="size-3" /> Write &quot;{filePath}&quot;
                   </span>
                 )}
+                {toolName == "edit" && (
+                  <span className="text-muted-foreground/90 flex items-center gap-1">
+                    <PenLine className="size-3" /> Edit &quot;{filePath}&quot;
+                  </span>
+                )}
+                {toolName == "grep" && (
+                  <span className="text-muted-foreground/90 flex items-center gap-1">
+                    <BookSearch className="size-3" /> Grep &quot;{pattern}&quot;
+                  </span>
+                )}
                 {toolName == "web" && (
                   <span className="text-muted-foreground/90 flex items-center gap-1">
                     <Globe className="size-3" /> Web &quot;{query}&quot;
@@ -302,7 +312,7 @@ function ToolPart({
         {(() => {
           if (
             part.state === "output-available" &&
-            toolName === "write" &&
+            (toolName === "write" || toolName === "edit") &&
             part.output &&
             typeof part.output === "object"
           ) {
@@ -357,10 +367,10 @@ const ToolOutput = React.memo(function ToolOutput({
   }
 
   if (toolName === "read" && data.content) {
-    return null;
+      return null;
   }
 
-  if (toolName === "write") {
+  if (toolName === "write" || toolName === "edit") {
     const editsArr = Array.isArray(data.edits)
       ? (data.edits as Array<Record<string, unknown>>)
       : [];
@@ -410,6 +420,35 @@ const ToolOutput = React.memo(function ToolOutput({
             {String(data.previousLineCount)} &rarr; {String(data.newLineCount)}{" "}
             lines
           </div>
+        )}
+      </div>
+    );
+  }
+
+  if (toolName === "grep") {
+    const matches = Array.isArray(data.matches)
+      ? (data.matches as Array<Record<string, unknown>>)
+      : [];
+
+    return (
+      <div className="space-y-2 rounded-lg border border-border/40 bg-card/70 p-3">
+        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          {String(data.total ?? matches.length)} matches
+        </div>
+        {matches.length === 0 ? (
+          <div className="text-xs text-muted-foreground">No matches</div>
+        ) : (
+          matches.map((match, index) => (
+            <div key={index} className="space-y-1 rounded-md bg-background/60 p-2">
+              <div className="font-mono text-[11px] text-muted-foreground">
+                {String(match.relativePath ?? match.filePath)}:{String(match.line)}:
+                {String(match.column)}
+              </div>
+              <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs">
+                {String(match.text ?? "")}
+              </pre>
+            </div>
+          ))
         )}
       </div>
     );
