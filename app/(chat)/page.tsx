@@ -18,11 +18,17 @@ import { useQueryState } from "nuqs";
 import ChatSidebar from "@/components/chat-sidebar";
 import ChatInput from "@/components/chat-input";
 import CommitButton from "@/components/commit-button";
+import CustomCommandButtons from "@/components/custom-command-buttons";
 import FileTreeBar from "@/components/file-tree";
 import { FileViewer } from "@/components/file-viewer";
 import Loader from "@/components/loader";
 import MessageUI from "@/components/message";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { getTitleFromMessages, parseMessages } from "@/lib/utils";
 import { api } from "@/lib/eden";
 import { useQuery } from "@tanstack/react-query";
@@ -279,19 +285,27 @@ function ChatLayout({
               </div>
 
               <div className="flex items-center gap-1 rounded-md">
+                <CustomCommandButtons
+                  workspacePath={workspace ?? ""}
+                  isBusy={isActive}
+                />
                 <CommitButton workspacePath={workspace ?? ""} isBusy={isActive} />
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  title="Toggle file tree"
-                  aria-label="Toggle file tree"
-                  onClick={() => setIsFileBarOpen((prev) => !prev)}>
-                  {isFileBarOpen ? (
-                    <PanelRightClose className="size-4" />
-                  ) : (
-                    <PanelRightOpen className="size-4" />
-                  )}
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      aria-label="Toggle file tree"
+                      onClick={() => setIsFileBarOpen((prev) => !prev)}>
+                      {isFileBarOpen ? (
+                        <PanelRightClose className="size-4" />
+                      ) : (
+                        <PanelRightOpen className="size-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Toggle file tree</TooltipContent>
+                </Tooltip>
               </div>
             </div>
 

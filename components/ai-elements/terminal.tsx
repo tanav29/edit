@@ -4,6 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { Copy, RotateCcw, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface TerminalProps {
   autoScroll?: boolean;
@@ -95,14 +100,20 @@ export function TerminalClearButton({
   onClickAction?: () => void;
 }) {
   return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      onClick={onClickAction}
-      className="size-6"
-    >
-      <RotateCcw className="size-3" />
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Clear"
+          onClick={onClickAction}
+          className="size-6"
+        >
+          <RotateCcw className="size-3" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">Clear</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -120,13 +131,23 @@ export function TerminalCopyButton({
   };
 
   return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      onClick={handleCopy}
-      className="size-6"
-    >
-      {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={copied ? "Copied" : "Copy"}
+          onClick={handleCopy}
+          className="size-6"
+        >
+          {copied ? (
+            <Check className="size-3" />
+          ) : (
+            <Copy className="size-3" />
+          )}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{copied ? "Copied" : "Copy"}</TooltipContent>
+    </Tooltip>
   );
 }

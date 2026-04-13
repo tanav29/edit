@@ -5,6 +5,11 @@ import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const MonacoEditor = dynamic(
   () => import("@monaco-editor/react").then((mod) => mod.Editor),
@@ -77,15 +82,20 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
   return (
     <div className="flex flex-col h-full bg-background border rounded-xl overflow-hidden shadow-lg">
       <div className="absolute right-3 top-3 z-20">
-        <Button
-          type="button"
-          size="icon"
-          variant="outline"
-          aria-label="Close file viewer"
-          className="size-8 rounded-full bg-background/90"
-          onClick={onClose}>
-          <X className="size-4" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              aria-label="Close file viewer"
+              className="size-8 rounded-full bg-background/90"
+              onClick={onClose}>
+              <X className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left">Close</TooltipContent>
+        </Tooltip>
       </div>
       <div className="flex-1 relative">
         {loading ? (

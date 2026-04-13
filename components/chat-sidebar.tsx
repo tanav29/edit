@@ -5,6 +5,11 @@ import { ChevronRight, Folder, Plus, Shell, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useQueryState } from "nuqs";
 import { toast } from "sonner";
 import { api } from "@/lib/eden";
@@ -186,13 +191,21 @@ export default function ChatSidebar() {
                             title={formatLabel(chat.title)}>
                             {formatLabel(chat.title)}
                           </button>
-                          <Button
-                            size="icon-xs"
-                            variant="ghost"
-                            onClick={() => handleDeleteChat(chat)}
-                            className="opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100">
-                            <Trash2 className="size-3 text-muted-foreground hover:text-destructive" />
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="icon-xs"
+                                variant="ghost"
+                                aria-label="Delete session"
+                                onClick={() => handleDeleteChat(chat)}
+                                className="opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100">
+                                <Trash2 className="size-3 text-muted-foreground hover:text-destructive" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="right">
+                              Delete session
+                            </TooltipContent>
+                          </Tooltip>
                         </div>
                       );
                     })}

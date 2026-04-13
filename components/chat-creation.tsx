@@ -4,6 +4,7 @@ import { Plus } from "lucide-react";
 import { useQueryState } from "nuqs";
 
 import { Button } from "./ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -86,17 +87,22 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
 
   return (
     <>
-      <Button
-        size="icon-sm"
-        variant="outline"
-        title="New chat"
-        onClick={() => {
-          refetch?.();
-          handleNewChat();
-        }}>
-        <Plus className="size-4" />
-        <span className="sr-only">New chat</span>
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="icon-sm"
+            variant="outline"
+            aria-label="New chat"
+            onClick={() => {
+              refetch?.();
+              handleNewChat();
+            }}>
+            <Plus className="size-4" />
+            <span className="sr-only">New chat</span>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="right">New chat</TooltipContent>
+      </Tooltip>
 
       <Dialog open={isNewChatModalOpen} onOpenChange={handleCloseNewChatModal}>
         <DialogContent>
