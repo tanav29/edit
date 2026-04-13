@@ -124,6 +124,7 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
               readOnly: true,
               minimap: { enabled: false },
               fontSize: 13,
+              fontFamily: "var(--font-geist-mono), monospace",
               scrollBeyondLastLine: false,
               automaticLayout: true,
               padding: { top: 16, bottom: 16 },
