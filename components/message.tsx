@@ -2,6 +2,7 @@
 
 import React, { useMemo } from "react";
 import { useJsonRenderMessage } from "@json-render/react";
+import { PatchDiff } from "@pierre/diffs/react";
 import {
   Terminal,
   TerminalActions,
@@ -74,12 +75,10 @@ export default function MessageUI({
   parts,
   addToolApprovalResponseAction,
   onFileClickAction,
-  onWriteDiffOpenAction,
 }: {
   parts: MessagePart[];
   addToolApprovalResponseAction: (response: ToolApprovalResponse) => void;
   onFileClickAction?: (path: string) => void;
-  onWriteDiffOpenAction?: (path: string) => void;
 }) {
   useJsonRenderMessage(parts);
 
@@ -134,19 +133,13 @@ export default function MessageUI({
                 part={part as ToolUIPart}
                 addToolApprovalResponseAction={addToolApprovalResponseAction}
                 onFileClickAction={onFileClickAction}
-                onWriteDiffOpenAction={onWriteDiffOpenAction}
               />
             );
           }
           return null;
       }
     });
-  }, [
-    parts,
-    addToolApprovalResponseAction,
-    onFileClickAction,
-    onWriteDiffOpenAction,
-  ]);
+  }, [parts, addToolApprovalResponseAction, onFileClickAction]);
   return <>{renderedParts}</>;
 }
 
@@ -154,12 +147,10 @@ function ToolPart({
   part,
   addToolApprovalResponseAction,
   onFileClickAction,
-  onWriteDiffOpenAction,
 }: {
   part: ToolUIPart;
   addToolApprovalResponseAction: (response: ToolApprovalResponse) => void;
   onFileClickAction?: (path: string) => void;
-  onWriteDiffOpenAction?: (path: string) => void;
 }) {
   const toolName = part.type.replace("tool-", "");
   const filePath = getInputString(part.input, "filePath");
@@ -238,17 +229,7 @@ function ToolPart({
 
   return (
     <details>
-      <summary
-        onClick={() => {
-          if (toolName === "write" && hasFilePathInput(part.input)) {
-            onWriteDiffOpenAction?.(part.input.filePath);
-            return;
-          }
-          if (hasFilePathInput(part.input) && onFileClickAction) {
-            onFileClickAction(part.input.filePath);
-          }
-        }}
-        className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90 select-none cursor-pointer outline-none">
+      <summary className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90 select-none cursor-pointer outline-none">
         {part.state == "output-available" ||
         part.state == "output-denied" ||
         part.state == "approval-responded" ||
@@ -367,60 +348,15 @@ const ToolOutput = React.memo(function ToolOutput({
   }
 
   if (toolName === "read" && data.content) {
-      return null;
+    return null;
   }
 
   if (toolName === "write" || toolName === "edit") {
-    const editsArr = Array.isArray(data.edits)
-      ? (data.edits as Array<Record<string, unknown>>)
-      : [];
+    const patch = typeof data.patch === "string" ? data.patch : null;
 
     return (
-      <div className="space-y-2 tool-card rounded-lg p-3.5">
-        <div className="flex items-center gap-2 text-[10px] pb-1 border-b border-border/30">
-          <span
-            className={
-              data.action === "created"
-                ? "text-emerald-400"
-                : data.action === "edited"
-                  ? "text-amber-400"
-                  : "text-blue-400"
-            }>
-            {String(data.action ?? "").toUpperCase()}
-          </span>
-          <span className="text-muted-foreground/70">
-            {String(data.filePath)}
-          </span>
-        </div>
-        {editsArr.map((edit, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-2 text-[10px] text-muted-foreground/80">
-            <span className="font-mono">L{String(edit.range)}</span>
-            <span className="text-red-400/70">
-              -{String(edit.linesRemoved)}
-            </span>
-            <span className="text-emerald-400/70">
-              +{String(edit.linesAdded)}
-            </span>
-            {edit.description != null && (
-              <span className="text-muted-foreground/50 ml-1">
-                {String(edit.description)}
-              </span>
-            )}
-          </div>
-        ))}
-        {data.message != null && (
-          <div className="text-muted-foreground/60 text-[10px]">
-            {String(data.message)}
-          </div>
-        )}
-        {data.previousLineCount !== undefined && (
-          <div className="text-muted-foreground/50 text-[10px]">
-            {String(data.previousLineCount)} &rarr; {String(data.newLineCount)}{" "}
-            lines
-          </div>
-        )}
+      <div className="tool-card rounded-lg border border-border/40 overflow-hidden">
+        {patch ? <PatchDiff patch={patch} /> : null}
       </div>
     );
   }
@@ -439,10 +375,12 @@ const ToolOutput = React.memo(function ToolOutput({
           <div className="text-xs text-muted-foreground">No matches</div>
         ) : (
           matches.map((match, index) => (
-            <div key={index} className="space-y-1 rounded-md bg-background/60 p-2">
+            <div
+              key={index}
+              className="space-y-1 rounded-md bg-background/60 p-2">
               <div className="font-mono text-[11px] text-muted-foreground">
-                {String(match.relativePath ?? match.filePath)}:{String(match.line)}:
-                {String(match.column)}
+                {String(match.relativePath ?? match.filePath)}:
+                {String(match.line)}:{String(match.column)}
               </div>
               <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs">
                 {String(match.text ?? "")}
@@ -484,7 +422,10 @@ const ToolOutput = React.memo(function ToolOutput({
         <TerminalHeader>
           <TerminalTitle>{String(data.path)}</TerminalTitle>
           <div className="flex items-center gap-1">
-            <TerminalStatus label={statusText} failed={hasExitCode && data.exitCode !== 0} />
+            <TerminalStatus
+              label={statusText}
+              failed={hasExitCode && data.exitCode !== 0}
+            />
             <TerminalActions>
               <TerminalCopyButton
                 onCopyAction={() => {

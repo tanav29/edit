@@ -8,12 +8,11 @@ import {
 } from "ai";
 import {
   Code,
-  FileDiff as FileDiffIcon,
   Loader2,
   PanelRightClose,
   PanelRightOpen,
 } from "lucide-react";
-import { memo, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { memo, Suspense, useEffect, useRef, useState } from "react";
 
 import { useQueryState } from "nuqs";
 import ChatSidebar from "@/components/chat-sidebar";
@@ -23,75 +22,12 @@ import FileTreeBar from "@/components/file-tree";
 import { FileViewer } from "@/components/file-viewer";
 import Loader from "@/components/loader";
 import MessageUI from "@/components/message";
-import SessionDiffDrawer, {
-  type SessionFileDiff,
-} from "@/components/session-diff-drawer";
 import { Button } from "@/components/ui/button";
 import { getTitleFromMessages, parseMessages } from "@/lib/utils";
 import { api } from "@/lib/eden";
 import { useQuery } from "@tanstack/react-query";
 
 const MemoMessageUI = memo(MessageUI);
-
-function buildSessionDiffs(messages: UIMessage[]): SessionFileDiff[] {
-  const byPath = new Map<string, SessionFileDiff>();
-  let cursor = 0;
-
-  for (const message of messages) {
-    if (!Array.isArray(message.parts)) continue;
-
-    for (const part of message.parts as Array<Record<string, unknown>>) {
-      cursor += 1;
-
-      if (part.type !== "tool-write" || part.state !== "output-available") {
-        continue;
-      }
-
-      const output = part.output;
-      if (!output || typeof output !== "object") continue;
-
-      const out = output as Record<string, unknown>;
-      const filePath =
-        typeof out.filePath === "string" && out.filePath.trim().length > 0
-          ? out.filePath
-          : undefined;
-      const patch = typeof out.patch === "string" ? out.patch : undefined;
-      const additions =
-        typeof out.patchAdditions === "number" ? out.patchAdditions : 0;
-      const deletions =
-        typeof out.patchDeletions === "number" ? out.patchDeletions : 0;
-      const action = out.action === "created" ? "created" : "edited";
-
-      if (!filePath || !patch) continue;
-
-      const existing = byPath.get(filePath);
-
-      if (!existing) {
-        byPath.set(filePath, {
-          filePath,
-          patch,
-          edits: 1,
-          action,
-          additions,
-          deletions,
-          updatedAt: cursor,
-        });
-        continue;
-      }
-
-      byPath.set(filePath, {
-        ...existing,
-        patch,
-        edits: existing.edits + 1,
-        additions,
-        deletions,
-        updatedAt: cursor,
-      });
-    }
-  }
-
-  return [...byPath.values()];
-}
 
 export default function Page() {
   return (
@@ -104,10 +40,6 @@ export default function Page() {
 function ChatPage() {
   const [session] = useQueryState("s");
   const [isFileBarOpen, setIsFileBarOpen] = useState(true);
-  const [isSessionDiffDrawerOpen, setIsSessionDiffDrawerOpen] = useState(false);
-  const [selectedSessionDiffPath, setSelectedSessionDiffPath] = useState<
-    string | undefined
-  >();
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
 
   const { data: sessionData, isLoading: isSessionLoading } = useQuery({
@@ -150,11 +82,6 @@ function ChatPage() {
         isFileBarOpen={isFileBarOpen}
         setIsFileBarOpen={setIsFileBarOpen}
         workspace={null}
-        sessionDiffs={[]}
-        selectedSessionDiffPath={undefined}
-        setSelectedSessionDiffPath={setSelectedSessionDiffPath}
-        isSessionDiffDrawerOpen={isSessionDiffDrawerOpen}
-        setIsSessionDiffDrawerOpen={setIsSessionDiffDrawerOpen}
         selectedFile={selectedFile}
         setSelectedFile={setSelectedFile}>
         <div className="flex h-full items-center justify-center">
@@ -171,10 +98,6 @@ function ChatPage() {
       initialMessages={sessionData?.messages ?? []}
       isFileBarOpen={isFileBarOpen}
       setIsFileBarOpen={setIsFileBarOpen}
-      isSessionDiffDrawerOpen={isSessionDiffDrawerOpen}
-      setIsSessionDiffDrawerOpen={setIsSessionDiffDrawerOpen}
-      selectedSessionDiffPath={selectedSessionDiffPath}
-      setSelectedSessionDiffPath={setSelectedSessionDiffPath}
       selectedFile={selectedFile}
       setSelectedFile={setSelectedFile}
     />
@@ -187,12 +110,6 @@ type LoadedSessionChatProps = {
   initialMessages: UIMessage[];
   isFileBarOpen: boolean;
   setIsFileBarOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  isSessionDiffDrawerOpen: boolean;
-  setIsSessionDiffDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  selectedSessionDiffPath: string | undefined;
-  setSelectedSessionDiffPath: React.Dispatch<
-    React.SetStateAction<string | undefined>
-  >;
   selectedFile: string | undefined;
   setSelectedFile: React.Dispatch<React.SetStateAction<string | undefined>>;
 };
@@ -203,10 +120,6 @@ function LoadedSessionChat({
   initialMessages,
   isFileBarOpen,
   setIsFileBarOpen,
-  isSessionDiffDrawerOpen,
-  setIsSessionDiffDrawerOpen,
-  selectedSessionDiffPath,
-  setSelectedSessionDiffPath,
   selectedFile,
   setSelectedFile,
 }: LoadedSessionChatProps) {
@@ -286,21 +199,10 @@ function LoadedSessionChat({
           parts={message.parts}
           addToolApprovalResponseAction={addToolApprovalResponse}
           onFileClickAction={setSelectedFile}
-          onWriteDiffOpenAction={(filePath) => {
-            setSelectedSessionDiffPath(filePath);
-            setIsSessionDiffDrawerOpen(true);
-          }}
         />
       )}
     </div>
   ));
-
-  const sessionDiffs = useMemo(() => buildSessionDiffs(messages), [messages]);
-  const effectiveSelectedSessionDiffPath =
-    selectedSessionDiffPath &&
-    sessionDiffs.some((diff) => diff.filePath === selectedSessionDiffPath)
-      ? selectedSessionDiffPath
-      : sessionDiffs[0]?.filePath;
 
   return (
     <ChatLayout
@@ -309,11 +211,6 @@ function LoadedSessionChat({
       isFileBarOpen={isFileBarOpen}
       setIsFileBarOpen={setIsFileBarOpen}
       workspace={workspace}
-      sessionDiffs={sessionDiffs}
-      selectedSessionDiffPath={effectiveSelectedSessionDiffPath}
-      setSelectedSessionDiffPath={setSelectedSessionDiffPath}
-      isSessionDiffDrawerOpen={isSessionDiffDrawerOpen}
-      setIsSessionDiffDrawerOpen={setIsSessionDiffDrawerOpen}
       selectedFile={selectedFile}
       setSelectedFile={setSelectedFile}>
       <div ref={scrollRef} className="relative flex-1 overflow-y-auto px-4 py-6">
@@ -352,13 +249,6 @@ type ChatLayoutProps = {
   isFileBarOpen: boolean;
   setIsFileBarOpen: React.Dispatch<React.SetStateAction<boolean>>;
   workspace: string | null;
-  sessionDiffs: SessionFileDiff[];
-  selectedSessionDiffPath: string | undefined;
-  setSelectedSessionDiffPath: React.Dispatch<
-    React.SetStateAction<string | undefined>
-  >;
-  isSessionDiffDrawerOpen: boolean;
-  setIsSessionDiffDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>;
   selectedFile: string | undefined;
   setSelectedFile: React.Dispatch<React.SetStateAction<string | undefined>>;
 };
@@ -370,11 +260,6 @@ function ChatLayout({
   isFileBarOpen,
   setIsFileBarOpen,
   workspace,
-  sessionDiffs,
-  selectedSessionDiffPath,
-  setSelectedSessionDiffPath,
-  isSessionDiffDrawerOpen,
-  setIsSessionDiffDrawerOpen,
   selectedFile,
   setSelectedFile,
 }: ChatLayoutProps) {
@@ -395,20 +280,6 @@ function ChatLayout({
 
               <div className="flex items-center gap-1 rounded-md">
                 <CommitButton workspacePath={workspace ?? ""} isBusy={isActive} />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  title="Toggle session diffs"
-                  className="h-8 gap-1.5 px-2"
-                  onClick={() => setIsSessionDiffDrawerOpen((prev) => !prev)}
-                  disabled={sessionDiffs.length === 0}>
-                  <FileDiffIcon className="size-3.5" />
-                  <span className="text-xs">Diffs</span>
-                  <span className="rounded-full border border-border/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                    {sessionDiffs.length}
-                  </span>
-                </Button>
                 <Button
                   variant="outline"
                   size="icon-sm"
@@ -433,14 +304,6 @@ function ChatLayout({
           </section>
         </div>
       </main>
-
-      <SessionDiffDrawer
-        isOpen={isSessionDiffDrawerOpen}
-        diffs={sessionDiffs}
-        selectedFilePath={selectedSessionDiffPath}
-        onClose={() => setIsSessionDiffDrawerOpen(false)}
-        onSelectFile={setSelectedSessionDiffPath}
-      />
 
       {selectedFile ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4">
@@ -476,11 +339,6 @@ function EmptyChatPage({
       isFileBarOpen={isFileBarOpen}
       setIsFileBarOpen={setIsFileBarOpen}
       workspace={null}
-      sessionDiffs={[]}
-      selectedSessionDiffPath={undefined}
-      setSelectedSessionDiffPath={() => undefined}
-      isSessionDiffDrawerOpen={false}
-      setIsSessionDiffDrawerOpen={() => undefined}
       selectedFile={undefined}
       setSelectedFile={() => undefined}>
       <div className="relative flex-1 overflow-y-auto px-4 py-6">
