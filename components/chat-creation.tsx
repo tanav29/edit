@@ -14,7 +14,11 @@ import {
 import { Input } from "./ui/input";
 import { api } from "@/lib/eden";
 
-export default function ChatCreation({ refetch }: any) {
+type ChatCreationProps = {
+  refetch?: () => void | Promise<unknown>;
+};
+
+export default function ChatCreation({ refetch }: ChatCreationProps) {
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [newChatWorkspacePath, setNewChatWorkspacePath] = useState("");
   const [newChatWorkspaceError, setNewChatWorkspaceError] = useState<

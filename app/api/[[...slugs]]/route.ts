@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { chats } from "@/db/schema";
 import { getTitleFromMessages } from "@/lib/utils";
+import { parseMessages } from "@/lib/utils";
 import { and, desc, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
@@ -47,7 +48,16 @@ export const app = new Elysia({ prefix: "/api" })
         .limit(1)
         .then((rows) => rows[0]);
 
-      return chat;
+      if (!chat) {
+        return null;
+      }
+
+      return {
+        ...chat,
+        workspace: chat.workspacePath,
+        messages: parseMessages(chat.messages),
+      };
+
     },
     {
       params: t.Object({

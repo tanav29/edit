@@ -27,7 +27,7 @@ import SessionDiffDrawer, {
   type SessionFileDiff,
 } from "@/components/session-diff-drawer";
 import { Button } from "@/components/ui/button";
-import { getTitleFromMessages } from "@/lib/utils";
+import { getTitleFromMessages, parseMessages } from "@/lib/utils";
 import { api } from "@/lib/eden";
 import { useQuery } from "@tanstack/react-query";
 
@@ -103,53 +103,146 @@ export default function Page() {
 
 function ChatPage() {
   const [session] = useQueryState("s");
-  const [workspace, setWorkspace] = useState<string | null>(null);
   const [isFileBarOpen, setIsFileBarOpen] = useState(true);
   const [isSessionDiffDrawerOpen, setIsSessionDiffDrawerOpen] = useState(false);
   const [selectedSessionDiffPath, setSelectedSessionDiffPath] = useState<
     string | undefined
   >();
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
-  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { isLoading: isSessionLoading } = useQuery({
+  const { data: sessionData, isLoading: isSessionLoading } = useQuery({
     queryKey: ["session", session],
     queryFn: async () => {
       if (!session) return null;
       const res = await fetch(`/api/store/${session}`);
       const data = await res.json();
-      setWorkspace(data.workspace);
-      return data.messages;
+      return {
+        workspace:
+          typeof data?.workspace === "string"
+            ? data.workspace
+            : typeof data?.workspacePath === "string"
+              ? data.workspacePath
+              : null,
+        messages: Array.isArray(data?.messages)
+          ? (data.messages as UIMessage[])
+          : parseMessages(data?.messages),
+      };
     },
     enabled: Boolean(session),
   });
 
-  const { messages, sendMessage, status, addToolApprovalResponse, stop } =
-    useChat<UIMessage>({
-      id: session ?? undefined,
-      messages: [],
-      transport: new DefaultChatTransport({
-        api: "/api/chat",
-        body: {
-          path: workspace,
-          sessionId: session,
-        },
-      }),
-      onData: () => {},
-      onFinish: async () => {
-        if (!session || !workspace) {
-          return;
-        }
+  const workspace = sessionData?.workspace ?? null;
 
-        await api.store.post({
-          id: session,
-          workspace: workspace,
-          messages: messages,
-        });
+  if (!session) {
+    return (
+      <EmptyChatPage
+        isFileBarOpen={isFileBarOpen}
+        setIsFileBarOpen={setIsFileBarOpen}
+      />
+    );
+  }
+
+  if (isSessionLoading) {
+    return (
+      <ChatLayout
+        currentSessionTitle="Select a session"
+        isActive={false}
+        isFileBarOpen={isFileBarOpen}
+        setIsFileBarOpen={setIsFileBarOpen}
+        workspace={null}
+        sessionDiffs={[]}
+        selectedSessionDiffPath={undefined}
+        setSelectedSessionDiffPath={setSelectedSessionDiffPath}
+        isSessionDiffDrawerOpen={isSessionDiffDrawerOpen}
+        setIsSessionDiffDrawerOpen={setIsSessionDiffDrawerOpen}
+        selectedFile={selectedFile}
+        setSelectedFile={setSelectedFile}>
+        <div className="flex h-full items-center justify-center">
+          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </div>
+      </ChatLayout>
+    );
+  }
+
+  return (
+    <LoadedSessionChat
+      session={session}
+      workspace={workspace}
+      initialMessages={sessionData?.messages ?? []}
+      isFileBarOpen={isFileBarOpen}
+      setIsFileBarOpen={setIsFileBarOpen}
+      isSessionDiffDrawerOpen={isSessionDiffDrawerOpen}
+      setIsSessionDiffDrawerOpen={setIsSessionDiffDrawerOpen}
+      selectedSessionDiffPath={selectedSessionDiffPath}
+      setSelectedSessionDiffPath={setSelectedSessionDiffPath}
+      selectedFile={selectedFile}
+      setSelectedFile={setSelectedFile}
+    />
+  );
+}
+
+type LoadedSessionChatProps = {
+  session: string;
+  workspace: string | null;
+  initialMessages: UIMessage[];
+  isFileBarOpen: boolean;
+  setIsFileBarOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  isSessionDiffDrawerOpen: boolean;
+  setIsSessionDiffDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  selectedSessionDiffPath: string | undefined;
+  setSelectedSessionDiffPath: React.Dispatch<
+    React.SetStateAction<string | undefined>
+  >;
+  selectedFile: string | undefined;
+  setSelectedFile: React.Dispatch<React.SetStateAction<string | undefined>>;
+};
+
+function LoadedSessionChat({
+  session,
+  workspace,
+  initialMessages,
+  isFileBarOpen,
+  setIsFileBarOpen,
+  isSessionDiffDrawerOpen,
+  setIsSessionDiffDrawerOpen,
+  selectedSessionDiffPath,
+  setSelectedSessionDiffPath,
+  selectedFile,
+  setSelectedFile,
+}: LoadedSessionChatProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const {
+    messages,
+    sendMessage,
+    status,
+    addToolApprovalResponse,
+    stop,
+  } = useChat<UIMessage>({
+    id: session,
+    messages: initialMessages,
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      body: {
+        path: workspace ?? "",
+        sessionId: session,
       },
-      sendAutomaticallyWhen:
-        lastAssistantMessageIsCompleteWithApprovalResponses,
-    });
+    }),
+    onData: () => {},
+    onFinish: async ({ messages: finishedMessages }) => {
+      if (!session || !workspace) {
+        return;
+      }
+
+      await api.store.post({
+        id: session,
+        workspace,
+        messages: finishedMessages,
+      });
+    },
+    sendAutomaticallyWhen:
+      lastAssistantMessageIsCompleteWithApprovalResponses,
+  });
 
   const isActive = status === "streaming" || status === "submitted";
 
@@ -168,66 +261,123 @@ function ChatPage() {
     });
   }
 
-  const currentSessionTitle = useMemo(() => {
-    if (!session) return "Select a session";
-    return getTitleFromMessages(messages);
-  }, [messages, session]);
+  const currentSessionTitle = getTitleFromMessages(messages);
 
-  const renderedMessages = useMemo(
-    () =>
-      messages.map((message, index) => (
-        <div key={message.id || index}>
-          {message.role === "user" ? (
-            <div className="flex justify-end py-2">
-              <div className="max-w-[85%] rounded-2xl rounded-br-md border border-primary/25 bg-primary/12 px-4 py-2.5 shadow-sm">
-                {message.parts.map((part, partIndex) => {
-                  if (part.type !== "text") return null;
+  const renderedMessages = messages.map((message, index) => (
+    <div key={message.id || index}>
+      {message.role === "user" ? (
+        <div className="flex justify-end py-2">
+          <div className="max-w-[85%] rounded-2xl rounded-br-md border border-primary/25 bg-primary/12 px-4 py-2.5 shadow-sm">
+            {message.parts.map((part, partIndex) => {
+              if (part.type !== "text") return null;
 
-                  return (
-                    <p
-                      key={partIndex}
-                      className="whitespace-pre-wrap text-sm leading-relaxed">
-                      {part.text}
-                    </p>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <MemoMessageUI
-              parts={message.parts}
-              addToolApprovalResponseAction={addToolApprovalResponse}
-              onFileClickAction={setSelectedFile}
-              onWriteDiffOpenAction={(filePath) => {
-                setSelectedSessionDiffPath(filePath);
-                setIsSessionDiffDrawerOpen(true);
-              }}
-            />
-          )}
+              return (
+                <p
+                  key={partIndex}
+                  className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {part.text}
+                </p>
+              );
+            })}
+          </div>
         </div>
-      )),
-    [addToolApprovalResponse, messages],
-  );
+      ) : (
+        <MemoMessageUI
+          parts={message.parts}
+          addToolApprovalResponseAction={addToolApprovalResponse}
+          onFileClickAction={setSelectedFile}
+          onWriteDiffOpenAction={(filePath) => {
+            setSelectedSessionDiffPath(filePath);
+            setIsSessionDiffDrawerOpen(true);
+          }}
+        />
+      )}
+    </div>
+  ));
 
   const sessionDiffs = useMemo(() => buildSessionDiffs(messages), [messages]);
+  const effectiveSelectedSessionDiffPath =
+    selectedSessionDiffPath &&
+    sessionDiffs.some((diff) => diff.filePath === selectedSessionDiffPath)
+      ? selectedSessionDiffPath
+      : sessionDiffs[0]?.filePath;
 
-  // for diffs
-  useEffect(() => {
-    if (sessionDiffs.length === 0) {
-      setSelectedSessionDiffPath(undefined);
-      return;
-    }
+  return (
+    <ChatLayout
+      currentSessionTitle={currentSessionTitle}
+      isActive={isActive}
+      isFileBarOpen={isFileBarOpen}
+      setIsFileBarOpen={setIsFileBarOpen}
+      workspace={workspace}
+      sessionDiffs={sessionDiffs}
+      selectedSessionDiffPath={effectiveSelectedSessionDiffPath}
+      setSelectedSessionDiffPath={setSelectedSessionDiffPath}
+      isSessionDiffDrawerOpen={isSessionDiffDrawerOpen}
+      setIsSessionDiffDrawerOpen={setIsSessionDiffDrawerOpen}
+      selectedFile={selectedFile}
+      setSelectedFile={setSelectedFile}>
+      <div ref={scrollRef} className="relative flex-1 overflow-y-auto px-4 py-6">
+        {messages.length === 0 ? (
+          <div className="flex h-full items-center justify-center">
+            <div className="w-full max-w-md text-center flex flex-col items-center justify-center gap-4">
+              <Code className="size-10 text-primary" />
+              <div className="space-y-1">
+                <h1 className="text-xl font-semibold">Lets build</h1>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="mx-auto w-full max-w-4xl space-y-1 select-text">
+            {renderedMessages}
+            {isActive && <Loader />}
+          </div>
+        )}
+      </div>
+      <div className="bg-background/85 p-2 pt-0">
+        <ChatInput
+          onSend={handleSend}
+          isActive={isActive}
+          isDisabled={!session}
+          stop={stop}
+        />
+      </div>
+    </ChatLayout>
+  );
+}
 
-    if (
-      selectedSessionDiffPath &&
-      sessionDiffs.some((diff) => diff.filePath === selectedSessionDiffPath)
-    ) {
-      return;
-    }
+type ChatLayoutProps = {
+  children: React.ReactNode;
+  currentSessionTitle: string;
+  isActive: boolean;
+  isFileBarOpen: boolean;
+  setIsFileBarOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  workspace: string | null;
+  sessionDiffs: SessionFileDiff[];
+  selectedSessionDiffPath: string | undefined;
+  setSelectedSessionDiffPath: React.Dispatch<
+    React.SetStateAction<string | undefined>
+  >;
+  isSessionDiffDrawerOpen: boolean;
+  setIsSessionDiffDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  selectedFile: string | undefined;
+  setSelectedFile: React.Dispatch<React.SetStateAction<string | undefined>>;
+};
 
-    setSelectedSessionDiffPath(sessionDiffs[0]?.filePath);
-  }, [selectedSessionDiffPath, sessionDiffs]);
-
+function ChatLayout({
+  children,
+  currentSessionTitle,
+  isActive,
+  isFileBarOpen,
+  setIsFileBarOpen,
+  workspace,
+  sessionDiffs,
+  selectedSessionDiffPath,
+  setSelectedSessionDiffPath,
+  isSessionDiffDrawerOpen,
+  setIsSessionDiffDrawerOpen,
+  selectedFile,
+  setSelectedFile,
+}: ChatLayoutProps) {
   return (
     <div className="relative flex h-screen overflow-hidden bg-background text-foreground">
       <div className="pointer-events-none absolute inset-0" />
@@ -244,10 +394,7 @@ function ChatPage() {
               </div>
 
               <div className="flex items-center gap-1 rounded-md">
-                <CommitButton
-                  workspacePath={workspace ?? ""}
-                  isBusy={isActive}
-                />
+                <CommitButton workspacePath={workspace ?? ""} isBusy={isActive} />
                 <Button
                   type="button"
                   variant="outline"
@@ -279,39 +426,7 @@ function ChatPage() {
 
             <div className="flex min-h-0 flex-1">
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                <div
-                  ref={scrollRef}
-                  className="relative flex-1 overflow-y-auto px-4 py-6">
-                  {isSessionLoading ? (
-                    <div className="flex h-full items-center justify-center">
-                      <Loader2 className="size-6 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : messages.length === 0 ? (
-                    <div className="flex h-full items-center justify-center">
-                      <div className="w-full max-w-md text-center flex flex-col items-center justify-center gap-4">
-                        <Code className="size-10 text-primary" />
-                        <div className="space-y-1">
-                          <h1 className="text-xl font-semibold">Lets build</h1>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mx-auto w-full max-w-4xl space-y-1 select-text">
-                      {renderedMessages}
-
-                      {isActive && <Loader />}
-                    </div>
-                  )}
-                </div>
-
-                <div className="bg-background/85 p-2 pt-0">
-                  <ChatInput
-                    onSend={handleSend}
-                    isActive={isActive || isSessionLoading}
-                    isDisabled={!session}
-                    stop={stop}
-                  />
-                </div>
+                {children}
               </div>
               <FileTreeBar rootPath={workspace} isOpen={isFileBarOpen} />
             </div>
@@ -344,5 +459,48 @@ function ChatPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function EmptyChatPage({
+  isFileBarOpen,
+  setIsFileBarOpen,
+}: {
+  isFileBarOpen: boolean;
+  setIsFileBarOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
+  return (
+    <ChatLayout
+      currentSessionTitle="Select a session"
+      isActive={false}
+      isFileBarOpen={isFileBarOpen}
+      setIsFileBarOpen={setIsFileBarOpen}
+      workspace={null}
+      sessionDiffs={[]}
+      selectedSessionDiffPath={undefined}
+      setSelectedSessionDiffPath={() => undefined}
+      isSessionDiffDrawerOpen={false}
+      setIsSessionDiffDrawerOpen={() => undefined}
+      selectedFile={undefined}
+      setSelectedFile={() => undefined}>
+      <div className="relative flex-1 overflow-y-auto px-4 py-6">
+        <div className="flex h-full items-center justify-center">
+          <div className="w-full max-w-md text-center flex flex-col items-center justify-center gap-4">
+            <Code className="size-10 text-primary" />
+            <div className="space-y-1">
+              <h1 className="text-xl font-semibold">Lets build</h1>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="bg-background/85 p-2 pt-0">
+        <ChatInput
+          onSend={async () => {}}
+          isActive={false}
+          isDisabled
+          stop={() => {}}
+        />
+      </div>
+    </ChatLayout>
   );
 }
