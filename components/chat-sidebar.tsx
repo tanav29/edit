@@ -179,7 +179,7 @@ export default function ChatSidebar() {
                         <div
                           key={chat.id}
                           className={cn(
-                            "flex truncate rounded-lg px-3 py-1.5 text-left text-sm transition-all group active:scale-[0.99] ease-out",
+                            "flex truncate rounded-lg px-3 py-1.5 text-left text-sm transition-all group active:scale-[0.99] ease-out relative",
                             isActive
                               ? "border-primary/30 bg-primary/10"
                               : "border-transparent hover:border-border hover:bg-accent/40",
@@ -191,21 +191,11 @@ export default function ChatSidebar() {
                             title={formatLabel(chat.title)}>
                             {formatLabel(chat.title)}
                           </button>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                size="icon-xs"
-                                variant="ghost"
-                                aria-label="Delete session"
-                                onClick={() => handleDeleteChat(chat)}
-                                className="opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100">
-                                <Trash2 className="size-3 text-muted-foreground hover:text-destructive" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="right">
-                              Delete session
-                            </TooltipContent>
-                          </Tooltip>
+                          <button
+                            onClick={() => handleDeleteChat(chat)}
+                            className="opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100 absolute right-0 top-0 bottom-0 px-3 cursor-pointer bg-accent">
+                            <Trash2 className="size-3 text-muted-foreground hover:text-destructive" />
+                          </button>
                         </div>
                       );
                     })}

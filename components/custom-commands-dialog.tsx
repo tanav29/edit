@@ -303,7 +303,14 @@ export function ManageCommandsDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{children}</DialogTrigger>
+      {/*
+        Radix `DialogTrigger` requires its child to accept a forwarded `ref`.
+        Wrapping in a plain element keeps the trigger reliable even when callers
+        pass composite components (e.g. Tooltip).
+      */}
+      <DialogTrigger asChild>
+        <span className="contents">{children}</span>
+      </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Manage Commands</DialogTitle>

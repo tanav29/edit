@@ -129,22 +129,22 @@ export default function CustomCommandButtons({
         );
       })}
 
-      <ManageCommandsDialog
-        commands={commands}
-        onAdd={addCommand}
-        onUpdate={updateCommand}
-        onDelete={deleteCommand}
-        onReset={resetToDefaults}
-      >
-        <Tooltip>
+      <Tooltip>
+        <ManageCommandsDialog
+          commands={commands}
+          onAdd={addCommand}
+          onUpdate={updateCommand}
+          onDelete={deleteCommand}
+          onReset={resetToDefaults}
+        >
           <TooltipTrigger asChild>
             <Button variant="outline" size="icon-sm" aria-label="Manage commands">
               <Settings />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Manage commands</TooltipContent>
-        </Tooltip>
-      </ManageCommandsDialog>
+        </ManageCommandsDialog>
+        <TooltipContent side="bottom">Manage commands</TooltipContent>
+      </Tooltip>
     </div>
   );
 }

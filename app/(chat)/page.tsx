@@ -6,12 +6,7 @@ import {
   lastAssistantMessageIsCompleteWithApprovalResponses,
   type UIMessage,
 } from "ai";
-import {
-  Code,
-  Loader2,
-  PanelRightClose,
-  PanelRightOpen,
-} from "lucide-react";
+import { Code, Loader2, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { memo, Suspense, useEffect, useRef, useState } from "react";
 
 import { useQueryState } from "nuqs";
@@ -131,37 +126,21 @@ function LoadedSessionChat({
 }: LoadedSessionChatProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const {
-    messages,
-    sendMessage,
-    status,
-    addToolApprovalResponse,
-    stop,
-  } = useChat<UIMessage>({
-    id: session,
-    messages: initialMessages,
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      body: {
-        path: workspace ?? "",
-        sessionId: session,
-      },
-    }),
-    onData: () => {},
-    onFinish: async ({ messages: finishedMessages }) => {
-      if (!session || !workspace) {
-        return;
-      }
-
-      await api.store.post({
-        id: session,
-        workspace,
-        messages: finishedMessages,
-      });
-    },
-    sendAutomaticallyWhen:
-      lastAssistantMessageIsCompleteWithApprovalResponses,
-  });
+  const { messages, sendMessage, status, addToolApprovalResponse, stop } =
+    useChat<UIMessage>({
+      id: session,
+      messages: initialMessages,
+      transport: new DefaultChatTransport({
+        api: "/api/chat",
+        body: {
+          id: session,
+          path: workspace ?? "",
+          sessionId: session,
+        },
+      }),
+      sendAutomaticallyWhen:
+        lastAssistantMessageIsCompleteWithApprovalResponses,
+    });
 
   const isActive = status === "streaming" || status === "submitted";
 
@@ -219,7 +198,9 @@ function LoadedSessionChat({
       workspace={workspace}
       selectedFile={selectedFile}
       setSelectedFile={setSelectedFile}>
-      <div ref={scrollRef} className="relative flex-1 overflow-y-auto px-4 py-6">
+      <div
+        ref={scrollRef}
+        className="relative flex-1 overflow-y-auto px-4 py-6">
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <div className="w-full max-w-md text-center flex flex-col items-center justify-center gap-4">
@@ -289,7 +270,10 @@ function ChatLayout({
                   workspacePath={workspace ?? ""}
                   isBusy={isActive}
                 />
-                <CommitButton workspacePath={workspace ?? ""} isBusy={isActive} />
+                <CommitButton
+                  workspacePath={workspace ?? ""}
+                  isBusy={isActive}
+                />
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -304,7 +288,9 @@ function ChatLayout({
                       )}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom">Toggle file tree</TooltipContent>
+                  <TooltipContent side="bottom">
+                    Toggle file tree
+                  </TooltipContent>
                 </Tooltip>
               </div>
             </div>

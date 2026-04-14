@@ -16,6 +16,7 @@ import {
 import { ollama } from "ollama-ai-provider-v2";
 
 import { createTools, DEFAULT_IGNORE_PATTERNS } from "@/lib/tool";
+import { api } from "@/lib/eden";
 
 export const runtime = "nodejs";
 
@@ -57,7 +58,6 @@ export const app = new Elysia({ prefix: "/api" })
         workspace: chat.workspacePath,
         messages: parseMessages(chat.messages),
       };
-
     },
     {
       params: t.Object({
@@ -65,6 +65,9 @@ export const app = new Elysia({ prefix: "/api" })
       }),
     },
   )
+  .get("favicon/:path", async ({ params }) => {
+    const paths = ["favicon.ico", "app/favicon.ico", "src/app/favicon.ico"];
+  })
   .post(
     "/store",
     async ({ body }) => {
@@ -147,6 +150,11 @@ export const app = new Elysia({ prefix: "/api" })
           { status: 400 },
         );
       }
+      api.store.post({
+        id: body.id,
+        messages: body.messages,
+        workspace: body.path,
+      });
 
       const tools = createTools(body.path);
 
@@ -182,10 +190,15 @@ export const app = new Elysia({ prefix: "/api" })
         experimental_transform: smoothStream(),
       });
 
-      return result.toUIMessageStreamResponse();
+      return result.toUIMessageStreamResponse({
+        onFinish: async (messages) => {
+          api.store.post({ id: body.id, messages, workspace: body.path });
+        },
+      });
     },
     {
       body: z.object({
+        id: z.string(),
         messages: z.array(z.any()) as z.ZodType<UIMessage[]>,
         path: z.string(),
       }),
