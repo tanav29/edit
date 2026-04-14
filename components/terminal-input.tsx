@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/eden";
 import { ChevronDown, ChevronUp, Terminal as TerminalIcon } from "lucide-react";
 
 interface TerminalInputProps {
@@ -13,7 +12,7 @@ export function TerminalInput({
   workspacePath,
   isDisabled = false,
 }: TerminalInputProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
   const [input, setInput] = useState("");
   const [output, setOutput] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -36,18 +35,21 @@ export function TerminalInput({
     setOutput((prev) => [...prev, `$ ${cmd}`]);
 
     try {
-      const res = await api.exec.post({
-        path: workspacePath,
-        command: cmd,
+      const res = await fetch("/api/exec", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: workspacePath, command: cmd }),
       });
 
-      if (res.error) {
+      const data = await res.json();
+
+      if (!res.ok) {
         setOutput((prev) => [
           ...prev,
-          `Error: ${res.error.message || res.error}`,
+          `Error: ${data.error || data.message || "Unknown error"}`,
         ]);
       } else {
-        const out = res.data?.output || "";
+        const out = data.output || "";
         if (out) {
           setOutput((prev) => [...prev, out]);
         }
