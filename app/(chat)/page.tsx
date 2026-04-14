@@ -18,6 +18,7 @@ import FileTreeBar from "@/components/file-tree";
 import { FileViewer } from "@/components/file-viewer";
 import Loader from "@/components/loader";
 import MessageUI from "@/components/message";
+import { TerminalInput } from "@/components/terminal-input";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -225,6 +226,9 @@ function LoadedSessionChat({
           stop={stop}
         />
       </div>
+      {workspace && (
+        <TerminalInput workspacePath={workspace} isDisabled={!session} />
+      )}
     </ChatLayout>
   );
 }
@@ -359,6 +363,7 @@ function EmptyChatPage({
           stop={() => {}}
         />
       </div>
+      <TerminalInput workspacePath="" isDisabled />
     </ChatLayout>
   );
 }
