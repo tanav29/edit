@@ -1,17 +1,34 @@
 # Edit
 
-An AI-powered coding assistant with a web interface for interactive code editing.
+<p align="center">
+  <strong>An AI-powered coding assistant with a stunning web interface for interactive code editing.</strong>
+</p>
+
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#getting-started">Getting Started</a> •
+  <a href="#demo">Demo</a> •
+  <a href="#tech-stack">Tech Stack</a>
+</p>
 
 ![Screenshot](screenshot.png)
 
+## Why Edit?
+
+- **Chat-driven development** — Describe what you want in plain English, and watch the AI write your code
+- **Full project awareness** — Browse your entire codebase through an intuitive file tree
+- **Built-in safety** — Review every change before it's applied with the approval system
+- **Local & private** — Runs entirely on your machine with Ollama. No data leaves your computer
+- **Web search enabled** — Debug faster by searching Stack Overflow and docs without leaving the app
+
 ## Features
 
-- **Visual File Tree** - Browse and navigate your project files
-- **Interactive Chat** - Natural language coding assistant with streaming responses
-- **File Operations** - Read, write, and edit files with AI assistance
-- **Web Search** - Search the web for documentation and solutions
-- **Approval System** - Review destructive operations before they execute
-- **Edit History** - Track all changes made during the session
+- **Visual File Tree** — Browse and navigate your project files with a beautiful, responsive explorer
+- **Interactive Chat** — Natural language coding assistant with real-time streaming responses
+- **File Operations** — Read, write, and edit files with AI assistance
+- **Web Search** — Search the web for documentation and solutions
+- **Approval System** — Review destructive operations before they execute
+- **Edit History** — Track and review all changes made during the session
 
 ## Getting Started
 
@@ -20,7 +37,7 @@ An AI-powered coding assistant with a web interface for interactive code editing
 - [Bun](https://bun.sh) (recommended) or Node.js
 - [Ollama](https://ollama.ai) running locally with your preferred model
 
-### Installation
+### Quick Start
 
 ```bash
 # Clone the repository
@@ -36,7 +53,7 @@ bun run dev
 
 Open [http://localhost:3000](http://localhost:3000) and select a workspace directory to begin.
 
-### Optional: Web Search
+### Web Search (Optional)
 
 To enable web search functionality, add a Tavily API key:
 
@@ -47,10 +64,10 @@ echo "TAVILY_API_KEY=your_api_key_here" > .env.local
 
 ## Usage
 
-1. **Select a workspace** - Choose the directory you want to work in
-2. **Chat with the AI** - Ask questions, request edits, or get help debugging
-3. **Review changes** - Approve file modifications before they're applied
-4. **Browse files** - Click files in the tree to view their contents
+1. **Select a workspace** — Choose the directory you want to work in
+2. **Chat with the AI** — Ask questions, request edits, or get help debugging
+3. **Review changes** — Approve file modifications before they're applied
+4. **Browse files** — Click files in the tree to view their contents
 
 ## Project Structure
 
@@ -72,12 +89,12 @@ echo "TAVILY_API_KEY=your_api_key_here" > .env.local
 
 ## Tech Stack
 
-- **Next.js 15** - React framework with App Router
-- **Bun** - Fast JavaScript runtime and package manager
-- **AI SDK** - Streaming AI responses with tool support
-- **Ollama** - Local LLM integration
-- **Tailwind CSS** - Utility-first styling
-- **shadcn/ui** - Accessible UI components
+- **Next.js 15** — React framework with App Router
+- **Bun** — Fast JavaScript runtime and package manager
+- **AI SDK** — Streaming AI responses with tool support
+- **Ollama** — Local LLM integration
+- **Tailwind CSS** — Utility-first styling
+- **shadcn/ui** — Accessible UI components
 
 ## License
 
