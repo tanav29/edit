@@ -173,7 +173,6 @@ export const app = new Elysia({ prefix: "/api" })
             id: body.id,
             messages,
             workspace: body.path,
-            merge: true,
           });
         },
       });

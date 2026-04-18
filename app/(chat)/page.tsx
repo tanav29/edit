@@ -232,7 +232,7 @@ function LoadedSessionChat({
       <div key={message.id || index}>
         {message.role === "user" ? (
           <div className="flex justify-end py-2">
-            <div className="flex items-start gap-2 max-w-[85%]">
+            <div className="flex items-center gap-2 max-w-[85%]">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -240,7 +240,7 @@ function LoadedSessionChat({
                     variant="ghost"
                     size="icon-sm"
                     aria-label="Copy user message"
-                    className="mt-1"
+                    className="text-muted-foreground"
                     onClick={() => {
                       if (
                         !userMessageText ||
@@ -251,7 +251,7 @@ function LoadedSessionChat({
 
                       void navigator.clipboard.writeText(userMessageText);
                     }}>
-                    <Copy className="size-4" />
+                    <Copy className="size-3" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="left">Copy</TooltipContent>

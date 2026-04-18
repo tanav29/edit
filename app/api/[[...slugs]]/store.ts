@@ -1,29 +1,17 @@
 import { db } from "@/db";
 import { chats } from "@/db/schema";
 import { buildStoredMessages } from "@/lib/chat-store-utils";
-import { UIMessage } from "ai";
 import { and, eq } from "drizzle-orm";
-
-function safeParseMessages(raw: unknown): UIMessage[] {
-  if (typeof raw !== "string" || !raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as UIMessage[]) : [];
-  } catch {
-    return [];
-  }
-}
+import { UIMessage } from "ai";
 
 export async function storeMessages({
   id,
   messages,
   workspace,
-  merge = false,
 }: {
   id: string;
   messages: UIMessage[];
   workspace: string;
-  merge?: boolean;
 }) {
   const now = Date.now();
 
@@ -34,9 +22,7 @@ export async function storeMessages({
     .limit(1);
 
   const { nextMessages, title } = buildStoredMessages({
-    existingMessages: safeParseMessages(existing[0]?.messages),
     incomingMessages: messages,
-    merge: merge && existing.length > 0,
   });
 
   const serializedMessages = JSON.stringify(nextMessages);

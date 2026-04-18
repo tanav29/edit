@@ -8,14 +8,14 @@ const userMessage = (id: string, text: string) =>
     id,
     role: "user",
     parts: [{ type: "text", text }],
-  }) as const;
+  }) as UIMessage;
 
 const assistantMessage = (id: string, text: string) =>
   ({
     id,
     role: "assistant",
     parts: [{ type: "text", text }],
-  }) as const;
+  }) as UIMessage;
 
 describe("buildStoredMessages", () => {
   test("normalizes reversed incoming messages before saving", () => {
@@ -26,8 +26,7 @@ describe("buildStoredMessages", () => {
     ];
 
     const result = buildStoredMessages({
-      incomingMessages: incomingMessages as UIMessage[],
-      merge: false,
+      incomingMessages,
     });
 
     expect(result.nextMessages.map((message) => message.id)).toEqual([
@@ -37,30 +36,21 @@ describe("buildStoredMessages", () => {
     expect(result.title).toBe("Please fix history saving");
   });
 
-  test("merges existing and incoming history in chronological order", () => {
-    const existingMessages = [
-      userMessage("u1", "first question"),
-      assistantMessage("a1", "first answer"),
-    ];
-
-    // New pair comes back reversed from stream finish payload.
+  test("rewrites with incoming history and keeps it chronological", () => {
+    // Incoming stream-finish payload can be reversed; saved history should be normalized.
     const incomingMessages = [
       assistantMessage("a2", "second answer"),
       userMessage("u2", "second question"),
     ];
 
     const result = buildStoredMessages({
-      existingMessages: existingMessages as UIMessage[],
-      incomingMessages: incomingMessages as UIMessage[],
-      merge: true,
+      incomingMessages,
     });
 
     expect(result.nextMessages.map((message) => message.id)).toEqual([
-      "u1",
-      "a1",
       "u2",
       "a2",
     ]);
-    expect(result.title).toBe("first question");
+    expect(result.title).toBe("second question");
   });
 });
