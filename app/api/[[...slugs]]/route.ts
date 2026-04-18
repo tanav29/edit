@@ -150,7 +150,7 @@ export const app = new Elysia({ prefix: "/api" })
           { status: 400 },
         );
       }
-      api.store.post({
+      await api.store.post({
         id: body.id,
         messages: body.messages,
         workspace: body.path,
@@ -192,7 +192,7 @@ export const app = new Elysia({ prefix: "/api" })
 
       return result.toUIMessageStreamResponse({
         onFinish: async (messages) => {
-          api.store.post({ id: body.id, messages, workspace: body.path });
+          await api.store.post({ id: body.id, messages, workspace: body.path });
         },
       });
     },

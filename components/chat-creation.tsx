@@ -12,8 +12,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-import { Input } from "./ui/input";
 import { api } from "@/lib/eden";
+import WorkspaceDirectoryPalette from "@/components/workspace-directory-palette";
 
 type ChatCreationProps = {
   refetch?: () => void | Promise<unknown>;
@@ -27,6 +27,12 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
   >(null);
   const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
   const [, setSession] = useQueryState("s");
+
+  function normalizeWorkspacePath(value: string) {
+    const trimmed = value.trim();
+    if (trimmed === "/" || /^[A-Za-z]:[\\/]+$/.test(trimmed)) return trimmed;
+    return trimmed.replace(/[\\/]+$/g, "");
+  }
 
   function handleNewChat(nextWorkspacePath?: string) {
     setNewChatWorkspacePath(nextWorkspacePath ?? "");
@@ -43,7 +49,7 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
   async function handleCreateNewChat(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const nextWorkspacePath = newChatWorkspacePath.trim();
+    const nextWorkspacePath = normalizeWorkspacePath(newChatWorkspacePath);
     if (!nextWorkspacePath || isCreatingNewChat) return;
 
     setIsCreatingNewChat(true);
@@ -112,24 +118,19 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
 
           <form onSubmit={handleCreateNewChat} className="space-y-4">
             <div className="space-y-3">
-              <Input
+              <WorkspaceDirectoryPalette
                 autoFocus
                 value={newChatWorkspacePath}
-                onChange={(event) => {
-                  setNewChatWorkspacePath(event.target.value);
-                  if (newChatWorkspaceError) setNewChatWorkspaceError(null);
-                }}
+                onValueChange={setNewChatWorkspacePath}
+                errorMessage={newChatWorkspaceError}
+                onClearError={() => setNewChatWorkspaceError(null)}
                 placeholder="/absolute/path/to/project"
               />
-              {newChatWorkspaceError ? (
-                <p className="text-sm text-destructive">
-                  {newChatWorkspaceError}
-                </p>
-              ) : (
+              {!newChatWorkspaceError ? (
                 <p className="text-sm text-muted-foreground">
                   Choose where the new chat should run.
                 </p>
-              )}
+              ) : null}
             </div>
 
             <DialogFooter>
