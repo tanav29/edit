@@ -559,7 +559,8 @@ export function createTools(workspacePath: string) {
     }),
 
     bash: tool({
-      description: "Execute a shell command in the workspace",
+      description:
+        "Execute a shell command in the workspace you are already in the workspace dir.",
       inputSchema: zodSchema(
         z.object({
           command: z.string().describe("The command to execute"),

@@ -320,6 +320,7 @@ function LoadedSessionChat({
             dispatchQueue({ type: "delete", index });
           }}
           stop={stop}
+          workspacePath={workspace}
         />
       </div>
       {workspace && (
@@ -459,6 +460,7 @@ function EmptyChatPage({
           queuedMessages={[]}
           onDeleteQueuedMessage={() => {}}
           stop={() => {}}
+          workspacePath={null}
         />
       </div>
       <TerminalInput workspacePath="" isDisabled />
