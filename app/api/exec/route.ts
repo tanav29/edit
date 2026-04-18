@@ -14,12 +14,12 @@ export async function POST(request: Request) {
     if (!path || !command) {
       return NextResponse.json(
         { error: "Path and command are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const fullCommand = `cd "${path}" && ${command}`;
-    const { stdout, stderr } = await execAsync(fullCommand, {
+    const { stdout, stderr } = await execAsync(command, {
+      cwd: path,
       timeout: 120000, // 2 minute timeout
     });
 
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       { error: message, output, exitCode },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
