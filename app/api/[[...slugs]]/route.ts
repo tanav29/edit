@@ -1,18 +1,21 @@
+import { exec, execSync } from "child_process";
 import { db } from "@/db";
 import { chats } from "@/db/schema";
-import { getTitleFromMessages } from "@/lib/utils";
+import { readdir, stat } from "fs/promises";
 import { normalizeMessageOrder } from "@/lib/utils";
 import { parseMessages } from "@/lib/utils";
-import { and, desc, eq } from "drizzle-orm";
+import path from "path";
+import { join } from "path";
+import { promisify } from "util";
+import { desc, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
-import { z } from "zod";
 
 import {
+  generateText,
   convertToModelMessages,
   smoothStream,
   stepCountIs,
   streamText,
-  type UIMessage,
 } from "ai";
 import { ollama } from "ollama-ai-provider-v2";
 
@@ -20,9 +23,327 @@ import { createTools, DEFAULT_IGNORE_PATTERNS } from "@/lib/tool";
 import { api } from "@/lib/eden";
 import { storeMessages } from "./store";
 
+const execAsync = promisify(exec);
+
+interface FileNode {
+  name: string;
+  path: string;
+  type: "file" | "directory";
+  children?: FileNode[];
+}
+
+type ScannedNode = FileNode & {
+  mtimeMs: number;
+};
+
+const IGNORED_PATTERNS = [
+  "node_modules",
+  ".git",
+  ".next",
+  "dist",
+  "build",
+  ".env",
+  ".env.local",
+  ".DS_Store",
+  "coverage",
+];
+
+async function scanDirectory(dirPath: string): Promise<FileNode[]> {
+  const entries = await readdir(dirPath, { withFileTypes: true });
+  const nodePromises = entries.map(
+    async (entry): Promise<ScannedNode | null> => {
+      if (IGNORED_PATTERNS.some((pattern) => entry.name.includes(pattern))) {
+        return null;
+      }
+
+      const fullPath = join(dirPath, entry.name);
+      const info = await stat(fullPath);
+      const isDir = entry.isDirectory();
+
+      return {
+        name: entry.name,
+        path: fullPath,
+        type: isDir ? "directory" : "file",
+        children: isDir ? [] : undefined,
+        mtimeMs: info.mtimeMs,
+      };
+    },
+  );
+
+  const nodes = (await Promise.all(nodePromises)).filter(
+    (node): node is ScannedNode => node !== null,
+  );
+
+  const sorted = nodes.sort((a, b) => {
+    if (a.type !== b.type) {
+      return a.type === "directory" ? -1 : 1;
+    }
+    if (a.mtimeMs !== b.mtimeMs) {
+      return b.mtimeMs - a.mtimeMs;
+    }
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  });
+
+  return sorted.map((node) => ({
+    name: node.name,
+    path: node.path,
+    type: node.type,
+    children: node.children,
+  }));
+}
+
+function runGit(command: string, cwd: string): string {
+  return execSync(command, {
+    cwd,
+    encoding: "utf-8",
+    maxBuffer: 10 * 1024 * 1024,
+  }).trim();
+}
+
+async function generateCommitMessage(diff: string): Promise<string> {
+  try {
+    const result = await generateText({
+      model: ollama("minimax-m2.5:cloud"),
+      prompt: [
+        "Generate one concise git commit message in imperative mood.",
+        "Rules:",
+        "- output only the commit message text",
+        "- max 72 characters",
+        "- no quotes, no markdown, no prefix labels",
+        "- focus on the most meaningful change",
+        "",
+        "Git diff:",
+        diff,
+      ].join("\n"),
+      maxRetries: 1,
+    });
+
+    const message = result.text.replace(/\s+/g, " ").trim();
+
+    if (!message) {
+      return "Update project files";
+    }
+
+    return message.length > 72 ? message.slice(0, 72).trim() : message;
+  } catch {
+    return "Update project files";
+  }
+}
+
 export const runtime = "nodejs";
 
 export const app = new Elysia({ prefix: "/api" })
+  .post(
+    "/exec",
+    async ({ body, set }) => {
+      try {
+        const { path, command } = body;
+
+        if (!path || !command) {
+          set.status = 400;
+          return { error: "Path and command are required" };
+        }
+
+        const { stdout, stderr } = await execAsync(command, {
+          cwd: path,
+          timeout: 120000,
+        });
+
+        const output = stdout || stderr;
+
+        return {
+          output,
+          exitCode: 0,
+        };
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
+
+        const exitCode =
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          typeof (error as { code?: unknown }).code === "number"
+            ? (error as { code: number }).code
+            : 1;
+
+        const output =
+          typeof error === "object" &&
+          error !== null &&
+          "stdout" in error &&
+          typeof (error as { stdout?: unknown }).stdout === "string"
+            ? (error as { stdout: string }).stdout
+            : typeof error === "object" &&
+                error !== null &&
+                "stderr" in error &&
+                typeof (error as { stderr?: unknown }).stderr === "string"
+              ? (error as { stderr: string }).stderr
+              : "";
+
+        set.status = 500;
+        return { error: message, output, exitCode };
+      }
+    },
+    {
+      body: t.Object({
+        path: t.String(),
+        command: t.String(),
+      }),
+    },
+  )
+  .get(
+    "/files",
+    async ({ query, set }) => {
+      try {
+        const reqPath = query.path;
+
+        if (!reqPath) {
+          set.status = 400;
+          return { error: "Path parameter is required" };
+        }
+
+        const file = Bun.file(reqPath);
+        if (await file.exists()) {
+          return {
+            name: reqPath.split("/").pop() || "",
+            path: reqPath,
+            type: "file",
+          };
+        }
+
+        const children = await scanDirectory(reqPath);
+
+        return {
+          name: reqPath.split("/").pop() || "",
+          path: reqPath,
+          type: "directory",
+          children,
+        };
+      } catch (error) {
+        console.error("Error scanning directory:", error);
+        set.status = 500;
+        return { error: "Failed to scan directory" };
+      }
+    },
+    {
+      query: t.Object({
+        path: t.Optional(t.String()),
+      }),
+    },
+  )
+  .get(
+    "/files/content",
+    async ({ query, set }) => {
+      try {
+        const filePath = query.path;
+
+        if (!filePath) {
+          set.status = 400;
+          return { error: "Path parameter is required" };
+        }
+
+        const file = Bun.file(filePath);
+        if (!(await file.exists())) {
+          set.status = 404;
+          return { error: "File not found" };
+        }
+
+        const content = await file.text();
+
+        return {
+          content,
+          filePath,
+        };
+      } catch (error) {
+        console.error("Error reading file:", error);
+        set.status = 500;
+        return { error: "Failed to read file" };
+      }
+    },
+    {
+      query: t.Object({
+        path: t.Optional(t.String()),
+      }),
+    },
+  )
+  .post(
+    "/git/commit",
+    async ({ body, set }) => {
+      try {
+        const workspacePath = body?.path?.trim();
+
+        if (!workspacePath) {
+          set.status = 400;
+          return { error: "Path is required" };
+        }
+
+        let gitRoot = "";
+
+        try {
+          gitRoot = runGit("git rev-parse --show-toplevel", workspacePath);
+        } catch {
+          set.status = 400;
+          return { error: "Selected directory is not a git repository" };
+        }
+
+        const statusBefore = runGit("git status --porcelain", gitRoot);
+
+        if (!statusBefore) {
+          set.status = 400;
+          return { error: "No changes to commit" };
+        }
+
+        const selectedRelativePath =
+          path.relative(gitRoot, workspacePath) || ".";
+
+        if (selectedRelativePath.startsWith("..")) {
+          set.status = 400;
+          return {
+            error: "Selected directory must be inside the git repository",
+          };
+        }
+
+        const pathSpec =
+          selectedRelativePath === "."
+            ? "."
+            : JSON.stringify(selectedRelativePath);
+
+        runGit(`git add -A -- ${pathSpec}`, gitRoot);
+
+        const stagedDiff = runGit(`git diff --cached -- ${pathSpec}`, gitRoot);
+        if (!stagedDiff) {
+          set.status = 400;
+          return { error: "No changes to commit in selected directory" };
+        }
+
+        const commitMessage = await generateCommitMessage(stagedDiff);
+
+        runGit(
+          `git commit -m ${JSON.stringify(commitMessage)} -- ${pathSpec}`,
+          gitRoot,
+        );
+
+        const commitHash = runGit("git rev-parse --short HEAD", gitRoot);
+
+        return {
+          ok: true,
+          message: commitMessage,
+          commitHash,
+          repository: gitRoot,
+        };
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Commit failed";
+        set.status = 500;
+        return { error: message };
+      }
+    },
+    {
+      body: t.Object({
+        path: t.Optional(t.String()),
+      }),
+    },
+  )
   .get("/sessions", async () => {
     const rows = await db
       .select({
@@ -67,9 +388,6 @@ export const app = new Elysia({ prefix: "/api" })
       }),
     },
   )
-  .get("favicon/:path", async ({ params }) => {
-    const paths = ["favicon.ico", "app/favicon.ico", "src/app/favicon.ico"];
-  })
   .post(
     "/store",
     async ({ body }) => {
@@ -113,17 +431,12 @@ export const app = new Elysia({ prefix: "/api" })
   })
   .post(
     "/chat",
-    async ({ body }) => {
-      if (
-        !body ||
-        !Array.isArray(body.messages) ||
-        typeof body.path !== "string"
-      ) {
-        return Response.json(
-          { error: "Invalid request body" },
-          { status: 400 },
-        );
+    async ({ body, set }) => {
+      if (!Array.isArray(body.messages)) {
+        set.status = 400;
+        return { error: "Invalid request body" };
       }
+
       await api.store.post({
         id: body.id,
         messages: body.messages,
@@ -178,10 +491,10 @@ export const app = new Elysia({ prefix: "/api" })
       });
     },
     {
-      body: z.object({
-        id: z.string(),
-        messages: z.array(z.any()) as z.ZodType<UIMessage[]>,
-        path: z.string(),
+      body: t.Object({
+        id: t.String(),
+        messages: t.Array(t.Any()),
+        path: t.String(),
       }),
     },
   );
