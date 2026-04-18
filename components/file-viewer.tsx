@@ -71,7 +71,7 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
   );
 
   return (
-    <div className="flex flex-col h-full bg-background border rounded-xl overflow-hidden shadow-lg">
+    <div className="flex flex-col h-full bg-background border rounded-lg overflow-hidden shadow-lg">
       <div className="absolute right-3 top-3 z-20">
         <Tooltip>
           <TooltipTrigger asChild>
@@ -88,7 +88,7 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
           <TooltipContent side="left">Close</TooltipContent>
         </Tooltip>
       </div>
-      <div className="flex-1 relative">
+      <div className="relative flex-1 w-full min-w-0">
         {loading ? (
           <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
             <Loader2 className="size-6 animate-spin" />
@@ -124,6 +124,7 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
             <MonacoEditor
               key={filePath}
               height="100%"
+              width="100%"
               language={language}
               value={content || ""}
               theme="vs-dark"

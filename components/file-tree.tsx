@@ -95,7 +95,7 @@ export default function FileTreeBar({ rootPath, isOpen }: FileTreeBarProps) {
             onClick={() => setSelectedFile(undefined)}
           />
 
-          <div className="relative z-10 h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-100">
+          <div className="relative z-10 h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-none">
             <FileViewer
               filePath={selectedFile}
               onClose={() => setSelectedFile(undefined)}
