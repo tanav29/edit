@@ -1,8 +1,7 @@
 "use client";
 
 import { Loader2, X } from "lucide-react";
-import dynamic from "next/dynamic";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,16 +10,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-const MonacoEditor = dynamic(
-  () => import("@monaco-editor/react").then((mod) => mod.Editor),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-        Loading editor...
-      </div>
-    ),
-  },
+const MonacoEditor = lazy(() =>
+  import("@monaco-editor/react").then((mod) => ({ default: mod.Editor })),
 );
 
 const LARGE_FILE_BYTES = 200_000;
@@ -60,9 +51,9 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
         `/api/files/content?path=${encodeURIComponent(filePath)}`,
       );
       if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as
-          | { error?: string }
-          | null;
+        const payload = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
         throw new Error(payload?.error || "Failed to load file");
       }
 
@@ -124,24 +115,31 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
             </pre>
           </div>
         ) : (
-          <MonacoEditor
-            key={filePath}
-            height="100%"
-            language={language}
-            value={content || ""}
-            theme="vs-dark"
-            options={{
-              readOnly: true,
-              minimap: { enabled: false },
-              fontSize: 13,
-              fontFamily: "var(--font-geist-mono), monospace",
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-              padding: { top: 16, bottom: 16 },
-              smoothScrolling: false,
-              cursorSmoothCaretAnimation: "off",
-            }}
-          />
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                Loading editor...
+              </div>
+            }>
+            <MonacoEditor
+              key={filePath}
+              height="100%"
+              language={language}
+              value={content || ""}
+              theme="vs-dark"
+              options={{
+                readOnly: true,
+                minimap: { enabled: false },
+                fontSize: 13,
+                fontFamily: "var(--font-geist-mono), monospace",
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                padding: { top: 16, bottom: 16 },
+                smoothScrolling: false,
+                cursorSmoothCaretAnimation: "off",
+              }}
+            />
+          </Suspense>
         )}
       </div>
       <div className="p-2 border-t bg-muted/10">

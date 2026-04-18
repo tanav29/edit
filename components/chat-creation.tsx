@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { nanoid } from "nanoid";
 import { Plus } from "lucide-react";
-import { useQueryState } from "nuqs";
 
 import { Button } from "./ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
@@ -14,6 +13,7 @@ import {
 } from "./ui/dialog";
 import { api } from "@/lib/eden";
 import WorkspaceDirectoryPalette from "@/components/workspace-directory-palette";
+import { useSessionParam } from "@/lib/session-param";
 
 type ChatCreationProps = {
   refetch?: () => void | Promise<unknown>;
@@ -26,7 +26,7 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
     string | null
   >(null);
   const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
-  const [, setSession] = useQueryState("s");
+  const [, setSession] = useSessionParam();
 
   function normalizeWorkspacePath(value: string) {
     const trimmed = value.trim();

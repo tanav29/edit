@@ -5,11 +5,11 @@ import { nanoid } from "nanoid";
 import { ChevronDown, Folder, Plus, Shell, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { useQueryState } from "nuqs";
 import { toast } from "sonner";
 import { api } from "@/lib/eden";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import ChatCreation from "./chat-creation";
+import { useSessionParam } from "@/lib/session-param";
 
 export type ChatSessionSummary = {
   id: string;
@@ -44,7 +44,7 @@ export default function ChatSidebar() {
       return 30 * 1000;
     },
   });
-  const [session, setSession] = useQueryState("s");
+  const [session, setSession] = useSessionParam();
   const [collapsedPaths, setCollapsedPaths] = useState<Record<string, boolean>>(
     {},
   );

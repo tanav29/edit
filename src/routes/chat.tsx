@@ -1,5 +1,3 @@
-"use client";
-
 import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
@@ -13,9 +11,8 @@ import {
   PanelRightClose,
   PanelRightOpen,
 } from "lucide-react";
-import { memo, Suspense, useEffect, useReducer, useRef, useState } from "react";
+import { memo, useEffect, useReducer, useRef, useState } from "react";
 
-import { useQueryState } from "nuqs";
 import ChatSidebar from "@/components/chat-sidebar";
 import ChatInput from "@/components/chat-input";
 import CommitButton from "@/components/commit-button";
@@ -31,6 +28,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useSessionParam } from "@/lib/session-param";
 import { getTitleFromMessages, parseMessages } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 
@@ -57,16 +55,8 @@ function queueReducer(state: string[], action: QueueAction) {
   }
 }
 
-export default function Page() {
-  return (
-    <Suspense fallback={<div className="h-screen bg-background" />}>
-      <ChatPage />
-    </Suspense>
-  );
-}
-
-function ChatPage() {
-  const [session] = useQueryState("s");
+export function ChatRouteComponent() {
+  const [session] = useSessionParam();
   const [isFileBarOpen, setIsFileBarOpen] = useState(true);
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
 

@@ -51,7 +51,12 @@ bun install
 bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and select a workspace directory to begin.
+Open [http://localhost:5173](http://localhost:5173) and select a workspace directory to begin.
+
+The app now runs with:
+
+- Frontend: Vite + TanStack Router on `http://localhost:5173`
+- API: Bun + Elysia on `http://localhost:3001`
 
 ### Web Search (Optional)
 
@@ -71,11 +76,14 @@ echo "TAVILY_API_KEY=your_api_key_here" > .env.local
 
 ## Project Structure
 
-```
-├── app/                    # Next.js app router
-│   ├── api/chat/route.ts  # AI chat API endpoint
-│   ├── layout.tsx         # Root layout
-│   └── page.tsx           # Main interface
+```text
+├── src/                   # Vite frontend
+│   ├── routes/            # TanStack Router routes
+│   ├── router.tsx         # Router tree
+│   └── main.tsx           # Frontend entry
+├── server/                # Elysia API server
+│   ├── app.ts             # API routes
+│   └── index.ts           # Server entry
 ├── components/            # React components
 │   ├── ai-elements/      # AI-specific UI (terminal, shimmer)
 │   ├── ui/               # shadcn/ui components
@@ -89,7 +97,9 @@ echo "TAVILY_API_KEY=your_api_key_here" > .env.local
 
 ## Tech Stack
 
-- **Next.js 15** — React framework with App Router
+- **TanStack Router** — Type-safe client-side routing
+- **Vite** — Frontend dev server and build tool
+- **Elysia** — Type-safe Bun API framework
 - **Bun** — Fast JavaScript runtime and package manager
 - **AI SDK** — Streaming AI responses with tool support
 - **Ollama** — Local LLM integration

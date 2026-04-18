@@ -20,7 +20,6 @@ import {
 import { ollama } from "ollama-ai-provider-v2";
 
 import { createTools, DEFAULT_IGNORE_PATTERNS } from "@/lib/tool";
-import { api } from "@/lib/eden";
 import { storeMessages } from "./store";
 
 const execAsync = promisify(exec);
@@ -129,8 +128,6 @@ async function generateCommitMessage(diff: string): Promise<string> {
     return "Update project files";
   }
 }
-
-export const runtime = "nodejs";
 
 export const app = new Elysia({ prefix: "/api" })
   .post(
@@ -360,7 +357,6 @@ export const app = new Elysia({ prefix: "/api" })
   .get(
     "/store/:id",
     async ({ params }) => {
-      // this api returns the chat session if it exists, otherwise returns null
       if (!params.id) {
         return { ok: false, msg: "sessionId and path are required" };
       }
@@ -391,7 +387,6 @@ export const app = new Elysia({ prefix: "/api" })
   .post(
     "/store",
     async ({ body }) => {
-      // this api creates or updates the chat session
       const messages = Array.isArray(body.messages) ? body.messages : undefined;
 
       if (!body.id || !body.workspace || !messages) {
@@ -437,7 +432,7 @@ export const app = new Elysia({ prefix: "/api" })
         return { error: "Invalid request body" };
       }
 
-      await api.store.post({
+      await storeMessages({
         id: body.id,
         messages: body.messages,
         workspace: body.path,
@@ -478,8 +473,6 @@ export const app = new Elysia({ prefix: "/api" })
       });
 
       return result.toUIMessageStreamResponse({
-        // Provide original messages so `onFinish` returns the full updated array,
-        // not just the new assistant message.
         originalMessages: body.messages,
         onFinish: async ({ messages }) => {
           await storeMessages({
@@ -498,6 +491,3 @@ export const app = new Elysia({ prefix: "/api" })
       }),
     },
   );
-
-export const GET = app.fetch;
-export const POST = app.fetch;

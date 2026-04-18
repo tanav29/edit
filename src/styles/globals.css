@@ -1,8 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@source "../node_modules/streamdown/dist/*.js";
-@source "../node_modules/@streamdown/code/dist/*.js";
+@source "../../node_modules/streamdown/dist/*.js";
+@source "../../node_modules/@streamdown/code/dist/*.js";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -50,6 +50,9 @@
 }
 
 :root {
+  --font-geist-sans:
+    "Geist Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-geist-mono: "Geist Mono", "SFMono-Regular", Menlo, monospace;
   --radius: 0.625rem;
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
