@@ -236,6 +236,7 @@ function getPatchedWriteResult(params: {
   existed: boolean;
   editCount?: number;
   action?: "created" | "edited";
+  includePatch?: boolean;
 }) {
   const {
     workspacePath,
@@ -245,19 +246,22 @@ function getPatchedWriteResult(params: {
     existed,
     editCount = existed ? 1 : 0,
     action = existed ? "edited" : "created",
+    includePatch = true,
   } = params;
   const previousLineCount = existed ? previousContent.split("\n").length : 0;
   const newLineCount = nextContent.split("\n").length;
   const relativePath =
     getRelativeWorkspacePath(workspacePath, fullPath) ||
     path.basename(fullPath);
-  const patch = createTwoFilesPatch(
-    relativePath,
-    relativePath,
-    previousContent,
-    nextContent,
-  );
-  const stats = getPatchStats(patch);
+  const patch = includePatch
+    ? createTwoFilesPatch(
+        relativePath,
+        relativePath,
+        previousContent,
+        nextContent,
+      )
+    : undefined;
+  const stats = patch ? getPatchStats(patch) : { additions: 0, deletions: 0 };
 
   return {
     filePath: fullPath,
@@ -267,7 +271,7 @@ function getPatchedWriteResult(params: {
     newLineCount,
     linesAdded: newLineCount - previousLineCount,
     linesRemoved: stats.deletions,
-    patch,
+    ...(patch ? { patch } : {}),
     patchAdditions: stats.additions,
     patchDeletions: stats.deletions,
     editCount,
@@ -494,6 +498,7 @@ export function createTools(workspacePath: string) {
               nextContent,
               existed: true,
               editCount: replaceAll ? occurrences : 1,
+              includePatch: false,
             }),
             replacements: replaceAll ? occurrences : 1,
             occurrencesFound: occurrences,

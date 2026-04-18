@@ -51,10 +51,6 @@ type MessagePart = {
   output?: unknown;
 };
 
-type FilePathInput = {
-  filePath: string;
-};
-
 function getInputString(input: unknown, key: string): string | undefined {
   if (typeof input !== "object" || input === null) return undefined;
 
@@ -62,23 +58,12 @@ function getInputString(input: unknown, key: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-function hasFilePathInput(input: unknown): input is FilePathInput {
-  return (
-    typeof input === "object" &&
-    input !== null &&
-    "filePath" in input &&
-    typeof (input as FilePathInput).filePath === "string"
-  );
-}
-
 export default function MessageUI({
   parts,
   addToolApprovalResponseAction,
-  onFileClickAction,
 }: {
   parts: MessagePart[];
   addToolApprovalResponseAction: (response: ToolApprovalResponse) => void;
-  onFileClickAction?: (path: string) => void;
 }) {
   useJsonRenderMessage(parts);
 
@@ -136,25 +121,22 @@ export default function MessageUI({
                 key={key}
                 part={part as ToolUIPart}
                 addToolApprovalResponseAction={addToolApprovalResponseAction}
-                onFileClickAction={onFileClickAction}
               />
             );
           }
           return null;
       }
     });
-  }, [parts, addToolApprovalResponseAction, onFileClickAction]);
+  }, [parts, addToolApprovalResponseAction]);
   return <>{renderedParts}</>;
 }
 
 function ToolPart({
   part,
   addToolApprovalResponseAction,
-  onFileClickAction,
 }: {
   part: ToolUIPart;
   addToolApprovalResponseAction: (response: ToolApprovalResponse) => void;
-  onFileClickAction?: (path: string) => void;
 }) {
   const toolName = part.type.replace("tool-", "");
   const filePath = getInputString(part.input, "filePath");
@@ -353,7 +335,7 @@ const ToolOutput = React.memo(function ToolOutput({
     return null;
   }
 
-  if (toolName === "write" || toolName === "edit") {
+  if (toolName === "write") {
     const patch = typeof data.patch === "string" ? data.patch : null;
 
     return (
@@ -361,6 +343,10 @@ const ToolOutput = React.memo(function ToolOutput({
         {patch ? <PatchDiff patch={patch} /> : null}
       </div>
     );
+  }
+
+  if (toolName === "edit") {
+    return null;
   }
 
   if (toolName === "grep") {
@@ -384,7 +370,7 @@ const ToolOutput = React.memo(function ToolOutput({
                 {String(match.relativePath ?? match.filePath)}:
                 {String(match.line)}:{String(match.column)}
               </div>
-              <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs">
+              <pre className="overflow-x-auto whitespace-pre-wrap wrap-break-word font-mono text-xs">
                 {String(match.text ?? "")}
               </pre>
             </div>

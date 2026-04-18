@@ -7,7 +7,7 @@ import {
   type UIMessage,
 } from "ai";
 import { Code, Loader2, PanelRightClose, PanelRightOpen } from "lucide-react";
-import { memo, Suspense, useEffect, useRef, useState } from "react";
+import { memo, Suspense, useEffect, useReducer, useRef, useState } from "react";
 
 import { useQueryState } from "nuqs";
 import ChatSidebar from "@/components/chat-sidebar";
@@ -26,10 +26,30 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getTitleFromMessages, parseMessages } from "@/lib/utils";
-import { api } from "@/lib/eden";
 import { useQuery } from "@tanstack/react-query";
 
 const MemoMessageUI = memo(MessageUI);
+
+type QueueAction =
+  | { type: "enqueue"; value: string }
+  | { type: "dequeue" }
+  | { type: "delete"; index: number }
+  | { type: "reset" };
+
+function queueReducer(state: string[], action: QueueAction) {
+  switch (action.type) {
+    case "enqueue":
+      return [...state, action.value];
+    case "dequeue":
+      return state.slice(1);
+    case "delete":
+      return state.filter((_, index) => index !== action.index);
+    case "reset":
+      return [];
+    default:
+      return state;
+  }
+}
 
 export default function Page() {
   return (
@@ -95,6 +115,7 @@ function ChatPage() {
 
   return (
     <LoadedSessionChat
+      key={session}
       session={session}
       workspace={workspace}
       initialMessages={sessionData?.messages ?? []}
@@ -126,6 +147,8 @@ function LoadedSessionChat({
   setSelectedFile,
 }: LoadedSessionChatProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [queuedMessages, dispatchQueue] = useReducer(queueReducer, []);
+  const isDrainingQueueRef = useRef(false);
 
   const { messages, sendMessage, status, addToolApprovalResponse, stop } =
     useChat<UIMessage>({
@@ -146,12 +169,37 @@ function LoadedSessionChat({
   const isActive = status === "streaming" || status === "submitted";
 
   useEffect(() => {
+    if (isActive || queuedMessages.length === 0 || isDrainingQueueRef.current) {
+      return;
+    }
+
+    const nextMessage = queuedMessages[0];
+    isDrainingQueueRef.current = true;
+    dispatchQueue({ type: "dequeue" });
+
+    void sendMessage({
+      text: nextMessage,
+    })
+      .catch(() => {
+        dispatchQueue({ type: "enqueue", value: nextMessage });
+      })
+      .finally(() => {
+        isDrainingQueueRef.current = false;
+      });
+  }, [isActive, queuedMessages, sendMessage]);
+
+  useEffect(() => {
     if (!scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, isActive]);
 
   async function handleSend(value: string) {
-    if (!value || isActive || !workspace || !session) {
+    if (!value || !workspace || !session) {
+      return;
+    }
+
+    if (isActive) {
+      dispatchQueue({ type: "enqueue", value });
       return;
     }
 
@@ -184,7 +232,6 @@ function LoadedSessionChat({
         <MemoMessageUI
           parts={message.parts}
           addToolApprovalResponseAction={addToolApprovalResponse}
-          onFileClickAction={setSelectedFile}
         />
       )}
     </div>
@@ -223,6 +270,10 @@ function LoadedSessionChat({
           onSend={handleSend}
           isActive={isActive}
           isDisabled={!session}
+          queuedMessages={queuedMessages}
+          onDeleteQueuedMessage={(index) => {
+            dispatchQueue({ type: "delete", index });
+          }}
           stop={stop}
         />
       </div>
@@ -360,6 +411,8 @@ function EmptyChatPage({
           onSend={async () => {}}
           isActive={false}
           isDisabled
+          queuedMessages={[]}
+          onDeleteQueuedMessage={() => {}}
           stop={() => {}}
         />
       </div>
