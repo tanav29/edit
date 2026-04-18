@@ -1,15 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronRight, Folder, Plus, Shell, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Folder,
+  Plus,
+  Shell,
+  Trash2,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useQueryState } from "nuqs";
 import { toast } from "sonner";
 import { api } from "@/lib/eden";
@@ -44,6 +45,9 @@ export default function ChatSidebar() {
     queryFn: async () => {
       const res = await api.sessions.get();
       return res.data;
+    },
+    refetchInterval() {
+      return 30 * 1000;
     },
   });
   const [session, setSession] = useQueryState("s");
@@ -129,17 +133,19 @@ export default function ChatSidebar() {
             No chat history yet.
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-1">
             {groupedSessions.map((group) => {
-              const isCollapsed = Boolean(collapsedPaths[group.path]);
+              // Keep the active session's workspace expanded so deep links don't hide it.
+              const isCollapsed =
+                group.path !== workspacePath &&
+                Boolean(collapsedPaths[group.path]);
 
               return (
                 <div key={group.path} className="space-y-1">
-                  <div className="flex items-center gap-1 px-1">
+                  <div className="flex items-center justify-center gap-1 px-1 hover:bg-accent rounded-lg py-1">
                     <button
-                      type="button"
                       className={cn(
-                        "flex flex-1 items-center gap-1.5 rounded-md px-0 py-1 text-[11px] text-muted-foreground",
+                        "flex flex-1 items-center gap-1.5 rounded-md px-2 my-1 text-[11px] text-muted-foreground justify-center",
                         group.path === workspacePath && "text-foreground",
                       )}
                       onClick={() =>
@@ -149,17 +155,23 @@ export default function ChatSidebar() {
                         }))
                       }
                       aria-expanded={!isCollapsed}>
-                      <ChevronRight
-                        className={cn(
-                          "size-3 transition-transform",
-                          !isCollapsed && "rotate-90",
-                        )}
-                      />
-                      <Folder className="size-3" />
-                      <span
-                        className="truncate flex-1 text-left"
-                        title={group.path}>
-                        {group.path}
+                      <div className="flex items-center justify-center relative w-4">
+                        <Folder
+                          className={cn(
+                            "size-3 transform-all absolute",
+                            isCollapsed ? "opacity-100" : "opacity-0",
+                          )}
+                        />
+                        <ChevronDown
+                          className={cn(
+                            "size-3 transition-all absolute",
+                            isCollapsed ? "opacity-0" : "opacity-100",
+                          )}
+                        />
+                      </div>
+
+                      <span className="truncate flex-1 text-left font-semibold">
+                        {group.path.split("/").filter(Boolean).pop()}
                       </span>
                     </button>
                     <button
@@ -171,34 +183,46 @@ export default function ChatSidebar() {
                     </button>
                   </div>
 
-                  <div className={cn("space-y-1", isCollapsed && "hidden")}>
-                    {group.chats.map((chat) => {
-                      const isActive = chat.id === activeSessionId;
+                  <div
+                    className={cn(
+                      "grid transition-all",
+                      isCollapsed
+                        ? "grid-rows-[0fr] opacity-0"
+                        : "grid-rows-[1fr] opacity-100",
+                      isCollapsed && "pointer-events-none",
+                    )}
+                    aria-hidden={isCollapsed}>
+                    <div className="min-h-0 overflow-hidden">
+                      <div className="space-y-1">
+                        {group.chats.map((chat) => {
+                          const isActive = chat.id === activeSessionId;
 
-                      return (
-                        <div
-                          key={chat.id}
-                          className={cn(
-                            "flex truncate rounded-lg px-3 py-1.5 text-left text-sm transition-all group active:scale-[0.99] ease-out relative",
-                            isActive
-                              ? "border-primary/30 bg-primary/10"
-                              : "border-transparent hover:border-border hover:bg-accent/40",
-                          )}>
-                          <button
-                            type="button"
-                            className="flex-1 text-left cursor-pointer"
-                            onClick={() => setSession(chat.id)}
-                            title={formatLabel(chat.title)}>
-                            {formatLabel(chat.title)}
-                          </button>
-                          <button
-                            onClick={() => handleDeleteChat(chat)}
-                            className="opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100 absolute right-0 top-0 bottom-0 px-3 cursor-pointer bg-accent">
-                            <Trash2 className="size-3 text-muted-foreground hover:text-destructive" />
-                          </button>
-                        </div>
-                      );
-                    })}
+                          return (
+                            <div
+                              key={chat.id}
+                              className={cn(
+                                "flex truncate rounded-lg px-3 py-1.5 text-left text-sm group active:scale-[0.99] relative",
+                                isActive
+                                  ? "border-primary/30 bg-primary/10"
+                                  : "border-transparent hover:border-border hover:bg-accent/40",
+                              )}>
+                              <button
+                                type="button"
+                                className="flex-1 text-left cursor-pointer"
+                                onClick={() => setSession(chat.id)}
+                                title={formatLabel(chat.title)}>
+                                {formatLabel(chat.title)}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteChat(chat)}
+                                className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 absolute delay-200 right-0 top-0 bottom-0 px-3 cursor-pointer">
+                                <Trash2 className="size-3 text-muted-foreground" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
               );

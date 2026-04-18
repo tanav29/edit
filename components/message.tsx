@@ -91,11 +91,15 @@ export default function MessageUI({
           return (
             <div key={key} className="text-md">
               <Streamdown
-                className="chat-markdown my-2"
-                mode="static"
-                plugins={{ code, mermaid, math, cjk }}
+                plugins={{
+                  code: code,
+                  mermaid: mermaid,
+                  math: math,
+                  cjk: cjk,
+                }}
                 shikiTheme={["github-light", "github-dark"]}
                 mermaid={{ config: { theme: "dark" } }}
+                animated
                 isAnimating={part.state === "streaming"}>
                 {part.text}
               </Streamdown>
@@ -229,66 +233,64 @@ function ToolPart({
 
   return (
     <details>
-      <summary className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90 select-none cursor-pointer outline-none">
+      <summary className="flex items-center gap-2 py-3 text-sm animate-fade-in text-muted-foreground/90 select-none cursor-pointer outline-none">
         {part.state == "output-available" ||
         part.state == "output-denied" ||
         part.state == "approval-responded" ||
         part.state == "output-error" ? (
           <>
-            {part.state === "output-error" && <Bug className="size-3" />}
-            {part.state === "output-denied" && <CircleX className="size-3" />}
+            {part.state === "output-error" && <Bug className="size-4" />}
+            {part.state === "output-denied" && <CircleX className="size-4" />}
             {part.state === "output-available" && (
               <>
                 {toolName == "read" && (
                   <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <BookSearch className="size-3" /> Read &quot;
-                    {filePath}
-                    &quot;
+                    <BookSearch className="size-4" /> Read {filePath}
                   </span>
                 )}
                 {toolName == "glob" && (
                   <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <Asterisk className="size-3" /> Glob &quot;{pattern}&quot;
+                    <Asterisk className="size-4" /> Glob {pattern}
                   </span>
                 )}
                 {toolName == "bash" && (
                   <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <TerIcon className="size-3" /> Bash &quot;{command}&quot;
+                    <TerIcon className="size-4" /> Bash {command}
                   </span>
                 )}
                 {toolName == "write" && (
                   <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <PenLine className="size-3" /> Write &quot;{filePath}&quot;
+                    <PenLine className="size-4" /> Write {filePath}
                   </span>
                 )}
                 {toolName == "edit" && (
                   <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <PenLine className="size-3" /> Edit &quot;{filePath}&quot;
+                    <PenLine className="size-4" /> Edit {filePath}
                   </span>
                 )}
                 {toolName == "grep" && (
                   <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <BookSearch className="size-3" /> Grep &quot;{pattern}&quot;
+                    <BookSearch className="size-4" /> Grep {pattern}
                   </span>
                 )}
                 {toolName == "web" && (
                   <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <Globe className="size-3" /> Web &quot;{query}&quot;
+                    <Globe className="size-4" /> Web {query}
                   </span>
                 )}
                 {toolName == "scrape" && (
                   <span className="text-muted-foreground/90 flex gap-1 items-center">
-                    <ScrollText className="size-3" /> Scrape &quot;{url}&quot;
+                    <ScrollText className="size-4" /> Scrape {url}
                   </span>
                 )}
               </>
             )}
             {part.state === "approval-responded" && !part.approval.approved && (
-              <CircleX className="size-3" />
+              <CircleX className="size-4" />
             )}
           </>
         ) : (
-          <Loader2 className="size-3 animate-spin" />
+          <Loader2 className="size-4 animate-spin" />
         )}
         {(() => {
           if (

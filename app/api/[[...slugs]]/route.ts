@@ -17,6 +17,7 @@ import { ollama } from "ollama-ai-provider-v2";
 
 import { createTools, DEFAULT_IGNORE_PATTERNS } from "@/lib/tool";
 import { api } from "@/lib/eden";
+import { storeMessages } from "./store";
 
 export const runtime = "nodejs";
 
@@ -81,39 +82,11 @@ export const app = new Elysia({ prefix: "/api" })
         };
       }
 
-      const now = Date.now();
-      const serializedMessages = JSON.stringify(messages);
-      const title = getTitleFromMessages(messages);
-
-      const existing = await db
-        .select()
-        .from(chats)
-        .where(
-          and(eq(chats.id, body.id), eq(chats.workspacePath, body.workspace)),
-        )
-        .limit(1);
-
-      if (existing.length === 0) {
-        await db.insert(chats).values({
-          id: body.id,
-          workspacePath: body.workspace,
-          title,
-          messages: serializedMessages,
-          createdAt: now,
-          updatedAt: now,
-        });
-      } else {
-        await db
-          .update(chats)
-          .set({
-            title,
-            messages: serializedMessages,
-            updatedAt: now,
-          })
-          .where(
-            and(eq(chats.id, body.id), eq(chats.workspacePath, body.workspace)),
-          );
-      }
+      await storeMessages({
+        id: body.id,
+        messages,
+        workspace: body.workspace,
+      });
 
       return { ok: true };
     },
@@ -159,7 +132,7 @@ export const app = new Elysia({ prefix: "/api" })
       const tools = createTools(body.path);
 
       const result = streamText({
-        model: ollama("minimax-m2.5:cloud"),
+        model: ollama("qwen3.5:0.8b"),
         system: [
           "You are OpenCode, an expert coding assistant.",
           `Working directory: ${body.path}`,
@@ -190,15 +163,23 @@ export const app = new Elysia({ prefix: "/api" })
         experimental_transform: smoothStream(),
       });
 
-      return result.toUIMessageStreamResponse({
-        onFinish: async (messages) => {
-          await api.store.post({ id: body.id, messages, workspace: body.path });
-        },
-      });
-    },
-    {
-      body: z.object({
-        id: z.string(),
+       return result.toUIMessageStreamResponse({
+         // Provide original messages so `onFinish` returns the full updated array,
+         // not just the new assistant message.
+         originalMessages: body.messages,
+         onFinish: async ({ messages }) => {
+           await storeMessages({
+             id: body.id,
+             messages,
+             workspace: body.path,
+             merge: true,
+           });
+         },
+       });
+     },
+     {
+       body: z.object({
+         id: z.string(),
         messages: z.array(z.any()) as z.ZodType<UIMessage[]>,
         path: z.string(),
       }),
