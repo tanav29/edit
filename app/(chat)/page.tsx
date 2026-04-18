@@ -6,7 +6,13 @@ import {
   lastAssistantMessageIsCompleteWithApprovalResponses,
   type UIMessage,
 } from "ai";
-import { Code, Loader2, PanelRightClose, PanelRightOpen } from "lucide-react";
+import {
+  Code,
+  Copy,
+  Loader2,
+  PanelRightClose,
+  PanelRightOpen,
+} from "lucide-react";
 import { memo, Suspense, useEffect, useReducer, useRef, useState } from "react";
 
 import { useQueryState } from "nuqs";
@@ -210,32 +216,71 @@ function LoadedSessionChat({
 
   const currentSessionTitle = getTitleFromMessages(messages);
 
-  const renderedMessages = messages.map((message, index) => (
-    <div key={message.id || index}>
-      {message.role === "user" ? (
-        <div className="flex justify-end py-2">
-          <div className="max-w-[85%] rounded-2xl rounded-br-md border border-primary/25 bg-primary/12 px-4 py-2.5 shadow-sm">
-            {message.parts.map((part, partIndex) => {
-              if (part.type !== "text") return null;
+  const renderedMessages = messages.map((message, index) => {
+    const userMessageText =
+      message.role === "user"
+        ? message.parts
+            .flatMap((part) =>
+              part.type === "text" && typeof part.text === "string"
+                ? [part.text]
+                : [],
+            )
+            .join("\n")
+        : "";
 
-              return (
-                <p
-                  key={partIndex}
-                  className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {part.text}
-                </p>
-              );
-            })}
+    return (
+      <div key={message.id || index}>
+        {message.role === "user" ? (
+          <div className="flex justify-end py-2">
+            <div className="flex items-start gap-2 max-w-[85%]">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Copy user message"
+                    className="mt-1"
+                    onClick={() => {
+                      if (
+                        !userMessageText ||
+                        typeof navigator === "undefined"
+                      ) {
+                        return;
+                      }
+
+                      void navigator.clipboard.writeText(userMessageText);
+                    }}>
+                    <Copy className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left">Copy</TooltipContent>
+              </Tooltip>
+
+              <div className="rounded-2xl rounded-br-md border border-primary/25 bg-primary/12 px-4 py-2.5 shadow-sm">
+                {message.parts.map((part, partIndex) => {
+                  if (part.type !== "text") return null;
+
+                  return (
+                    <p
+                      key={partIndex}
+                      className="whitespace-pre-wrap text-sm leading-relaxed">
+                      {part.text}
+                    </p>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-        </div>
-      ) : (
-        <MemoMessageUI
-          parts={message.parts}
-          addToolApprovalResponseAction={addToolApprovalResponse}
-        />
-      )}
-    </div>
-  ));
+        ) : (
+          <MemoMessageUI
+            parts={message.parts}
+            addToolApprovalResponseAction={addToolApprovalResponse}
+          />
+        )}
+      </div>
+    );
+  });
 
   return (
     <ChatLayout

@@ -142,6 +142,7 @@ function ToolPart({
   const filePath = getInputString(part.input, "filePath");
   const pattern = getInputString(part.input, "pattern");
   const command = getInputString(part.input, "command");
+  const compactCommand = command?.replace(/\s+/g, " ").trim();
   const query = getInputString(part.input, "query");
   const url = getInputString(part.input, "url");
 
@@ -215,7 +216,7 @@ function ToolPart({
 
   return (
     <details>
-      <summary className="flex items-center gap-2 py-3 text-sm animate-fade-in text-muted-foreground/90 select-none cursor-pointer outline-none">
+      <summary className="flex items-center gap-2 py-1 text-sm animate-fade-in text-muted-foreground/90 select-none cursor-pointer outline-none">
         {part.state == "output-available" ||
         part.state == "output-denied" ||
         part.state == "approval-responded" ||
@@ -236,8 +237,13 @@ function ToolPart({
                   </span>
                 )}
                 {toolName == "bash" && (
-                  <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <TerIcon className="size-4" /> Bash {command}
+                  <span className="text-muted-foreground/90 flex items-center gap-1 min-w-0">
+                    <TerIcon className="size-4 shrink-0" />
+                    <span
+                      className="truncate"
+                      title={`bash ${compactCommand ?? ""}`}>
+                      bash {compactCommand}
+                    </span>
                   </span>
                 )}
                 {toolName == "write" && (
@@ -392,7 +398,7 @@ const ToolOutput = React.memo(function ToolOutput({
       : "Ready";
     const mergedOutput = [
       stdout.trimEnd(),
-      stderr.trimEnd() ? `\n[stderr]\n${stderr.trimEnd()}` : "",
+      stderr.trimEnd() ? stderr.trimEnd() : "",
     ]
       .filter(Boolean)
       .join("\n");

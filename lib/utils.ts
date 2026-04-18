@@ -38,3 +38,34 @@ export function parseMessages(raw: string | null | undefined): UIMessage[] {
     return [];
   }
 }
+
+function scoreMessageOrder(messages: UIMessage[]) {
+  if (messages.length <= 1) return 0;
+
+  let score = 0;
+
+  const firstRole = messages[0]?.role;
+  if (firstRole === "user") {
+    score += 2;
+  } else if (firstRole === "assistant") {
+    score -= 2;
+  }
+
+  for (let i = 1; i < messages.length; i += 1) {
+    if (messages[i - 1]?.role !== messages[i]?.role) {
+      score += 1;
+    }
+  }
+
+  return score;
+}
+
+export function normalizeMessageOrder(messages: UIMessage[]): UIMessage[] {
+  if (messages.length <= 1) return messages;
+
+  const reversed = [...messages].reverse();
+  const directScore = scoreMessageOrder(messages);
+  const reversedScore = scoreMessageOrder(reversed);
+
+  return reversedScore > directScore ? reversed : messages;
+}

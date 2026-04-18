@@ -183,7 +183,9 @@ export default function WorkspaceDirectoryPalette({
           }
 
           const parentEntries = await listFromCacheOrFetch(parentDir);
-          const exactMatch = parentEntries.find((entry) => entry.name === fragment);
+          const exactMatch = parentEntries.find(
+            (entry) => entry.name === fragment,
+          );
 
           if (exactMatch) {
             const childEntries = await listFromCacheOrFetch(exactMatch.path);
@@ -304,25 +306,12 @@ export default function WorkspaceDirectoryPalette({
         <p className="text-sm text-destructive">{scanError}</p>
       ) : null}
 
-      <div
-        className={cn(
-          "rounded-md border bg-card/30",
-          !value.trim() && "hidden",
-        )}>
-        <div className="flex items-center justify-between gap-2 border-b px-2 py-1 text-xs text-muted-foreground">
-          <div className="min-w-0 truncate">
-            {contextDir ? `Folders in: ${contextDir}` : "Folders"}
-          </div>
-          {isLoading ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : null}
-        </div>
-
+      <div className={cn(!value.trim() && "hidden")}>
         <div
           ref={listRef}
           role="listbox"
           aria-label="Directory suggestions"
-          className="max-h-56 overflow-y-auto p-1">
+          className="max-h-56 overflow-y-auto">
           {items.length === 0 ? (
             <div className="px-2 py-3 text-xs text-muted-foreground">
               No folders found.

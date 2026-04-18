@@ -41,12 +41,12 @@ export default function ChatInput({
     <div className="max-w-4xl mx-auto">
       <div className="rounded-xl border bg-card p-2 transition-colors focus-within:border-muted-foreground/50">
         {queuedMessages.length > 0 ? (
-          <div className="mb-2 rounded-lg border border-border/40 bg-muted/25 p-2">
+          <div className="mb-2 rounded-lg">
             {queuedMessages.map((message, index) => (
               <div
                 key={`${index}-${message}`}
-                className="flex items-start gap-2 rounded-md border border-border/60 bg-background/80 px-2 py-1 text-[10px] text-muted-foreground not-last:mb-1">
-                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border/60 text-[9px] font-medium">
+                className="flex items-center gap-2 rounded-md border border-border/60 px-2 py-1 text-[10px] text-muted-foreground not-last:mb-1">
+                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center font-medium">
                   {index + 1}
                 </span>
                 <span className="flex-1 wrap-break-word">{message}</span>

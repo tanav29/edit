@@ -111,11 +111,7 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
       </Tooltip>
 
       <Dialog open={isNewChatModalOpen} onOpenChange={handleCloseNewChatModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Select workspace for new session</DialogTitle>
-          </DialogHeader>
-
+        <DialogContent showCloseButton={false}>
           <form onSubmit={handleCreateNewChat} className="space-y-4">
             <div className="space-y-3">
               <WorkspaceDirectoryPalette
@@ -126,18 +122,13 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
                 onClearError={() => setNewChatWorkspaceError(null)}
                 placeholder="/absolute/path/to/project"
               />
-              {!newChatWorkspaceError ? (
-                <p className="text-sm text-muted-foreground">
-                  Choose where the new chat should run.
-                </p>
-              ) : null}
             </div>
 
             <DialogFooter>
               <Button
                 type="submit"
                 disabled={!newChatWorkspacePath.trim() || isCreatingNewChat}>
-                {isCreatingNewChat ? "Creating..." : "Create chat"}
+                {isCreatingNewChat ? "Creating..." : "Create Session"}
               </Button>
             </DialogFooter>
           </form>

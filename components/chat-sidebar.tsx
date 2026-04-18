@@ -1,14 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  ChevronDown,
-  ChevronRight,
-  Folder,
-  Plus,
-  Shell,
-  Trash2,
-} from "lucide-react";
+import { nanoid } from "nanoid";
+import { ChevronDown, Folder, Plus, Shell, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useQueryState } from "nuqs";
@@ -108,8 +102,27 @@ export default function ChatSidebar() {
     }
   }
 
-  function onNewChat(nextWorkspacePath?: string) {
-    console.log(nextWorkspacePath);
+  async function onNewChat(nextWorkspacePath?: string) {
+    const workspace = nextWorkspacePath?.trim();
+    if (!workspace || workspace === "Unknown workspace") {
+      toast("Invalid workspace path");
+      return;
+    }
+
+    const newSessionId = nanoid();
+    const res = await api.store.post({
+      id: newSessionId,
+      workspace,
+      messages: [],
+    });
+
+    if (!res.data?.ok) {
+      toast("Failed to create chat");
+      return;
+    }
+
+    await queryClient.invalidateQueries({ queryKey: ["sessions"] });
+    await setSession(newSessionId);
   }
 
   return (

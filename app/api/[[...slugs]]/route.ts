@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { chats } from "@/db/schema";
 import { getTitleFromMessages } from "@/lib/utils";
+import { normalizeMessageOrder } from "@/lib/utils";
 import { parseMessages } from "@/lib/utils";
 import { and, desc, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
@@ -57,7 +58,7 @@ export const app = new Elysia({ prefix: "/api" })
       return {
         ...chat,
         workspace: chat.workspacePath,
-        messages: parseMessages(chat.messages),
+        messages: normalizeMessageOrder(parseMessages(chat.messages)),
       };
     },
     {
@@ -132,7 +133,7 @@ export const app = new Elysia({ prefix: "/api" })
       const tools = createTools(body.path);
 
       const result = streamText({
-        model: ollama("qwen3.5:0.8b"),
+        model: ollama("kimi-k2.5:cloud"),
         system: [
           "You are OpenCode, an expert coding assistant.",
           `Working directory: ${body.path}`,
@@ -163,23 +164,23 @@ export const app = new Elysia({ prefix: "/api" })
         experimental_transform: smoothStream(),
       });
 
-       return result.toUIMessageStreamResponse({
-         // Provide original messages so `onFinish` returns the full updated array,
-         // not just the new assistant message.
-         originalMessages: body.messages,
-         onFinish: async ({ messages }) => {
-           await storeMessages({
-             id: body.id,
-             messages,
-             workspace: body.path,
-             merge: true,
-           });
-         },
-       });
-     },
-     {
-       body: z.object({
-         id: z.string(),
+      return result.toUIMessageStreamResponse({
+        // Provide original messages so `onFinish` returns the full updated array,
+        // not just the new assistant message.
+        originalMessages: body.messages,
+        onFinish: async ({ messages }) => {
+          await storeMessages({
+            id: body.id,
+            messages,
+            workspace: body.path,
+            merge: true,
+          });
+        },
+      });
+    },
+    {
+      body: z.object({
+        id: z.string(),
         messages: z.array(z.any()) as z.ZodType<UIMessage[]>,
         path: z.string(),
       }),
