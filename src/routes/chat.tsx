@@ -1,15 +1,18 @@
-"use client";
-
 import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
   type UIMessage,
 } from "ai";
-import { Code, Loader2, PanelRightClose, PanelRightOpen } from "lucide-react";
-import { memo, Suspense, useEffect, useRef, useState } from "react";
+import {
+  Code,
+  Copy,
+  Loader2,
+  PanelRightClose,
+  PanelRightOpen,
+} from "lucide-react";
+import { memo, useEffect, useReducer, useRef, useState } from "react";
 
-import { useQueryState } from "nuqs";
 import ChatSidebar from "@/components/chat-sidebar";
 import ChatInput from "@/components/chat-input";
 import CommitButton from "@/components/commit-button";
@@ -25,22 +28,35 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useSessionParam } from "@/lib/session-param";
 import { getTitleFromMessages, parseMessages } from "@/lib/utils";
-import { api } from "@/lib/eden";
 import { useQuery } from "@tanstack/react-query";
 
 const MemoMessageUI = memo(MessageUI);
 
-export default function Page() {
-  return (
-    <Suspense fallback={<div className="h-screen bg-background" />}>
-      <ChatPage />
-    </Suspense>
-  );
+type QueueAction =
+  | { type: "enqueue"; value: string }
+  | { type: "dequeue" }
+  | { type: "delete"; index: number }
+  | { type: "reset" };
+
+function queueReducer(state: string[], action: QueueAction) {
+  switch (action.type) {
+    case "enqueue":
+      return [...state, action.value];
+    case "dequeue":
+      return state.slice(1);
+    case "delete":
+      return state.filter((_, index) => index !== action.index);
+    case "reset":
+      return [];
+    default:
+      return state;
+  }
 }
 
-function ChatPage() {
-  const [session] = useQueryState("s");
+export function ChatRouteComponent() {
+  const [session] = useSessionParam();
   const [isFileBarOpen, setIsFileBarOpen] = useState(true);
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
 
@@ -95,6 +111,7 @@ function ChatPage() {
 
   return (
     <LoadedSessionChat
+      key={session}
       session={session}
       workspace={workspace}
       initialMessages={sessionData?.messages ?? []}
@@ -126,6 +143,8 @@ function LoadedSessionChat({
   setSelectedFile,
 }: LoadedSessionChatProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [queuedMessages, dispatchQueue] = useReducer(queueReducer, []);
+  const isDrainingQueueRef = useRef(false);
 
   const { messages, sendMessage, status, addToolApprovalResponse, stop } =
     useChat<UIMessage>({
@@ -146,12 +165,37 @@ function LoadedSessionChat({
   const isActive = status === "streaming" || status === "submitted";
 
   useEffect(() => {
+    if (isActive || queuedMessages.length === 0 || isDrainingQueueRef.current) {
+      return;
+    }
+
+    const nextMessage = queuedMessages[0];
+    isDrainingQueueRef.current = true;
+    dispatchQueue({ type: "dequeue" });
+
+    void sendMessage({
+      text: nextMessage,
+    })
+      .catch(() => {
+        dispatchQueue({ type: "enqueue", value: nextMessage });
+      })
+      .finally(() => {
+        isDrainingQueueRef.current = false;
+      });
+  }, [isActive, queuedMessages, sendMessage]);
+
+  useEffect(() => {
     if (!scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, isActive]);
 
   async function handleSend(value: string) {
-    if (!value || isActive || !workspace || !session) {
+    if (!value || !workspace || !session) {
+      return;
+    }
+
+    if (isActive) {
+      dispatchQueue({ type: "enqueue", value });
       return;
     }
 
@@ -162,33 +206,71 @@ function LoadedSessionChat({
 
   const currentSessionTitle = getTitleFromMessages(messages);
 
-  const renderedMessages = messages.map((message, index) => (
-    <div key={message.id || index}>
-      {message.role === "user" ? (
-        <div className="flex justify-end py-2">
-          <div className="max-w-[85%] rounded-2xl rounded-br-md border border-primary/25 bg-primary/12 px-4 py-2.5 shadow-sm">
-            {message.parts.map((part, partIndex) => {
-              if (part.type !== "text") return null;
+  const renderedMessages = messages.map((message, index) => {
+    const userMessageText =
+      message.role === "user"
+        ? message.parts
+            .flatMap((part) =>
+              part.type === "text" && typeof part.text === "string"
+                ? [part.text]
+                : [],
+            )
+            .join("\n")
+        : "";
 
-              return (
-                <p
-                  key={partIndex}
-                  className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {part.text}
-                </p>
-              );
-            })}
+    return (
+      <div key={message.id || index}>
+        {message.role === "user" ? (
+          <div className="flex justify-end py-2">
+            <div className="flex items-center gap-2 max-w-[85%]">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Copy user message"
+                    className="text-muted-foreground"
+                    onClick={() => {
+                      if (
+                        !userMessageText ||
+                        typeof navigator === "undefined"
+                      ) {
+                        return;
+                      }
+
+                      void navigator.clipboard.writeText(userMessageText);
+                    }}>
+                    <Copy className="size-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left">Copy</TooltipContent>
+              </Tooltip>
+
+              <div className="rounded-2xl rounded-br-md border border-primary/25 bg-primary/12 px-4 py-2.5 shadow-sm">
+                {message.parts.map((part, partIndex) => {
+                  if (part.type !== "text") return null;
+
+                  return (
+                    <p
+                      key={partIndex}
+                      className="whitespace-pre-wrap text-sm leading-relaxed">
+                      {part.text}
+                    </p>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-        </div>
-      ) : (
-        <MemoMessageUI
-          parts={message.parts}
-          addToolApprovalResponseAction={addToolApprovalResponse}
-          onFileClickAction={setSelectedFile}
-        />
-      )}
-    </div>
-  ));
+        ) : (
+          <MemoMessageUI
+            parts={message.parts}
+            addToolApprovalResponseAction={addToolApprovalResponse}
+          />
+        )}
+      </div>
+    );
+  });
 
   return (
     <ChatLayout
@@ -223,7 +305,12 @@ function LoadedSessionChat({
           onSend={handleSend}
           isActive={isActive}
           isDisabled={!session}
+          queuedMessages={queuedMessages}
+          onDeleteQueuedMessage={(index) => {
+            dispatchQueue({ type: "delete", index });
+          }}
           stop={stop}
+          workspacePath={workspace}
         />
       </div>
       {workspace && (
@@ -317,7 +404,7 @@ function ChatLayout({
             className="absolute inset-0"
             onClick={() => setSelectedFile(undefined)}
           />
-          <div className="relative z-10 h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-6xl">
+          <div className="relative z-10 h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-none">
             <FileViewer
               filePath={selectedFile}
               onClose={() => setSelectedFile(undefined)}
@@ -360,7 +447,10 @@ function EmptyChatPage({
           onSend={async () => {}}
           isActive={false}
           isDisabled
+          queuedMessages={[]}
+          onDeleteQueuedMessage={() => {}}
           stop={() => {}}
+          workspacePath={null}
         />
       </div>
       <TerminalInput workspacePath="" isDisabled />

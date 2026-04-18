@@ -51,10 +51,6 @@ type MessagePart = {
   output?: unknown;
 };
 
-type FilePathInput = {
-  filePath: string;
-};
-
 function getInputString(input: unknown, key: string): string | undefined {
   if (typeof input !== "object" || input === null) return undefined;
 
@@ -62,23 +58,12 @@ function getInputString(input: unknown, key: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-function hasFilePathInput(input: unknown): input is FilePathInput {
-  return (
-    typeof input === "object" &&
-    input !== null &&
-    "filePath" in input &&
-    typeof (input as FilePathInput).filePath === "string"
-  );
-}
-
 export default function MessageUI({
   parts,
   addToolApprovalResponseAction,
-  onFileClickAction,
 }: {
   parts: MessagePart[];
   addToolApprovalResponseAction: (response: ToolApprovalResponse) => void;
-  onFileClickAction?: (path: string) => void;
 }) {
   useJsonRenderMessage(parts);
 
@@ -91,11 +76,15 @@ export default function MessageUI({
           return (
             <div key={key} className="text-md">
               <Streamdown
-                className="chat-markdown my-2"
-                mode="static"
-                plugins={{ code, mermaid, math, cjk }}
+                plugins={{
+                  code: code,
+                  mermaid: mermaid,
+                  math: math,
+                  cjk: cjk,
+                }}
                 shikiTheme={["github-light", "github-dark"]}
                 mermaid={{ config: { theme: "dark" } }}
+                animated
                 isAnimating={part.state === "streaming"}>
                 {part.text}
               </Streamdown>
@@ -132,30 +121,28 @@ export default function MessageUI({
                 key={key}
                 part={part as ToolUIPart}
                 addToolApprovalResponseAction={addToolApprovalResponseAction}
-                onFileClickAction={onFileClickAction}
               />
             );
           }
           return null;
       }
     });
-  }, [parts, addToolApprovalResponseAction, onFileClickAction]);
+  }, [parts, addToolApprovalResponseAction]);
   return <>{renderedParts}</>;
 }
 
 function ToolPart({
   part,
   addToolApprovalResponseAction,
-  onFileClickAction,
 }: {
   part: ToolUIPart;
   addToolApprovalResponseAction: (response: ToolApprovalResponse) => void;
-  onFileClickAction?: (path: string) => void;
 }) {
   const toolName = part.type.replace("tool-", "");
   const filePath = getInputString(part.input, "filePath");
   const pattern = getInputString(part.input, "pattern");
   const command = getInputString(part.input, "command");
+  const compactCommand = command?.replace(/\s+/g, " ").trim();
   const query = getInputString(part.input, "query");
   const url = getInputString(part.input, "url");
 
@@ -229,66 +216,69 @@ function ToolPart({
 
   return (
     <details>
-      <summary className="flex items-center gap-2 text-xs py-0.5 animate-fade-in text-muted-foreground/90 select-none cursor-pointer outline-none">
+      <summary className="flex items-center gap-2 py-1 text-sm animate-fade-in text-muted-foreground/90 select-none cursor-pointer outline-none">
         {part.state == "output-available" ||
         part.state == "output-denied" ||
         part.state == "approval-responded" ||
         part.state == "output-error" ? (
           <>
-            {part.state === "output-error" && <Bug className="size-3" />}
-            {part.state === "output-denied" && <CircleX className="size-3" />}
+            {part.state === "output-error" && <Bug className="size-4" />}
+            {part.state === "output-denied" && <CircleX className="size-4" />}
             {part.state === "output-available" && (
               <>
                 {toolName == "read" && (
                   <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <BookSearch className="size-3" /> Read &quot;
-                    {filePath}
-                    &quot;
+                    <BookSearch className="size-4" /> Read {filePath}
                   </span>
                 )}
                 {toolName == "glob" && (
                   <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <Asterisk className="size-3" /> Glob &quot;{pattern}&quot;
+                    <Asterisk className="size-4" /> Glob {pattern}
                   </span>
                 )}
                 {toolName == "bash" && (
-                  <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <TerIcon className="size-3" /> Bash &quot;{command}&quot;
+                  <span className="text-muted-foreground/90 flex items-center gap-1 min-w-0">
+                    <TerIcon className="size-4 shrink-0" />
+                    <span
+                      className="truncate"
+                      title={`bash ${compactCommand ?? ""}`}>
+                      bash {compactCommand}
+                    </span>
                   </span>
                 )}
                 {toolName == "write" && (
                   <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <PenLine className="size-3" /> Write &quot;{filePath}&quot;
+                    <PenLine className="size-4" /> Write {filePath}
                   </span>
                 )}
                 {toolName == "edit" && (
                   <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <PenLine className="size-3" /> Edit &quot;{filePath}&quot;
+                    <PenLine className="size-4" /> Edit {filePath}
                   </span>
                 )}
                 {toolName == "grep" && (
                   <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <BookSearch className="size-3" /> Grep &quot;{pattern}&quot;
+                    <BookSearch className="size-4" /> Grep {pattern}
                   </span>
                 )}
                 {toolName == "web" && (
                   <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <Globe className="size-3" /> Web &quot;{query}&quot;
+                    <Globe className="size-4" /> Web {query}
                   </span>
                 )}
                 {toolName == "scrape" && (
                   <span className="text-muted-foreground/90 flex gap-1 items-center">
-                    <ScrollText className="size-3" /> Scrape &quot;{url}&quot;
+                    <ScrollText className="size-4" /> Scrape {url}
                   </span>
                 )}
               </>
             )}
             {part.state === "approval-responded" && !part.approval.approved && (
-              <CircleX className="size-3" />
+              <CircleX className="size-4" />
             )}
           </>
         ) : (
-          <Loader2 className="size-3 animate-spin" />
+          <Loader2 className="size-4 animate-spin" />
         )}
         {(() => {
           if (
@@ -351,7 +341,7 @@ const ToolOutput = React.memo(function ToolOutput({
     return null;
   }
 
-  if (toolName === "write" || toolName === "edit") {
+  if (toolName === "write") {
     const patch = typeof data.patch === "string" ? data.patch : null;
 
     return (
@@ -359,6 +349,10 @@ const ToolOutput = React.memo(function ToolOutput({
         {patch ? <PatchDiff patch={patch} /> : null}
       </div>
     );
+  }
+
+  if (toolName === "edit") {
+    return null;
   }
 
   if (toolName === "grep") {
@@ -382,7 +376,7 @@ const ToolOutput = React.memo(function ToolOutput({
                 {String(match.relativePath ?? match.filePath)}:
                 {String(match.line)}:{String(match.column)}
               </div>
-              <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs">
+              <pre className="overflow-x-auto whitespace-pre-wrap wrap-break-word font-mono text-xs">
                 {String(match.text ?? "")}
               </pre>
             </div>
@@ -404,7 +398,7 @@ const ToolOutput = React.memo(function ToolOutput({
       : "Ready";
     const mergedOutput = [
       stdout.trimEnd(),
-      stderr.trimEnd() ? `\n[stderr]\n${stderr.trimEnd()}` : "",
+      stderr.trimEnd() ? stderr.trimEnd() : "",
     ]
       .filter(Boolean)
       .join("\n");

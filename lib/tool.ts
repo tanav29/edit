@@ -200,7 +200,10 @@ function getPatchStats(patch: string): {
   return { additions, deletions };
 }
 
-function resolveWorkspacePath(workspacePath: string, targetPath?: string): string {
+function resolveWorkspacePath(
+  workspacePath: string,
+  targetPath?: string,
+): string {
   const workspaceRoot = path.resolve(workspacePath);
   const resolvedTarget = targetPath
     ? path.resolve(workspaceRoot, targetPath)
@@ -218,7 +221,10 @@ function resolveWorkspacePath(workspacePath: string, targetPath?: string): strin
   return resolvedTarget;
 }
 
-function getRelativeWorkspacePath(workspacePath: string, targetPath: string): string {
+function getRelativeWorkspacePath(
+  workspacePath: string,
+  targetPath: string,
+): string {
   return path.relative(path.resolve(workspacePath), targetPath) || ".";
 }
 
@@ -230,6 +236,7 @@ function getPatchedWriteResult(params: {
   existed: boolean;
   editCount?: number;
   action?: "created" | "edited";
+  includePatch?: boolean;
 }) {
   const {
     workspacePath,
@@ -239,18 +246,22 @@ function getPatchedWriteResult(params: {
     existed,
     editCount = existed ? 1 : 0,
     action = existed ? "edited" : "created",
+    includePatch = true,
   } = params;
   const previousLineCount = existed ? previousContent.split("\n").length : 0;
   const newLineCount = nextContent.split("\n").length;
   const relativePath =
-    getRelativeWorkspacePath(workspacePath, fullPath) || path.basename(fullPath);
-  const patch = createTwoFilesPatch(
-    relativePath,
-    relativePath,
-    previousContent,
-    nextContent,
-  );
-  const stats = getPatchStats(patch);
+    getRelativeWorkspacePath(workspacePath, fullPath) ||
+    path.basename(fullPath);
+  const patch = includePatch
+    ? createTwoFilesPatch(
+        relativePath,
+        relativePath,
+        previousContent,
+        nextContent,
+      )
+    : undefined;
+  const stats = patch ? getPatchStats(patch) : { additions: 0, deletions: 0 };
 
   return {
     filePath: fullPath,
@@ -260,7 +271,7 @@ function getPatchedWriteResult(params: {
     newLineCount,
     linesAdded: newLineCount - previousLineCount,
     linesRemoved: stats.deletions,
-    patch,
+    ...(patch ? { patch } : {}),
     patchAdditions: stats.additions,
     patchDeletions: stats.deletions,
     editCount,
@@ -384,7 +395,10 @@ export function createTools(workspacePath: string) {
           const totalLines = lines.length;
           const requestedLimit = limit ?? DEFAULT_READ_LINE_LIMIT;
           const startOffset = offset ? offset - 1 : 0;
-          const endOffset = Math.min(startOffset + requestedLimit, lines.length);
+          const endOffset = Math.min(
+            startOffset + requestedLimit,
+            lines.length,
+          );
           const selectedLines = lines.slice(startOffset, endOffset);
 
           return {
@@ -444,10 +458,7 @@ export function createTools(workspacePath: string) {
       inputSchema: zodSchema(
         z.object({
           filePath: z.string().describe("The path to the file to edit"),
-          oldText: z
-            .string()
-            .min(1)
-            .describe("Exact existing text to replace"),
+          oldText: z.string().min(1).describe("Exact existing text to replace"),
           newText: z.string().describe("Replacement text"),
           replaceAll: z
             .boolean()
@@ -487,6 +498,7 @@ export function createTools(workspacePath: string) {
               nextContent,
               existed: true,
               editCount: replaceAll ? occurrences : 1,
+              includePatch: false,
             }),
             replacements: replaceAll ? occurrences : 1,
             occurrencesFound: occurrences,
@@ -502,7 +514,10 @@ export function createTools(workspacePath: string) {
         "Search file contents in the workspace. Use this before reading or editing when you need to find symbols, strings, or code patterns.",
       inputSchema: zodSchema(
         z.object({
-          pattern: z.string().min(1).describe("Text or regex pattern to search"),
+          pattern: z
+            .string()
+            .min(1)
+            .describe("Text or regex pattern to search"),
           glob: z
             .string()
             .optional()
@@ -525,7 +540,10 @@ export function createTools(workspacePath: string) {
             maxResults,
           }).map((match) => ({
             ...match,
-            relativePath: getRelativeWorkspacePath(workspacePath, match.filePath),
+            relativePath: getRelativeWorkspacePath(
+              workspacePath,
+              match.filePath,
+            ),
           }));
 
           return {
@@ -541,7 +559,8 @@ export function createTools(workspacePath: string) {
     }),
 
     bash: tool({
-      description: "Execute a shell command in the workspace",
+      description:
+        "Execute a shell command in the workspace you are already in the workspace dir.",
       inputSchema: zodSchema(
         z.object({
           command: z.string().describe("The command to execute"),
@@ -566,7 +585,8 @@ export function createTools(workspacePath: string) {
 
           const stdout = result.stdout ?? "";
           const stderr = result.stderr ?? "";
-          const exitCode = typeof result.status === "number" ? result.status : -1;
+          const exitCode =
+            typeof result.status === "number" ? result.status : -1;
 
           return {
             stdout,
@@ -591,7 +611,7 @@ export function createTools(workspacePath: string) {
           };
         }
       },
-      needsApproval: true,
+      // needsApproval: true,
     }),
 
     web: tool({

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { nanoid } from "nanoid";
 import { Plus } from "lucide-react";
-import { useQueryState } from "nuqs";
 
 import { Button } from "./ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
@@ -12,8 +11,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-import { Input } from "./ui/input";
 import { api } from "@/lib/eden";
+import WorkspaceDirectoryPalette from "@/components/workspace-directory-palette";
+import { useSessionParam } from "@/lib/session-param";
 
 type ChatCreationProps = {
   refetch?: () => void | Promise<unknown>;
@@ -26,7 +26,13 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
     string | null
   >(null);
   const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
-  const [, setSession] = useQueryState("s");
+  const [, setSession] = useSessionParam();
+
+  function normalizeWorkspacePath(value: string) {
+    const trimmed = value.trim();
+    if (trimmed === "/" || /^[A-Za-z]:[\\/]+$/.test(trimmed)) return trimmed;
+    return trimmed.replace(/[\\/]+$/g, "");
+  }
 
   function handleNewChat(nextWorkspacePath?: string) {
     setNewChatWorkspacePath(nextWorkspacePath ?? "");
@@ -43,7 +49,7 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
   async function handleCreateNewChat(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const nextWorkspacePath = newChatWorkspacePath.trim();
+    const nextWorkspacePath = normalizeWorkspacePath(newChatWorkspacePath);
     if (!nextWorkspacePath || isCreatingNewChat) return;
 
     setIsCreatingNewChat(true);
@@ -105,38 +111,24 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
       </Tooltip>
 
       <Dialog open={isNewChatModalOpen} onOpenChange={handleCloseNewChatModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Select workspace for new session</DialogTitle>
-          </DialogHeader>
-
+        <DialogContent showCloseButton={false}>
           <form onSubmit={handleCreateNewChat} className="space-y-4">
             <div className="space-y-3">
-              <Input
+              <WorkspaceDirectoryPalette
                 autoFocus
                 value={newChatWorkspacePath}
-                onChange={(event) => {
-                  setNewChatWorkspacePath(event.target.value);
-                  if (newChatWorkspaceError) setNewChatWorkspaceError(null);
-                }}
+                onValueChange={setNewChatWorkspacePath}
+                errorMessage={newChatWorkspaceError}
+                onClearError={() => setNewChatWorkspaceError(null)}
                 placeholder="/absolute/path/to/project"
               />
-              {newChatWorkspaceError ? (
-                <p className="text-sm text-destructive">
-                  {newChatWorkspaceError}
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Choose where the new chat should run.
-                </p>
-              )}
             </div>
 
             <DialogFooter>
               <Button
                 type="submit"
                 disabled={!newChatWorkspacePath.trim() || isCreatingNewChat}>
-                {isCreatingNewChat ? "Creating..." : "Create chat"}
+                {isCreatingNewChat ? "Creating..." : "Create Session"}
               </Button>
             </DialogFooter>
           </form>

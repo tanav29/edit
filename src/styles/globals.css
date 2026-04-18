@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@source "../../node_modules/streamdown/dist/*.js";
+@source "../../node_modules/@streamdown/code/dist/*.js";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -48,6 +50,9 @@
 }
 
 :root {
+  --font-geist-sans:
+    "Geist Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-geist-mono: "Geist Mono", "SFMono-Regular", Menlo, monospace;
   --radius: 0.625rem;
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -186,61 +191,6 @@
 }
 .thinking-dot:nth-child(3) {
   animation-delay: 0.32s;
-}
-
-/* ── Streamdown prose styling ─────────────────────────────── */
-.chat-markdown {
-  line-height: 1;
-  word-break: break-word;
-}
-
-.chat-markdown pre {
-  overflow-x: auto;
-  font-family: var(--font-geist-mono), monospace;
-}
-
-.chat-markdown code:not(pre code) {
-  background: oklch(0.2 0.01 260);
-  padding: 0.15em 0.4em;
-  border-radius: 4px;
-  font-size: 0.88em;
-  font-family: var(--font-geist-mono), monospace;
-}
-
-.chat-markdown ul,
-.chat-markdown ol {
-  list-style-type: circle;
-  padding-left: 1.5em;
-  margin: 0.5em 0;
-}
-
-.chat-markdown li {
-  margin-bottom: 0.25em;
-}
-
-.chat-markdown blockquote {
-  border-left: 3px solid oklch(0.7 0.15 250);
-  padding-left: 1em;
-  margin: 0.75em 0;
-  color: oklch(0.7 0.01 260);
-}
-
-.chat-markdown h1,
-.chat-markdown h2,
-.chat-markdown h3 {
-  font-weight: 600;
-  margin-top: 1em;
-  margin-bottom: 0.5em;
-}
-
-.chat-markdown a {
-  color: oklch(0.7 0.15 250);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.chat-markdown a:hover {
-  color: oklch(0.8 0.15 250);
 }
 
 /* ── Tool approval card ───────────────────────────────────── */
