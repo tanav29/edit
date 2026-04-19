@@ -25,7 +25,7 @@
 
 - **Visual File Tree** — Browse and navigate your project files with a beautiful, responsive explorer
 - **Interactive Chat** — Natural language coding assistant with real-time streaming responses
-- **File Operations** — Read, write, and edit files with AI assistance
+- **File Operations** — Read and patch-edit files with AI assistance
 - **Web Search** — Search the web for documentation and solutions
 - **Approval System** — Review destructive operations before they execute
 - **Edit History** — Track and review all changes made during the session
