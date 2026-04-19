@@ -25,6 +25,7 @@ import {
   CircleX,
   ScrollText,
   Asterisk,
+  Edit,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -226,61 +227,40 @@ function ToolPart({
             {toolName == "read" && (
               <span className="text-muted-foreground/90 flex items-center gap-2">
                 <BookSearch className="size-4" />
-                <span className="flex flex-wrap gap-1 items-center">
-                  {filePaths ? (
-                    filePaths.split(",").map((f, i) => (
-                      <span
-                        key={i}
-                        className="text-xs bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded">
-                        {f.trim()}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-xs">{filePath}</span>
-                  )}
-                </span>
+                Read
               </span>
             )}
             {toolName == "glob" && (
-              <span className="text-muted-foreground/90 flex items-center gap-1">
+              <span className="text-muted-foreground/90 flex items-center gap-2">
                 <Asterisk className="size-4" /> Searched for{" "}
                 {patterns && patterns.length} patterns
               </span>
             )}
             {toolName == "bash" && (
-              <span className="text-muted-foreground/90 flex items-center gap-1 min-w-0">
+              <span className="text-muted-foreground/90 flex items-center gap-2 min-w-0">
                 <TerIcon className="size-4 shrink-0" />
-                <span
-                  className="truncate"
-                  title={`bash ${compactCommand ?? ""}`}>
-                  bash {compactCommand}
-                </span>
+                <span className="truncate">Bash {compactCommand}</span>
               </span>
             )}
-            {toolName == "write" && (
-              <span className="text-muted-foreground/90 flex items-center gap-1">
-                <PenLine className="size-4" /> Write {filePath}
-              </span>
-            )}
-            {toolName == "edit" && (
-              <span className="text-muted-foreground/90 flex items-center gap-1">
-                <PenLine className="size-4" /> Edit {filePath}
+            {toolName == "patch" && (
+              <span className="text-muted-foreground/90 flex items-center gap-2">
+                <Edit className="size-4" />
+                {filePath}
               </span>
             )}
             {toolName == "grep" && (
-              <span className="text-muted-foreground/90 flex items-center gap-1">
+              <span className="text-muted-foreground/90 flex items-center gap-2">
                 <BookSearch className="size-4" /> Grep {pattern}
               </span>
             )}
             {toolName == "web" && (
               <span className="text-muted-foreground/90 flex items-center gap-2">
                 <Globe className="size-4" />
+                Searched the web for
                 <span className="flex flex-wrap gap-1 items-center">
                   {queries ? (
                     queries.split(",").map((q, i) => (
-                      <span
-                        key={i}
-                        className="text-xs bg-green-500/10 text-green-400 px-2 py-0.5 rounded">
+                      <span key={i} className="text-sm py-0.5 rounded">
                         {q.trim()}
                       </span>
                     ))
@@ -293,14 +273,13 @@ function ToolPart({
             {toolName == "scrape" && (
               <span className="text-muted-foreground/90 flex items-center gap-2">
                 <ScrollText className="size-4" />
+                Scraped
                 <span className="flex flex-wrap gap-1 items-center">
                   {urls ? (
                     urls.split(",").map((u, i) => {
                       const urlObj = new URL(u.trim());
                       return (
-                        <span
-                          key={i}
-                          className="text-xs bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded">
+                        <span key={i} className="text-sm">
                           {urlObj.hostname}
                         </span>
                       );
@@ -323,14 +302,14 @@ function ToolPart({
             const out = part.output as Record<string, unknown>;
             if (Array.isArray(out.files) && out.files.length > 1) {
               return (
-                <span className="text-muted-foreground/60 ml-2">
+                <span>
                   {String(out.successCount)}/{String(out.count)} files
                 </span>
               );
             }
             if ("range" in out) {
               return (
-                <span className="text-muted-foreground/60 ml-1">
+                <span>
                   lines {String(out.range)} of {String(out.totalLines)}
                 </span>
               );
@@ -368,18 +347,28 @@ function ToolPart({
           }
           if (
             part.state === "output-available" &&
-            (toolName === "write" || toolName === "edit") &&
+            toolName === "patch" &&
             part.output &&
             typeof part.output === "object"
           ) {
             const out = part.output as Record<string, unknown>;
+            const editCount =
+              typeof out.editCount === "number" ? out.editCount : 1;
+            const patchAdditions =
+              typeof out.patchAdditions === "number" ? out.patchAdditions : 0;
+            const patchDeletions =
+              typeof out.patchDeletions === "number" ? out.patchDeletions : 0;
             const label =
               out.action === "created"
                 ? "created"
                 : out.action === "edited"
-                  ? `${String(out.editCount)} edit(s)`
+                  ? `${String(editCount)} edit${editCount > 1 ? "s" : ""}`
                   : "written";
-            return <span className="text-emerald-500/80 ml-1">{label}</span>;
+            return (
+              <span className="text-muted-foreground/70 ml-1">
+                {label} (+{String(patchAdditions)}/-{String(patchDeletions)})
+              </span>
+            );
           }
           return null;
         })()}
@@ -447,18 +436,21 @@ const ToolOutput = React.memo(function ToolOutput({
     return null;
   }
 
-  if (toolName === "write") {
+  if (toolName === "patch") {
     const patch = typeof data.patch === "string" ? data.patch : null;
 
     return (
-      <div className="tool-card rounded-lg border border-border/40 overflow-hidden">
-        {patch ? <PatchDiff patch={patch} /> : null}
+      <div className="tool-card rounded-lg border border-border/40 h-96 overflow-auto">
+        {patch ? (
+          <PatchDiff
+            patch={patch}
+            options={{
+              diffStyle: "unified",
+            }}
+          />
+        ) : null}
       </div>
     );
-  }
-
-  if (toolName === "edit") {
-    return null;
   }
 
   // Handle parallel web search (multiple queries)

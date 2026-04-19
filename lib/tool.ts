@@ -577,44 +577,9 @@ export function createTools(workspacePath: string) {
       },
     }),
 
-    write: tool({
-      description: "Write content to a file",
-      inputSchema: zodSchema(
-        z.object({
-          filePath: z.string().describe("The path to the file to write"),
-          content: z.string().describe("The content to write to the file"),
-        }),
-      ),
-      execute: async ({ filePath, content }) => {
-        try {
-          const fullPath = resolveWorkspacePath(workspacePath, filePath);
-
-          const dir = path.dirname(fullPath);
-          if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-          }
-
-          const existed = fs.existsSync(fullPath);
-          const previousContent = existed
-            ? fs.readFileSync(fullPath, "utf-8")
-            : "";
-          fs.writeFileSync(fullPath, content, "utf-8");
-          return getPatchedWriteResult({
-            workspacePath,
-            fullPath,
-            previousContent,
-            nextContent: content,
-            existed,
-          });
-        } catch (error) {
-          return { error: errorMessage(error) };
-        }
-      },
-    }),
-
-    edit: tool({
+    patch: tool({
       description:
-        "Apply an exact text replacement inside an existing file. Use this for targeted edits instead of overwriting the whole file.",
+        "Only editing tool: apply exact text replacements inside existing files for targeted patch-style changes.",
       inputSchema: zodSchema(
         z.object({
           filePath: z.string().describe("The path to the file to edit"),
@@ -658,7 +623,7 @@ export function createTools(workspacePath: string) {
               nextContent,
               existed: true,
               editCount: replaceAll ? occurrences : 1,
-              includePatch: false,
+              includePatch: true,
             }),
             replacements: replaceAll ? occurrences : 1,
             occurrencesFound: occurrences,
