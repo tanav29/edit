@@ -3,6 +3,7 @@ import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { createTwoFilesPatch } from "diff";
+import { Glob } from "bun";
 import z from "zod";
 
 const DEFAULT_READ_LINE_LIMIT = 250;
@@ -288,7 +289,7 @@ type GrepMatch = {
 function grepWorkspace(params: {
   workspacePath: string;
   pattern: string;
-  glob?: string;
+  glob?: string | string[];
   maxResults: number;
 }): GrepMatch[] {
   const { workspacePath, pattern, glob, maxResults } = params;
@@ -304,7 +305,11 @@ function grepWorkspace(params: {
   ];
 
   if (glob) {
-    rgArgs.push("--glob", glob);
+    if (Array.isArray(glob)) {
+      glob.forEach((globPattern) => rgArgs.push("--glob", globPattern));
+    } else {
+      rgArgs.push("--glob", glob);
+    }
   }
 
   rgArgs.push(pattern, workspacePath);
@@ -345,24 +350,188 @@ function grepWorkspace(params: {
     .filter((match): match is GrepMatch => match !== null);
 }
 
+// Helper function to read a single file
+async function readFile(params: {
+  workspacePath: string;
+  filePath: string;
+  offset?: number;
+  limit?: number;
+}) {
+  const { workspacePath, filePath, offset, limit } = params;
+  try {
+    const fullPath = resolveWorkspacePath(workspacePath, filePath);
+
+    if (!fs.existsSync(fullPath)) {
+      return {
+        filePath: fullPath,
+        relativePath: getRelativeWorkspacePath(workspacePath, fullPath),
+        error: `File not found: ${fullPath}`,
+      };
+    }
+
+    const content = fs.readFileSync(fullPath, "utf-8");
+    const lines = content.split("\n");
+    const totalLines = lines.length;
+    const requestedLimit = limit ?? DEFAULT_READ_LINE_LIMIT;
+    const startOffset = offset ? offset - 1 : 0;
+    const endOffset = Math.min(startOffset + requestedLimit, lines.length);
+    const selectedLines = lines.slice(startOffset, endOffset);
+
+    return {
+      filePath: fullPath,
+      relativePath: getRelativeWorkspacePath(workspacePath, fullPath),
+      content: selectedLines.join("\n"),
+      range: `${startOffset + 1}-${endOffset}`,
+      totalLines,
+      size: fs.statSync(fullPath).size,
+      truncated: endOffset < totalLines,
+      defaultLimitApplied: limit == null,
+    };
+  } catch (error) {
+    return {
+      filePath,
+      relativePath: filePath,
+      error: errorMessage(error),
+    };
+  }
+}
+
+// Helper function to search the web for a single query
+async function searchWeb(query: string, maxResults: number = 5) {
+  try {
+    const searchUrl = `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+    const response = await fetchWithTimeout(searchUrl, 15000);
+
+    if (!response.ok) {
+      return {
+        query,
+        results: [],
+        total: 0,
+        error: `Search request failed with status ${response.status}`,
+      };
+    }
+
+    const html = await response.text();
+    const results = parseDuckDuckGoResults(html, maxResults);
+
+    return {
+      query,
+      results,
+      total: results.length,
+      provider: "duckduckgo",
+    };
+  } catch (error) {
+    return {
+      query,
+      results: [],
+      total: 0,
+      error: errorMessage(error),
+    };
+  }
+}
+
+// Helper function to scrape a single URL
+async function scrapeUrl(url: string, maxChars: number = 8000) {
+  try {
+    const validatedUrl = ensureHttpUrl(url);
+    const response = await fetchWithTimeout(validatedUrl.toString(), 20000);
+
+    if (!response.ok) {
+      return {
+        url: validatedUrl.toString(),
+        error: `Failed to fetch page: HTTP ${response.status}`,
+      };
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    const raw = await response.text();
+
+    if (!/html/i.test(contentType)) {
+      return {
+        url: validatedUrl.toString(),
+        contentType,
+        content: raw.slice(0, maxChars),
+        truncated: raw.length > maxChars,
+        length: raw.length,
+      };
+    }
+
+    const titleMatch = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const descriptionMatch = raw.match(
+      /<meta[^>]*name=["']description["'][^>]*content=["']([\s\S]*?)["'][^>]*>/i,
+    );
+
+    const textContent = stripHtml(raw);
+
+    return {
+      url: validatedUrl.toString(),
+      title: titleMatch ? stripHtml(titleMatch[1]) : null,
+      description: descriptionMatch
+        ? decodeHtmlEntities(descriptionMatch[1]).trim()
+        : null,
+      contentType,
+      content: textContent.slice(0, maxChars),
+      truncated: textContent.length > maxChars,
+      length: textContent.length,
+    };
+  } catch (error) {
+    return {
+      url,
+      error: errorMessage(error),
+    };
+  }
+}
+
 export function createTools(workspacePath: string) {
   return {
     glob: tool({
-      description: "Search for files by pattern in the workspace",
+      description:
+        "Search for files by pattern in the workspace using Bun's fast glob",
       inputSchema: zodSchema(
         z.object({
-          pattern: z
-            .string()
-            .describe("The glob pattern to search for (e.g., '**/*.ts')"),
+          patterns: z
+            .union([z.string(), z.array(z.string())])
+            .describe(
+              "Glob pattern(s) to search for. Can be a single pattern like '**/*.ts' or multiple patterns like ['**/*.ts', 'src/**']",
+            ),
+          limit: z
+            .number()
+            .int()
+            .min(1)
+            .max(1000)
+            .optional()
+            .describe("Maximum number of files to return (default: 50)"),
         }),
       ),
-      execute: async ({ pattern }) => {
+      execute: async ({ patterns, limit = 50 }) => {
         try {
-          const files = getFiles(workspacePath, DEFAULT_IGNORE_PATTERNS);
-          const matches = findMatches(files, pattern);
+          const patternArray = Array.isArray(patterns) ? patterns : [patterns];
+
+          const files: string[] = [];
+          for (const pattern of patternArray) {
+            const globInstance = new Glob(pattern);
+            for await (const file of globInstance.scan({
+              cwd: workspacePath,
+              onlyFiles: true,
+            })) {
+              files.push(file);
+            }
+          }
+
+          // Remove duplicates, filter ignored patterns, and sort
+          const uniqueFiles = Array.from(new Set(files))
+            .filter(
+              (file) =>
+                !DEFAULT_IGNORE_PATTERNS.some((pattern) =>
+                  matchesPattern(file, pattern),
+                ),
+            )
+            .sort();
+
           return {
-            files: matches.slice(0, 50),
-            total: matches.length,
+            patterns: patternArray,
+            files: uniqueFiles.slice(0, limit),
+            total: uniqueFiles.length,
           };
         } catch (error) {
           return { error: errorMessage(error) };
@@ -371,10 +540,14 @@ export function createTools(workspacePath: string) {
     }),
 
     read: tool({
-      description: "Read the contents of a file",
+      description: "Read the contents of one or more files in parallel",
       inputSchema: zodSchema(
         z.object({
-          filePath: z.string().describe("The path to the file to read"),
+          filePaths: z
+            .union([z.string(), z.array(z.string())])
+            .describe(
+              "Single file path or array of file paths to read. Can be a single path like 'src/main.ts' or multiple paths like ['src/main.ts', 'src/utils.ts']",
+            ),
           offset: z
             .number()
             .optional()
@@ -382,34 +555,21 @@ export function createTools(workspacePath: string) {
           limit: z.number().optional().describe("The number of lines to read"),
         }),
       ),
-      execute: async ({ filePath, offset, limit }) => {
+      execute: async ({ filePaths, offset, limit }) => {
         try {
-          const fullPath = resolveWorkspacePath(workspacePath, filePath);
+          const pathArray = Array.isArray(filePaths) ? filePaths : [filePaths];
 
-          if (!fs.existsSync(fullPath)) {
-            return { error: `File not found: ${fullPath}` };
-          }
-
-          const content = fs.readFileSync(fullPath, "utf-8");
-          const lines = content.split("\n");
-          const totalLines = lines.length;
-          const requestedLimit = limit ?? DEFAULT_READ_LINE_LIMIT;
-          const startOffset = offset ? offset - 1 : 0;
-          const endOffset = Math.min(
-            startOffset + requestedLimit,
-            lines.length,
+          const results = await Promise.all(
+            pathArray.map((filePath) =>
+              readFile({ workspacePath, filePath, offset, limit }),
+            ),
           );
-          const selectedLines = lines.slice(startOffset, endOffset);
 
           return {
-            filePath: fullPath,
-            relativePath: getRelativeWorkspacePath(workspacePath, fullPath),
-            content: selectedLines.join("\n"),
-            range: `${startOffset + 1}-${endOffset}`,
-            totalLines,
-            size: fs.statSync(fullPath).size,
-            truncated: endOffset < totalLines,
-            defaultLimitApplied: limit == null,
+            files: results,
+            count: results.length,
+            successCount: results.filter((r) => !r.error).length,
+            errorCount: results.filter((r) => r.error).length,
           };
         } catch (error) {
           return { error: errorMessage(error) };
@@ -519,9 +679,11 @@ export function createTools(workspacePath: string) {
             .min(1)
             .describe("Text or regex pattern to search"),
           glob: z
-            .string()
+            .union([z.string(), z.array(z.string())])
             .optional()
-            .describe("Optional file glob filter such as '*.ts' or 'app/**'"),
+            .describe(
+              "Optional file glob filter such as '*.ts', 'app/**', or ['**/*.ts', 'src/**'] for multiple patterns",
+            ),
           maxResults: z
             .number()
             .int()
@@ -615,113 +777,80 @@ export function createTools(workspacePath: string) {
     }),
 
     web: tool({
-      description: "Search the web and return top results",
+      description: "Search the web for one or more queries in parallel",
       inputSchema: zodSchema(
         z.object({
-          query: z.string().min(1).describe("The search query"),
+          queries: z
+            .union([z.string(), z.array(z.string())])
+            .describe(
+              "Single search query or array of queries. Can be a single query like 'typescript' or multiple like ['typescript', 'bun runtime']",
+            ),
           maxResults: z
             .number()
             .int()
             .min(1)
             .max(10)
             .optional()
-            .describe("Maximum number of results to return (default: 5)"),
+            .describe("Maximum number of results per query (default: 5)"),
         }),
       ),
-      execute: async ({ query, maxResults = 5 }) => {
+      execute: async ({ queries, maxResults = 5 }) => {
         try {
-          const searchUrl = `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-          const response = await fetchWithTimeout(searchUrl, 15000);
+          const queryArray = Array.isArray(queries) ? queries : [queries];
 
-          if (!response.ok) {
-            throw new Error(
-              `Search request failed with status ${response.status}`,
-            );
-          }
-
-          const html = await response.text();
-          const results = parseDuckDuckGoResults(html, maxResults);
-
-          if (results.length === 0) {
-            return {
-              query,
-              results: [],
-              total: 0,
-              message: "No results parsed from search response",
-            };
-          }
+          const results = await Promise.all(
+            queryArray.map((query) => searchWeb(query, maxResults)),
+          );
 
           return {
-            query,
-            results,
-            total: results.length,
-            provider: "duckduckgo",
+            searches: results,
+            count: results.length,
+            totalResults: results.reduce((sum, r) => sum + r.total, 0),
+            successCount: results.filter((r) => !r.error).length,
+            errorCount: results.filter((r) => r.error).length,
           };
         } catch (error) {
-          return { error: errorMessage(error), query, results: [], total: 0 };
+          return { error: errorMessage(error) };
         }
       },
     }),
 
     scrape: tool({
-      description: "Fetch and extract readable content from a web page",
+      description:
+        "Fetch and extract readable content from one or more URLs in parallel",
       inputSchema: zodSchema(
         z.object({
-          url: z.string().url().describe("The page URL to scrape"),
+          urls: z
+            .union([z.string().url(), z.array(z.string().url())])
+            .describe(
+              "Single URL or array of URLs to scrape. Can be a single URL like 'https://example.com' or multiple URLs",
+            ),
           maxChars: z
             .number()
             .int()
             .min(500)
             .max(50000)
             .optional()
-            .describe("Max extracted content length (default: 8000)"),
+            .describe("Max extracted content length per URL (default: 8000)"),
         }),
       ),
-      execute: async ({ url, maxChars = 8000 }) => {
+      execute: async ({ urls, maxChars = 8000 }) => {
         try {
-          const validatedUrl = ensureHttpUrl(url);
-          const response = await fetchWithTimeout(
-            validatedUrl.toString(),
-            20000,
+          const urlArray = Array.isArray(urls) ? urls : [urls];
+
+          const results = await Promise.all(
+            urlArray.map((url) => scrapeUrl(url, maxChars)),
           );
-
-          if (!response.ok) {
-            throw new Error(`Failed to fetch page: HTTP ${response.status}`);
-          }
-
-          const contentType = response.headers.get("content-type") || "";
-          const raw = await response.text();
-
-          if (!/html/i.test(contentType)) {
-            return {
-              url: validatedUrl.toString(),
-              contentType,
-              content: raw.slice(0, maxChars),
-              truncated: raw.length > maxChars,
-              length: raw.length,
-            };
-          }
-
-          const titleMatch = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-          const descriptionMatch = raw.match(
-            /<meta[^>]*name=["']description["'][^>]*content=["']([\s\S]*?)["'][^>]*>/i,
-          );
-
-          const textContent = stripHtml(raw);
 
           return {
-            url: validatedUrl.toString(),
-            title: titleMatch ? stripHtml(titleMatch[1]) : null,
-            description: descriptionMatch
-              ? decodeHtmlEntities(descriptionMatch[1]).trim()
-              : null,
-            contentType,
-            content: textContent.slice(0, maxChars),
-            truncated: textContent.length > maxChars,
-            length: textContent.length,
+            pages: results,
+            count: results.length,
+            successCount: results.filter((r) => !r.error).length,
+            errorCount: results.filter((r) => r.error).length,
+            totalChars: results.reduce((sum, r) => sum + (r.length ?? 0), 0),
           };
         } catch (error) {
-          return { error: errorMessage(error), url };
+          return { error: errorMessage(error) };
         }
       },
     }),

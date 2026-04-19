@@ -140,11 +140,15 @@ function ToolPart({
 }) {
   const toolName = part.type.replace("tool-", "");
   const filePath = getInputString(part.input, "filePath");
+  const filePaths = getInputString(part.input, "filePaths");
   const pattern = getInputString(part.input, "pattern");
+  const patterns = getInputString(part.input, "patterns");
   const command = getInputString(part.input, "command");
   const compactCommand = command?.replace(/\s+/g, " ").trim();
   const query = getInputString(part.input, "query");
+  const queries = getInputString(part.input, "queries");
   const url = getInputString(part.input, "url");
+  const urls = getInputString(part.input, "urls");
 
   const toolOutput = useMemo(
     () => <ToolOutput toolName={toolName} output={part.output} />,
@@ -217,70 +221,151 @@ function ToolPart({
   return (
     <details>
       <summary className="flex items-center gap-2 py-1 text-sm animate-fade-in text-muted-foreground/90 select-none cursor-pointer outline-none">
-        {part.state == "output-available" ||
-        part.state == "output-denied" ||
-        part.state == "approval-responded" ||
-        part.state == "output-error" ? (
+        {part.state === "output-available" && (
           <>
-            {part.state === "output-error" && <Bug className="size-4" />}
-            {part.state === "output-denied" && <CircleX className="size-4" />}
-            {part.state === "output-available" && (
-              <>
-                {toolName == "read" && (
-                  <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <BookSearch className="size-4" /> Read {filePath}
-                  </span>
-                )}
-                {toolName == "glob" && (
-                  <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <Asterisk className="size-4" /> Glob {pattern}
-                  </span>
-                )}
-                {toolName == "bash" && (
-                  <span className="text-muted-foreground/90 flex items-center gap-1 min-w-0">
-                    <TerIcon className="size-4 shrink-0" />
-                    <span
-                      className="truncate"
-                      title={`bash ${compactCommand ?? ""}`}>
-                      bash {compactCommand}
-                    </span>
-                  </span>
-                )}
-                {toolName == "write" && (
-                  <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <PenLine className="size-4" /> Write {filePath}
-                  </span>
-                )}
-                {toolName == "edit" && (
-                  <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <PenLine className="size-4" /> Edit {filePath}
-                  </span>
-                )}
-                {toolName == "grep" && (
-                  <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <BookSearch className="size-4" /> Grep {pattern}
-                  </span>
-                )}
-                {toolName == "web" && (
-                  <span className="text-muted-foreground/90 flex items-center gap-1">
-                    <Globe className="size-4" /> Web {query}
-                  </span>
-                )}
-                {toolName == "scrape" && (
-                  <span className="text-muted-foreground/90 flex gap-1 items-center">
-                    <ScrollText className="size-4" /> Scrape {url}
-                  </span>
-                )}
-              </>
+            {toolName == "read" && (
+              <span className="text-muted-foreground/90 flex items-center gap-2">
+                <BookSearch className="size-4" />
+                <span className="flex flex-wrap gap-1 items-center">
+                  {filePaths ? (
+                    filePaths.split(",").map((f, i) => (
+                      <span
+                        key={i}
+                        className="text-xs bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded">
+                        {f.trim()}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs">{filePath}</span>
+                  )}
+                </span>
+              </span>
             )}
-            {part.state === "approval-responded" && !part.approval.approved && (
-              <CircleX className="size-4" />
+            {toolName == "glob" && (
+              <span className="text-muted-foreground/90 flex items-center gap-1">
+                <Asterisk className="size-4" /> Searched for{" "}
+                {patterns && patterns.length} patterns
+              </span>
+            )}
+            {toolName == "bash" && (
+              <span className="text-muted-foreground/90 flex items-center gap-1 min-w-0">
+                <TerIcon className="size-4 shrink-0" />
+                <span
+                  className="truncate"
+                  title={`bash ${compactCommand ?? ""}`}>
+                  bash {compactCommand}
+                </span>
+              </span>
+            )}
+            {toolName == "write" && (
+              <span className="text-muted-foreground/90 flex items-center gap-1">
+                <PenLine className="size-4" /> Write {filePath}
+              </span>
+            )}
+            {toolName == "edit" && (
+              <span className="text-muted-foreground/90 flex items-center gap-1">
+                <PenLine className="size-4" /> Edit {filePath}
+              </span>
+            )}
+            {toolName == "grep" && (
+              <span className="text-muted-foreground/90 flex items-center gap-1">
+                <BookSearch className="size-4" /> Grep {pattern}
+              </span>
+            )}
+            {toolName == "web" && (
+              <span className="text-muted-foreground/90 flex items-center gap-2">
+                <Globe className="size-4" />
+                <span className="flex flex-wrap gap-1 items-center">
+                  {queries ? (
+                    queries.split(",").map((q, i) => (
+                      <span
+                        key={i}
+                        className="text-xs bg-green-500/10 text-green-400 px-2 py-0.5 rounded">
+                        {q.trim()}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs">{query}</span>
+                  )}
+                </span>
+              </span>
+            )}
+            {toolName == "scrape" && (
+              <span className="text-muted-foreground/90 flex items-center gap-2">
+                <ScrollText className="size-4" />
+                <span className="flex flex-wrap gap-1 items-center">
+                  {urls ? (
+                    urls.split(",").map((u, i) => {
+                      const urlObj = new URL(u.trim());
+                      return (
+                        <span
+                          key={i}
+                          className="text-xs bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded">
+                          {urlObj.hostname}
+                        </span>
+                      );
+                    })
+                  ) : (
+                    <span className="text-xs">{url}</span>
+                  )}
+                </span>
+              </span>
             )}
           </>
-        ) : (
-          <Loader2 className="size-4 animate-spin" />
         )}
         {(() => {
+          if (
+            part.state === "output-available" &&
+            toolName === "read" &&
+            part.output &&
+            typeof part.output === "object"
+          ) {
+            const out = part.output as Record<string, unknown>;
+            if (Array.isArray(out.files) && out.files.length > 1) {
+              return (
+                <span className="text-muted-foreground/60 ml-2">
+                  {String(out.successCount)}/{String(out.count)} files
+                </span>
+              );
+            }
+            if ("range" in out) {
+              return (
+                <span className="text-muted-foreground/60 ml-1">
+                  lines {String(out.range)} of {String(out.totalLines)}
+                </span>
+              );
+            }
+          }
+          if (
+            part.state === "output-available" &&
+            toolName === "web" &&
+            part.output &&
+            typeof part.output === "object"
+          ) {
+            const out = part.output as Record<string, unknown>;
+            if (Array.isArray(out.searches) && out.searches.length > 1) {
+              return (
+                <span className="text-muted-foreground/60 ml-2">
+                  {String(out.totalResults)} results
+                </span>
+              );
+            }
+          }
+          if (
+            part.state === "output-available" &&
+            toolName === "scrape" &&
+            part.output &&
+            typeof part.output === "object"
+          ) {
+            const out = part.output as Record<string, unknown>;
+            if (Array.isArray(out.pages) && out.pages.length > 1) {
+              return (
+                <span className="text-muted-foreground/60 ml-2">
+                  {String(out.successCount)}/{String(out.count)} pages
+                </span>
+              );
+            }
+          }
           if (
             part.state === "output-available" &&
             (toolName === "write" || toolName === "edit") &&
@@ -295,20 +380,6 @@ function ToolPart({
                   ? `${String(out.editCount)} edit(s)`
                   : "written";
             return <span className="text-emerald-500/80 ml-1">{label}</span>;
-          }
-          if (
-            part.state === "output-available" &&
-            toolName === "read" &&
-            part.output &&
-            typeof part.output === "object" &&
-            "range" in (part.output as Record<string, unknown>)
-          ) {
-            const out = part.output as Record<string, unknown>;
-            return (
-              <span className="text-muted-foreground/60 ml-1">
-                lines {String(out.range)} of {String(out.totalLines)}
-              </span>
-            );
           }
           return null;
         })()}
@@ -337,6 +408,41 @@ const ToolOutput = React.memo(function ToolOutput({
     );
   }
 
+  // Handle parallel read (multiple files)
+  if (
+    toolName === "read" &&
+    Array.isArray(data.files) &&
+    data.files.length > 1
+  ) {
+    const files = data.files as Array<Record<string, unknown>>;
+    return (
+      <div className="space-y-2 rounded-lg border border-border/40 bg-card/70 p-3">
+        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          Read {String(data.successCount)} of {String(data.count)} files
+        </div>
+        {files.map((file, idx) => (
+          <div key={idx} className="rounded-md bg-background/60 p-2">
+            <div className="text-xs font-mono text-muted-foreground mb-1">
+              {String(file.relativePath ?? file.filePath)}
+            </div>
+            {!file.error ? (
+              <>
+                <div className="text-[10px] text-muted-foreground/60 mb-1">
+                  {String(file.range)} of {String(file.totalLines)}
+                </div>
+                <pre className="text-xs overflow-auto max-h-32 bg-background/40 p-1 rounded border border-border/20">
+                  {String(file.content ?? "")}
+                </pre>
+              </>
+            ) : (
+              <div className="text-xs text-red-400">{String(file.error)}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   if (toolName === "read" && data.content) {
     return null;
   }
@@ -353,6 +459,94 @@ const ToolOutput = React.memo(function ToolOutput({
 
   if (toolName === "edit") {
     return null;
+  }
+
+  // Handle parallel web search (multiple queries)
+  if (
+    toolName === "web" &&
+    Array.isArray(data.searches) &&
+    data.searches.length > 1
+  ) {
+    const searches = data.searches as Array<Record<string, unknown>>;
+    return (
+      <div className="space-y-3 rounded-lg border border-border/40 bg-card/70 p-3">
+        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          {String(data.totalResults)} results from {String(data.count)} queries
+        </div>
+        {searches.map((search, queryIdx) => (
+          <div key={queryIdx} className="rounded-md bg-background/60 p-2">
+            <div className="text-xs font-semibold text-blue-400 mb-2">
+              {String(search.query)}
+            </div>
+            {!search.error ? (
+              <div className="space-y-1">
+                {Array.isArray(search.results) && search.results.length > 0 ? (
+                  (search.results as Array<Record<string, unknown>>).map(
+                    (result, idx) => (
+                      <a
+                        key={idx}
+                        href={String(result.url)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-xs text-primary hover:underline truncate">
+                        {String(result.title)}
+                      </a>
+                    ),
+                  )
+                ) : (
+                  <div className="text-xs text-muted-foreground">
+                    No results
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-red-400">{String(search.error)}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Handle parallel scrape (multiple URLs)
+  if (
+    toolName === "scrape" &&
+    Array.isArray(data.pages) &&
+    data.pages.length > 1
+  ) {
+    const pages = data.pages as Array<Record<string, unknown>>;
+    return (
+      <div className="space-y-2 rounded-lg border border-border/40 bg-card/70 p-3">
+        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          Scraped {String(data.successCount)} of {String(data.count)} pages
+        </div>
+        {pages.map((page, idx) => (
+          <div key={idx} className="rounded-md bg-background/60 p-2">
+            <a
+              href={String(page.url)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-mono text-blue-400 hover:underline truncate block mb-1">
+              {String(page.url)}
+            </a>
+            {!page.error ? (
+              <>
+                {page.title && (
+                  <div className="text-xs font-semibold text-foreground/80 mb-1">
+                    {String(page.title)}
+                  </div>
+                )}
+                <pre className="text-xs overflow-auto max-h-32 bg-background/40 p-1 rounded border border-border/20 whitespace-pre-wrap">
+                  {String(page.content ?? "").slice(0, 200)}...
+                </pre>
+              </>
+            ) : (
+              <div className="text-xs text-red-400">{String(page.error)}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
   }
 
   if (toolName === "grep") {
