@@ -5,7 +5,7 @@ import { readdir, stat } from "fs/promises";
 import { normalizeMessageOrder } from "@/lib/utils";
 import { parseMessages } from "@/lib/utils";
 import path from "path";
-import { join } from "path";
+import { join, relative } from "path";
 import { promisify } from "util";
 import { desc, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
@@ -29,6 +29,12 @@ interface FileNode {
   path: string;
   type: "file" | "directory";
   children?: FileNode[];
+}
+
+interface WorkspaceTreePayload {
+  paths: string[];
+  rootName: string;
+  rootPath: string;
 }
 
 type ScannedNode = FileNode & {
@@ -89,6 +95,46 @@ async function scanDirectory(dirPath: string): Promise<FileNode[]> {
     type: node.type,
     children: node.children,
   }));
+}
+
+async function listWorkspaceTreePaths(
+  rootPath: string,
+): Promise<WorkspaceTreePayload> {
+  const normalizedRootPath = path.normalize(rootPath);
+  const rootName =
+    path.basename(normalizedRootPath) || normalizedRootPath || "workspace";
+  const paths: string[] = [];
+
+  async function walk(currentPath: string) {
+    const children = await scanDirectory(currentPath);
+
+    for (const child of children) {
+      const relativePath = relative(normalizedRootPath, child.path).replaceAll(
+        "\\",
+        "/",
+      );
+
+      if (!relativePath || relativePath.startsWith("..")) {
+        continue;
+      }
+
+      paths.push(
+        child.type === "directory" ? `${relativePath}/` : relativePath,
+      );
+
+      if (child.type === "directory") {
+        await walk(child.path);
+      }
+    }
+  }
+
+  await walk(normalizedRootPath);
+
+  return {
+    paths,
+    rootName,
+    rootPath: normalizedRootPath,
+  };
 }
 
 function runGit(command: string, cwd: string): string {
@@ -255,6 +301,36 @@ export const app = new Elysia({ prefix: "/api" })
         console.error("Error reading file:", error);
         set.status = 500;
         return { error: "Failed to read file" };
+      }
+    },
+    {
+      query: t.Object({
+        path: t.Optional(t.String()),
+      }),
+    },
+  )
+  .get(
+    "/files/tree",
+    async ({ query, set }) => {
+      try {
+        const workspacePath = query.path;
+
+        if (!workspacePath) {
+          set.status = 400;
+          return { error: "Path parameter is required" };
+        }
+
+        const file = Bun.file(workspacePath);
+        if (await file.exists()) {
+          set.status = 400;
+          return { error: "Workspace path must point to a directory" };
+        }
+
+        return await listWorkspaceTreePaths(workspacePath);
+      } catch (error) {
+        console.error("Error building workspace tree:", error);
+        set.status = 500;
+        return { error: "Failed to build workspace tree" };
       }
     },
     {
@@ -441,7 +517,7 @@ export const app = new Elysia({ prefix: "/api" })
       const tools = createTools(body.path);
 
       const result = streamText({
-        model: ollama("kimi-k2.5:cloud"),
+        model: ollama("qwen3.5:0.8b"),
         system: [
           "You are OpenCode, an expert coding assistant.",
           `Working directory: ${body.path}`,

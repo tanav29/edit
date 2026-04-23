@@ -1,280 +1,263 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
-import { ChevronRight, File, Folder, FolderOpen } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { FileTree, useFileTree } from "@pierre/trees/react";
+import { preparePresortedFileTreeInput } from "@pierre/trees";
 import { cn } from "@/lib/utils";
-import { FileViewer } from "./file-viewer";
 
-interface FileNode {
-  name: string;
-  path: string;
-  type: "file" | "directory";
-  children?: FileNode[];
+interface WorkspaceTreePayload {
+  paths: string[];
+  rootName: string;
+  rootPath: string;
 }
 
 interface FileTreeBarProps {
   rootPath?: string | null;
   isOpen: boolean;
-}
-
-interface FileTreeProps {
-  rootPath: string;
-  onFileSelect: (path: string) => void;
   selectedFile?: string;
+  onFileSelect: (path: string | undefined) => void;
 }
 
-function updateNodeChildren(
-  node: FileNode,
-  targetPath: string,
-  children: FileNode[],
-): FileNode {
-  if (node.path === targetPath) {
-    return { ...node, children };
-  }
-
-  if (node.children) {
-    return {
-      ...node,
-      children: node.children.map((child) =>
-        updateNodeChildren(child, targetPath, children),
-      ),
-    };
-  }
-
-  return node;
+function trimTrailingSeparators(path: string) {
+  const trimmed = path.trim();
+  if (trimmed === "/" || /^[A-Za-z]:[\\/]+$/.test(trimmed)) return trimmed;
+  return trimmed.replace(/[\\/]+$/g, "");
 }
 
-export default function FileTreeBar({ rootPath, isOpen }: FileTreeBarProps) {
-  const [selectedFile, setSelectedFile] = useState<string | undefined>();
+function inferSeparator(path: string) {
+  return path.includes("\\") ? "\\" : "/";
+}
 
+function joinWorkspacePath(rootPath: string, relativePath: string) {
+  const normalizedRoot = trimTrailingSeparators(rootPath);
+  if (!relativePath) return normalizedRoot;
+
+  const separator = inferSeparator(normalizedRoot);
+  const normalizedRelative = relativePath.replace(/[\\/]+/g, separator);
+
+  if (normalizedRoot === "/" || /^[A-Za-z]:[\\/]*$/.test(normalizedRoot)) {
+    return `${normalizedRoot}${normalizedRelative.replace(/^[\\/]+/, "")}`;
+  }
+
+  return `${normalizedRoot}${separator}${normalizedRelative.replace(
+    /^[\\/]+/,
+    "",
+  )}`;
+}
+
+function toRelativeWorkspacePath(fullPath: string, rootPath: string) {
+  const normalizedRoot = trimTrailingSeparators(rootPath);
+  const normalizedFullPath = fullPath.trim();
+
+  if (normalizedFullPath === normalizedRoot) {
+    return "";
+  }
+
+  if (normalizedFullPath.startsWith(normalizedRoot)) {
+    return normalizedFullPath
+      .slice(normalizedRoot.length)
+      .replace(/^[\\/]+/, "")
+      .replaceAll("\\", "/");
+  }
+
+  return normalizedFullPath.replaceAll("\\", "/");
+}
+
+export default function FileTreeBar({
+  rootPath,
+  isOpen,
+  selectedFile,
+  onFileSelect,
+}: FileTreeBarProps) {
   useEffect(() => {
     if (!selectedFile) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setSelectedFile(undefined);
+        onFileSelect(undefined);
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedFile]);
+  }, [onFileSelect, selectedFile]);
 
   return (
-    <>
-      <aside
-        className={cn(
-          "shrink-0 min-h-0 z-50 flex-col border-l transition-all duration-200 ease-out",
-          isOpen
-            ? "flex w-64 translate-x-0 opacity-100"
-            : "pointer-events-none flex w-0 translate-x-3 opacity-0 overflow-hidden border-l-0",
-        )}>
-        <div className="flex-1 min-h-0 overflow-hidden">
-          {rootPath ? (
-            <FileTree
-              key={rootPath}
-              rootPath={rootPath}
-              selectedFile={selectedFile}
-              onFileSelect={(filepath: string) => setSelectedFile(filepath)}
-            />
-          ) : (
-            <div className="p-3 text-xs text-muted-foreground">
-              Select or create a chat to browse files
-            </div>
-          )}
-        </div>
-      </aside>
-
-      {selectedFile ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4">
-          <button
-            type="button"
-            aria-label="Close file viewer"
-            className="absolute inset-0"
-            onClick={() => setSelectedFile(undefined)}
+    <aside
+      className={cn(
+        "shrink-0 min-h-0 z-50 flex-col border-l transition-all duration-200 ease-out bg-background",
+        isOpen
+          ? "flex w-80 translate-x-0 opacity-100"
+          : "pointer-events-none flex w-0 translate-x-3 opacity-0 overflow-hidden border-l-0",
+      )}
+    >
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {rootPath ? (
+          <WorkspaceFileTree
+            key={rootPath}
+            rootPath={rootPath}
+            selectedFile={selectedFile}
+            onFileSelect={onFileSelect}
           />
-
-          <div className="relative z-10 h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-none">
-            <FileViewer
-              filePath={selectedFile}
-              onClose={() => setSelectedFile(undefined)}
-            />
+        ) : (
+          <div className="p-3 text-xs text-muted-foreground">
+            Select or create a chat to browse files
           </div>
-        </div>
-      ) : null}
-    </>
+        )}
+      </div>
+    </aside>
   );
 }
 
-function FileTree({ rootPath, onFileSelect, selectedFile }: FileTreeProps) {
-  const queryClient = useQueryClient();
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
-
-  const { data: rootNode, isLoading } = useQuery<FileNode>({
-    queryKey: ["file-tree", rootPath],
+function WorkspaceFileTree({
+  rootPath,
+  selectedFile,
+  onFileSelect,
+}: {
+  rootPath: string;
+  selectedFile?: string;
+  onFileSelect: (path: string | undefined) => void;
+}) {
+  const { data, isLoading, isError, error } = useQuery<
+    WorkspaceTreePayload,
+    Error
+  >({
+    queryKey: ["workspace-tree", rootPath],
     queryFn: async () => {
       const res = await fetch(
-        `/api/files?path=${encodeURIComponent(rootPath)}`,
+        `/api/files/tree?path=${encodeURIComponent(rootPath)}`,
       );
+
       if (!res.ok) {
         const payload = (await res.json().catch(() => null)) as {
           error?: string;
         } | null;
-        throw new Error(payload?.error || "Failed to load files");
+        throw new Error(payload?.error || "Failed to load workspace tree");
       }
-      return (await res.json()) as FileNode;
+
+      return (await res.json()) as WorkspaceTreePayload;
     },
     enabled: Boolean(rootPath),
+    staleTime: 30_000,
+    gcTime: 10 * 60_000,
   });
-
-  let treeRoot: FileNode | null = rootNode ?? null;
-  if (treeRoot) {
-    for (const path of expandedDirs) {
-      const cached = queryClient.getQueryData<FileNode>(["file-tree", path]);
-      if (!cached?.children) continue;
-      treeRoot = updateNodeChildren(treeRoot, path, cached.children);
-    }
-  }
-
-  async function loadChildDirectory(node: FileNode) {
-    if (
-      node.type !== "directory" ||
-      !node.children ||
-      node.children.length > 0
-    ) {
-      return;
-    }
-
-    try {
-      const data = await queryClient.fetchQuery<FileNode>({
-        queryKey: ["file-tree", node.path],
-        queryFn: async () => {
-          const res = await fetch(
-            `/api/files?path=${encodeURIComponent(node.path)}`,
-          );
-          if (!res.ok) {
-            const payload = (await res.json().catch(() => null)) as {
-              error?: string;
-            } | null;
-            throw new Error(payload?.error || "Failed to load directory");
-          }
-          return (await res.json()) as FileNode;
-        },
-      });
-      if (data.children) {
-        queryClient.setQueryData(["file-tree", node.path], data);
-      }
-    } catch (error) {
-      console.error("Failed to load directory:", error);
-    }
-  }
-
-  function toggleDirectory(node: FileNode) {
-    setExpandedDirs((prev) => {
-      const next = new Set(prev);
-      if (next.has(node.path)) {
-        next.delete(node.path);
-      } else {
-        next.add(node.path);
-        void loadChildDirectory(node);
-      }
-      return next;
-    });
-  }
 
   if (isLoading) {
     return <div className="p-3 text-xs text-muted-foreground">Loading...</div>;
   }
 
-  if (!treeRoot) {
+  if (isError) {
+    return (
+      <div className="p-3 text-xs text-destructive">
+        {error.message || "Failed to load workspace tree"}
+      </div>
+    );
+  }
+
+  if (!data) {
     return (
       <div className="p-3 text-xs text-muted-foreground">No files found</div>
     );
   }
 
   return (
-    <div className="text-xs font-mono">
-      <FileTreeNode
-        node={treeRoot}
-        depth={0}
-        expandedDirs={expandedDirs}
-        selectedFile={selectedFile}
-        onToggle={toggleDirectory}
-        onSelect={onFileSelect}
-      />
-    </div>
+    <WorkspaceFileTreeContent
+      key={`${data.rootPath}:${data.paths.join("\n")}`}
+      rootPath={rootPath}
+      rootName={data.rootName}
+      workspaceDisplayPath={data.rootPath}
+      paths={data.paths}
+      selectedFile={selectedFile}
+      onFileSelect={onFileSelect}
+    />
   );
 }
 
-const FileTreeNode = memo(function FileTreeNode({
-  node,
-  depth,
-  expandedDirs,
+function WorkspaceFileTreeContent({
+  rootPath,
+  rootName,
+  workspaceDisplayPath,
+  paths,
   selectedFile,
-  onToggle,
-  onSelect,
+  onFileSelect,
 }: {
-  node: FileNode;
-  depth: number;
-  expandedDirs: Set<string>;
+  rootPath: string;
+  rootName: string;
+  workspaceDisplayPath: string;
+  paths: string[];
   selectedFile?: string;
-  onToggle: (node: FileNode) => void;
-  onSelect: (path: string) => void;
+  onFileSelect: (path: string | undefined) => void;
 }) {
-  const isExpanded = expandedDirs.has(node.path);
-  const isSelected = selectedFile === node.path;
-  const isDirectory = node.type === "directory";
+  const initialSelectedPaths = useMemo(() => {
+    if (!selectedFile || !rootPath) return undefined;
+
+    const relativePath = toRelativeWorkspacePath(selectedFile, rootPath);
+    return relativePath ? [relativePath] : undefined;
+  }, [rootPath, selectedFile]);
+
+  const preparedInput = useMemo(
+    () => preparePresortedFileTreeInput(paths),
+    [paths],
+  );
+
+  const { model } = useFileTree({
+    preparedInput,
+    paths,
+    flattenEmptyDirectories: false,
+    initialExpansion: 1,
+    initialSelectedPaths,
+    search: true,
+    density: "compact",
+    icons: {
+      set: "standard",
+      colored: false,
+    },
+    onSelectionChange: (selectedPaths) => {
+      const selectedPath = selectedPaths[0];
+      if (!selectedPath || selectedPath.endsWith("/")) {
+        return;
+      }
+
+      onFileSelect(joinWorkspacePath(rootPath, selectedPath));
+    },
+  });
+
+  useEffect(() => {
+    model.resetPaths(paths, {
+      preparedInput,
+    });
+  }, [model, paths, preparedInput]);
 
   return (
-    <div>
-      <div
-        className={cn(
-          "flex items-center gap-1 py-1 px-2 cursor-pointer hover:bg-accent/50 transition-colors",
-          isSelected && "bg-accent",
-        )}
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
-        onClick={() => {
-          if (isDirectory) {
-            onToggle(node);
-          } else {
-            onSelect(node.path);
-          }
-        }}>
-        {isDirectory ? (
-          <>
-            <ChevronRight
-              className={cn(
-                "size-3 text-muted-foreground transition-transform",
-                isExpanded && "rotate-90",
-              )}
-            />
-            {isExpanded ? (
-              <FolderOpen className="size-3.5 text-muted-foreground" />
-            ) : (
-              <Folder className="size-3.5 text-muted-foreground" />
-            )}
-          </>
-        ) : (
-          <File className="size-3.5 text-muted-foreground ml-4" />
-        )}
-        <span className="truncate">{node.name}</span>
-      </div>
-      {isDirectory && isExpanded && node.children && (
-        <div>
-          {node.children.map((child) => (
-            <FileTreeNode
-              key={child.path}
-              node={child}
-              depth={depth + 1}
-              expandedDirs={expandedDirs}
-              selectedFile={selectedFile}
-              onToggle={onToggle}
-              onSelect={onSelect}
-            />
-          ))}
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="border-b px-3 py-2 text-xs font-medium text-foreground">
+        <div className="truncate">{rootName}</div>
+        <div className="truncate text-[10px] text-muted-foreground">
+          {workspaceDisplayPath}
         </div>
-      )}
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <FileTree
+          model={model}
+          className="h-full w-full"
+          style={
+            {
+              height: "100%",
+              width: "100%",
+              "--trees-border-color-override": "transparent",
+              "--trees-selected-bg-override":
+                "color-mix(in oklab, var(--accent) 85%, transparent)",
+              "--trees-hover-bg-override":
+                "color-mix(in oklab, var(--accent) 45%, transparent)",
+              "--trees-fg-override": "var(--foreground)",
+              "--trees-muted-fg-override": "var(--muted-foreground)",
+              "--trees-bg-override": "var(--background)",
+            } as React.CSSProperties
+          }
+        />
+      </div>
     </div>
   );
-});
+}

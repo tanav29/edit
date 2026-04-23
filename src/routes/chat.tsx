@@ -101,7 +101,8 @@ export function ChatRouteComponent() {
         setIsFileBarOpen={setIsFileBarOpen}
         workspace={null}
         selectedFile={selectedFile}
-        setSelectedFile={setSelectedFile}>
+        setSelectedFile={setSelectedFile}
+      >
         <div className="flex h-full items-center justify-center">
           <Loader2 className="size-6 animate-spin text-muted-foreground" />
         </div>
@@ -240,7 +241,8 @@ function LoadedSessionChat({
                       }
 
                       void navigator.clipboard.writeText(userMessageText);
-                    }}>
+                    }}
+                  >
                     <Copy className="size-3" />
                   </Button>
                 </TooltipTrigger>
@@ -254,7 +256,8 @@ function LoadedSessionChat({
                   return (
                     <p
                       key={partIndex}
-                      className="whitespace-pre-wrap text-sm leading-relaxed">
+                      className="whitespace-pre-wrap text-sm leading-relaxed"
+                    >
                       {part.text}
                     </p>
                   );
@@ -280,10 +283,12 @@ function LoadedSessionChat({
       setIsFileBarOpen={setIsFileBarOpen}
       workspace={workspace}
       selectedFile={selectedFile}
-      setSelectedFile={setSelectedFile}>
+      setSelectedFile={setSelectedFile}
+    >
       <div
         ref={scrollRef}
-        className="relative flex-1 overflow-y-auto px-4 py-6">
+        className="relative flex-1 overflow-y-auto px-4 py-6"
+      >
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <div className="w-full max-w-md text-center flex flex-col items-center justify-center gap-4">
@@ -371,7 +376,8 @@ function ChatLayout({
                       variant="outline"
                       size="icon-sm"
                       aria-label="Toggle file tree"
-                      onClick={() => setIsFileBarOpen((prev) => !prev)}>
+                      onClick={() => setIsFileBarOpen((prev) => !prev)}
+                    >
                       {isFileBarOpen ? (
                         <PanelRightClose className="size-4" />
                       ) : (
@@ -390,7 +396,12 @@ function ChatLayout({
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 {children}
               </div>
-              <FileTreeBar rootPath={workspace} isOpen={isFileBarOpen} />
+              <FileTreeBar
+                rootPath={workspace}
+                isOpen={isFileBarOpen}
+                selectedFile={selectedFile}
+                onFileSelect={setSelectedFile}
+              />
             </div>
           </section>
         </div>
@@ -431,7 +442,8 @@ function EmptyChatPage({
       setIsFileBarOpen={setIsFileBarOpen}
       workspace={null}
       selectedFile={undefined}
-      setSelectedFile={() => undefined}>
+      setSelectedFile={() => undefined}
+    >
       <div className="relative flex-1 overflow-y-auto px-4 py-6">
         <div className="flex h-full items-center justify-center">
           <div className="w-full max-w-md text-center flex flex-col items-center justify-center gap-4">
