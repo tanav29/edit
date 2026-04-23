@@ -4,7 +4,15 @@ import { Folder, FolderOpen, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
-import { Input } from "@/components/ui/input";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command";
 
 type DirectoryEntry = {
   name: string;
@@ -17,11 +25,13 @@ type PaletteItem =
       key: string;
       label: string;
       path: string;
+      keywords: string[];
     }
   | {
       kind: "directory";
       key: string;
       entry: DirectoryEntry;
+      keywords: string[];
     };
 
 type WorkspaceDirectoryPaletteProps = {
@@ -102,36 +112,19 @@ export default function WorkspaceDirectoryPalette({
 }: WorkspaceDirectoryPaletteProps) {
   const cacheRef = useRef(new Map<string, DirectoryEntry[]>());
   const abortRef = useRef<AbortController | null>(null);
+
   const [items, setItems] = useState<PaletteItem[]>([]);
   const [contextDir, setContextDir] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
-  const [activeIndex, setActiveIndex] = useState<number>(-1);
-
-  const listRef = useRef<HTMLDivElement>(null);
-
-  const hasItems = items.length > 0;
-
-  const activeKey = useMemo(() => {
-    if (activeIndex < 0 || activeIndex >= items.length) return null;
-    return items[activeIndex]?.key ?? null;
-  }, [activeIndex, items]);
+  const [rawQuery, setRawQuery] = useState(value);
 
   useEffect(() => {
-    if (!activeKey || !listRef.current) return;
-    const escapedKey =
-      typeof CSS !== "undefined" && typeof CSS.escape === "function"
-        ? CSS.escape(activeKey)
-        : activeKey.replace(/["\\]/g, "\\$&");
-    const el = listRef.current.querySelector<HTMLElement>(
-      `[data-palette-key="${escapedKey}"]`,
-    );
-    el?.scrollIntoView({ block: "nearest" });
-  }, [activeKey]);
+    setRawQuery(value);
+  }, [value]);
 
   useEffect(() => {
     const raw = value.trim();
-    setActiveIndex(-1);
     setScanError(null);
 
     abortRef.current?.abort();
@@ -160,6 +153,7 @@ export default function WorkspaceDirectoryPalette({
 
       async function run() {
         setIsLoading(true);
+
         try {
           if (endsWithSeparator) {
             const scanPath = trimTrailingSeparators(raw);
@@ -170,6 +164,7 @@ export default function WorkspaceDirectoryPalette({
                 kind: "directory" as const,
                 key: `dir:${entry.path}`,
                 entry,
+                keywords: [entry.name, entry.path],
               })),
             );
             return;
@@ -196,11 +191,17 @@ export default function WorkspaceDirectoryPalette({
                 key: `use:${exactMatch.path}`,
                 label: `Use "${exactMatch.name}"`,
                 path: exactMatch.path,
+                keywords: [
+                  exactMatch.name,
+                  exactMatch.path,
+                  "use current folder",
+                ],
               },
               ...childEntries.map((entry) => ({
                 kind: "directory" as const,
                 key: `dir:${entry.path}`,
                 entry,
+                keywords: [entry.name, entry.path],
               })),
             ]);
             return;
@@ -219,6 +220,7 @@ export default function WorkspaceDirectoryPalette({
               kind: "directory" as const,
               key: `dir:${entry.path}`,
               entry,
+              keywords: [entry.name, entry.path],
             })),
           );
         } catch (error) {
@@ -234,7 +236,7 @@ export default function WorkspaceDirectoryPalette({
         }
       }
 
-      run();
+      void run();
     }, 120);
 
     return () => {
@@ -242,6 +244,16 @@ export default function WorkspaceDirectoryPalette({
       abortRef.current?.abort();
     };
   }, [value]);
+
+  const commandFilter = useMemo(() => {
+    return (itemValue: string, search: string, keywords?: string[]) => {
+      const haystack = [itemValue, ...(keywords ?? [])].join(" ").toLowerCase();
+      const needle = search.trim().toLowerCase();
+
+      if (!needle) return 1;
+      return haystack.includes(needle) ? 1 : 0;
+    };
+  }, []);
 
   function acceptItem(item: PaletteItem) {
     if (item.kind === "use-current") {
@@ -253,50 +265,99 @@ export default function WorkspaceDirectoryPalette({
     onValueChange(`${trimTrailingSeparators(item.entry.path)}${sep}`);
   }
 
-  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (!hasItems) return;
-
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setActiveIndex((prev) => (prev < 0 ? 0 : (prev + 1) % items.length));
-      return;
-    }
-
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setActiveIndex((prev) =>
-        prev < 0 ? items.length - 1 : (prev - 1 + items.length) % items.length,
-      );
-      return;
-    }
-
-    if (event.key === "Enter" && activeIndex >= 0) {
-      event.preventDefault();
-      const item = items[activeIndex];
-      if (item) acceptItem(item);
-      return;
-    }
-
-    if (event.key === "Escape" && activeIndex >= 0) {
-      event.preventDefault();
-      setActiveIndex(-1);
-    }
-  }
-
   return (
     <div className="space-y-2">
-      <Input
-        autoFocus={autoFocus}
-        value={value}
-        onKeyDown={handleKeyDown}
-        onChange={(event) => {
-          onValueChange(event.target.value);
-          if (errorMessage) onClearError?.();
-        }}
-        placeholder={placeholder}
-        aria-invalid={Boolean(errorMessage)}
-        aria-describedby={errorMessage ? "workspace-path-error" : undefined}
-      />
+      <Command
+        shouldFilter
+        filter={commandFilter}
+        value=""
+        className="rounded-lg border bg-background"
+      >
+        <CommandInput
+          autoFocus={autoFocus}
+          value={rawQuery}
+          onValueChange={(nextValue) => {
+            setRawQuery(nextValue);
+            onValueChange(nextValue);
+            if (errorMessage) onClearError?.();
+          }}
+          placeholder={placeholder}
+          aria-invalid={Boolean(errorMessage)}
+          aria-describedby={errorMessage ? "workspace-path-error" : undefined}
+        />
+
+        <CommandList className={cn(!value.trim() && "hidden", "max-h-56")}>
+          {isLoading ? (
+            <div className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              <span>Scanning folders...</span>
+            </div>
+          ) : (
+            <>
+              <CommandEmpty>No folders found.</CommandEmpty>
+
+              {contextDir ? (
+                <CommandGroup heading={contextDir}>
+                  {items.map((item) => {
+                    if (item.kind === "use-current") {
+                      return (
+                        <CommandItem
+                          key={item.key}
+                          value={item.label}
+                          keywords={item.keywords}
+                          onSelect={() => acceptItem(item)}
+                        >
+                          <FolderOpen className="size-4 text-muted-foreground" />
+                          <span className="truncate">{item.label}</span>
+                          <span className="ml-auto truncate text-xs text-muted-foreground">
+                            {item.path}
+                          </span>
+                        </CommandItem>
+                      );
+                    }
+
+                    return (
+                      <CommandItem
+                        key={item.key}
+                        value={item.entry.name}
+                        keywords={item.keywords}
+                        onSelect={() => acceptItem(item)}
+                      >
+                        <Folder className="size-4 text-muted-foreground" />
+                        <span className="truncate">{item.entry.name}</span>
+                        <span className="ml-auto truncate text-xs text-muted-foreground">
+                          {item.entry.path}
+                        </span>
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              ) : (
+                <CommandGroup heading="Folders">
+                  {items.map((item) => {
+                    if (item.kind !== "directory") return null;
+
+                    return (
+                      <CommandItem
+                        key={item.key}
+                        value={item.entry.name}
+                        keywords={item.keywords}
+                        onSelect={() => acceptItem(item)}
+                      >
+                        <Folder className="size-4 text-muted-foreground" />
+                        <span className="truncate">{item.entry.name}</span>
+                        <span className="ml-auto truncate text-xs text-muted-foreground">
+                          {item.entry.path}
+                        </span>
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              )}
+            </>
+          )}
+        </CommandList>
+      </Command>
 
       {errorMessage ? (
         <p id="workspace-path-error" className="text-sm text-destructive">
@@ -306,73 +367,14 @@ export default function WorkspaceDirectoryPalette({
         <p className="text-sm text-destructive">{scanError}</p>
       ) : null}
 
-      <div className={cn(!value.trim() && "hidden")}>
-        <div
-          ref={listRef}
-          role="listbox"
-          aria-label="Directory suggestions"
-          className="max-h-56 overflow-y-auto">
-          {items.length === 0 ? (
-            <div className="px-2 py-3 text-xs text-muted-foreground">
-              No folders found.
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {items.map((item, index) => {
-                const isActive = index === activeIndex;
-
-                if (item.kind === "use-current") {
-                  return (
-                    <button
-                      key={item.key}
-                      type="button"
-                      data-palette-key={item.key}
-                      role="option"
-                      aria-selected={isActive}
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-                        "hover:bg-accent/60",
-                        isActive && "bg-accent",
-                      )}
-                      onMouseEnter={() => setActiveIndex(index)}
-                      onClick={() => acceptItem(item)}>
-                      <FolderOpen className="size-4 text-muted-foreground" />
-                      <span className="truncate">{item.label}</span>
-                    </button>
-                  );
-                }
-
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    data-palette-key={item.key}
-                    role="option"
-                    aria-selected={isActive}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-                      "hover:bg-accent/60",
-                      isActive && "bg-accent",
-                    )}
-                    onMouseEnter={() => setActiveIndex(index)}
-                    onClick={() => acceptItem(item)}>
-                    <Folder className="size-4 text-muted-foreground" />
-                    <span className="truncate">{item.entry.name}</span>
-                    <span className="ml-auto truncate text-xs text-muted-foreground">
-                      {item.entry.path}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
       {!errorMessage ? (
-        <p className="text-xs text-muted-foreground">
-          Tip: use ↑/↓ to navigate, Enter to pick a folder.
-        </p>
+        <div className="space-y-1">
+          <CommandSeparator className="mx-0" />
+          <p className="text-xs text-muted-foreground">
+            Use the command menu to search folders and press Enter to choose
+            one.
+          </p>
+        </div>
       ) : null}
     </div>
   );
