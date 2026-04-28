@@ -114,13 +114,6 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
 
       <Dialog open={isNewChatModalOpen} onOpenChange={handleCloseNewChatModal}>
         <DialogContent showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Start a new chat</DialogTitle>
-            <DialogDescription>
-              Select a workspace folder to create a new chat session.
-            </DialogDescription>
-          </DialogHeader>
-
           <form onSubmit={handleCreateNewChat} className="space-y-4">
             <div className="space-y-3">
               <WorkspaceDirectoryPalette

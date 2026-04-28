@@ -11,7 +11,6 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandSeparator,
 } from "@/components/ui/command";
 
 type DirectoryEntry = {
@@ -369,7 +368,7 @@ export default function WorkspaceDirectoryPalette({
 
       {!errorMessage ? (
         <div className="space-y-1">
-          <CommandSeparator className="mx-0" />
+          <div className="mx-0 h-px bg-border" />
           <p className="text-xs text-muted-foreground">
             Use the command menu to search folders and press Enter to choose
             one.

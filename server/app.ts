@@ -53,6 +53,17 @@ const IGNORED_PATTERNS = [
   "coverage",
 ];
 
+async function getPathInfo(targetPath: string): Promise<FileNode> {
+  const normalizedPath = path.normalize(targetPath);
+  const info = await stat(normalizedPath);
+
+  return {
+    name: path.basename(normalizedPath) || normalizedPath,
+    path: normalizedPath,
+    type: info.isDirectory() ? "directory" : "file",
+  };
+}
+
 async function scanDirectory(dirPath: string): Promise<FileNode[]> {
   const entries = await readdir(dirPath, { withFileTypes: true });
   const nodePromises = entries.map(
@@ -245,21 +256,16 @@ export const app = new Elysia({ prefix: "/api" })
           return { error: "Path parameter is required" };
         }
 
-        const file = Bun.file(reqPath);
-        if (await file.exists()) {
-          return {
-            name: reqPath.split("/").pop() || "",
-            path: reqPath,
-            type: "file",
-          };
+        const pathInfo = await getPathInfo(reqPath);
+
+        if (pathInfo.type === "file") {
+          return pathInfo;
         }
 
-        const children = await scanDirectory(reqPath);
+        const children = await scanDirectory(pathInfo.path);
 
         return {
-          name: reqPath.split("/").pop() || "",
-          path: reqPath,
-          type: "directory",
+          ...pathInfo,
           children,
         };
       } catch (error) {
@@ -285,19 +291,29 @@ export const app = new Elysia({ prefix: "/api" })
           return { error: "Path parameter is required" };
         }
 
-        const file = Bun.file(filePath);
-        if (!(await file.exists())) {
+        const pathInfo = await getPathInfo(filePath);
+        if (pathInfo.type !== "file") {
+          set.status = 400;
+          return { error: "Path must point to a file" };
+        }
+
+        const content = await Bun.file(pathInfo.path).text();
+
+        return {
+          content,
+          filePath: pathInfo.path,
+        };
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "ENOENT"
+        ) {
           set.status = 404;
           return { error: "File not found" };
         }
 
-        const content = await file.text();
-
-        return {
-          content,
-          filePath,
-        };
-      } catch (error) {
         console.error("Error reading file:", error);
         set.status = 500;
         return { error: "Failed to read file" };
@@ -320,13 +336,14 @@ export const app = new Elysia({ prefix: "/api" })
           return { error: "Path parameter is required" };
         }
 
-        const file = Bun.file(workspacePath);
-        if (await file.exists()) {
+        const workspaceInfo = await getPathInfo(workspacePath);
+
+        if (workspaceInfo.type !== "directory") {
           set.status = 400;
           return { error: "Workspace path must point to a directory" };
         }
 
-        return await listWorkspaceTreePaths(workspacePath);
+        return await listWorkspaceTreePaths(workspaceInfo.path);
       } catch (error) {
         console.error("Error building workspace tree:", error);
         set.status = 500;
