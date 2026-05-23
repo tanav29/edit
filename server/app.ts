@@ -214,16 +214,15 @@ export const app = new Elysia({ prefix: "/api" })
         return { ok: true, path: normalizedPath };
       } catch (error) {
         const code =
-          typeof error === "object" &&
-          error !== null &&
-          "code" in error
+          typeof error === "object" && error !== null && "code" in error
             ? (error as { code?: string }).code
             : undefined;
 
         if (code !== "ENOENT") {
           set.status = 500;
           return {
-            error: error instanceof Error ? error.message : "Failed to open path",
+            error:
+              error instanceof Error ? error.message : "Failed to open path",
           };
         }
       }
@@ -240,7 +239,9 @@ export const app = new Elysia({ prefix: "/api" })
         set.status = 500;
         return {
           error:
-            error instanceof Error ? error.message : "Failed to create directory",
+            error instanceof Error
+              ? error.message
+              : "Failed to create directory",
         };
       }
     },
@@ -320,33 +321,6 @@ export const app = new Elysia({ prefix: "/api" })
           return { error: "Path parameter is required" };
         }
 
-<<<<<<< HEAD
-        const normalizedPath = path.normalize(reqPath);
-
-        try {
-          const info = await stat(normalizedPath);
-          if (info.isFile()) {
-            return {
-              name: path.basename(normalizedPath),
-              path: normalizedPath,
-              type: "file",
-            };
-          }
-        } catch (error) {
-          set.status = 404;
-          return {
-            error:
-              error instanceof Error ? error.message : "Path not found",
-          };
-        }
-
-        const children = await scanDirectory(normalizedPath);
-
-        return {
-          name: path.basename(normalizedPath),
-          path: normalizedPath,
-          type: "directory",
-=======
         const pathInfo = await getPathInfo(reqPath);
 
         if (pathInfo.type === "file") {
@@ -357,7 +331,6 @@ export const app = new Elysia({ prefix: "/api" })
 
         return {
           ...pathInfo,
->>>>>>> 695bd528ac51477b805d7c04a1ee00683ccc68f8
           children,
         };
       } catch (error) {

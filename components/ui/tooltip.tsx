@@ -1,7 +1,7 @@
 "use client";
 
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
-import type React from "react";
+import * as React from "react";
 import { cn } from "@/lib/utils";
 
 export const TooltipCreateHandle: typeof TooltipPrimitive.createHandle =
@@ -12,10 +12,28 @@ export const TooltipProvider: typeof TooltipPrimitive.Provider =
 
 export const Tooltip: typeof TooltipPrimitive.Root = TooltipPrimitive.Root;
 
-export function TooltipTrigger(
-  props: TooltipPrimitive.Trigger.Props,
-): React.ReactElement {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
+export function TooltipTrigger({
+  asChild,
+  children,
+  ...props
+}: TooltipPrimitive.Trigger.Props & {
+  asChild?: boolean;
+}): React.ReactElement {
+  if (asChild && React.isValidElement(children)) {
+    return (
+      <TooltipPrimitive.Trigger
+        data-slot="tooltip-trigger"
+        render={children}
+        {...props}
+      />
+    );
+  }
+
+  return (
+    <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props}>
+      {children}
+    </TooltipPrimitive.Trigger>
+  );
 }
 
 export function TooltipPopup({

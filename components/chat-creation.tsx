@@ -171,9 +171,9 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
     string | null
   >(null);
   const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
-  const [pendingWorkspacePath, setPendingWorkspacePath] = useState<string | null>(
-    null,
-  );
+  const [pendingWorkspacePath, setPendingWorkspacePath] = useState<
+    string | null
+  >(null);
   const [, setSession] = useSessionParam();
 
   const cacheRef = useRef(new Map<string, DirectoryEntry[]>());
@@ -296,14 +296,18 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
         handleNewChat(paletteItem.path);
         setOpen(false);
       } else if (paletteItem.kind === "directory") {
-        const dirItem = paletteItem as Extract<PaletteItem, { kind: "directory" }>;
+        const dirItem = paletteItem as Extract<
+          PaletteItem,
+          { kind: "directory" }
+        >;
         const sep = inferSeparator(dirItem.entry.path);
-        setCommandInputValue(`${trimTrailingSeparators(dirItem.entry.path)}${sep}`);
+        setCommandInputValue(
+          `${trimTrailingSeparators(dirItem.entry.path)}${sep}`,
+        );
       }
       return;
     }
 
-<<<<<<< HEAD
     const staticItem = item as Item;
     console.log("Static item clicked:", staticItem);
   }
@@ -320,7 +324,8 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
   }, []);
 
   useEffect(() => {
-    const raw = typeof commandInputValue === "string" ? commandInputValue.trim() : "";
+    const raw =
+      typeof commandInputValue === "string" ? commandInputValue.trim() : "";
     abortRef.current?.abort();
 
     if (!raw) {
@@ -387,7 +392,9 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
         }
 
         const parentEntries = await listFromCacheOrFetch(parentDir);
-        const exactMatch = parentEntries.find((entry) => entry.name === fragment);
+        const exactMatch = parentEntries.find(
+          (entry) => entry.name === fragment,
+        );
 
         if (exactMatch) {
           const childEntries = await listFromCacheOrFetch(exactMatch.path);
@@ -465,7 +472,8 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
   }, [directoryItems, contextDir]);
 
   const isPathQuery = useMemo(() => {
-    const raw = typeof commandInputValue === "string" ? commandInputValue.trim() : "";
+    const raw =
+      typeof commandInputValue === "string" ? commandInputValue.trim() : "";
     return (
       raw.startsWith("/") ||
       raw.includes("\\") ||
@@ -548,10 +556,7 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
                           try {
                             setIsCreatingNewChat(true);
                             setScanError(null);
-                            await openWorkspacePath(
-                              pendingWorkspacePath,
-                              true,
-                            );
+                            await openWorkspacePath(pendingWorkspacePath, true);
                             setOpen(false);
                             setCommandInputValue("");
                             setPendingWorkspacePath(null);
@@ -601,11 +606,10 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
                               );
                             }
 
-                            const dirItem =
-                              paletteItem as Extract<
-                                PaletteItem,
-                                { kind: "directory" }
-                              >;
+                            const dirItem = paletteItem as Extract<
+                              PaletteItem,
+                              { kind: "directory" }
+                            >;
                             return (
                               <CommandItem
                                 key={dirItem.key}
@@ -700,22 +704,6 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
                 {newChatWorkspaceError}
               </p>
             )}
-=======
-      <Dialog open={isNewChatModalOpen} onOpenChange={handleCloseNewChatModal}>
-        <DialogContent showCloseButton={false}>
-          <form onSubmit={handleCreateNewChat} className="space-y-4">
-            <div className="space-y-3">
-              <WorkspaceDirectoryPalette
-                autoFocus
-                value={newChatWorkspacePath}
-                onValueChange={setNewChatWorkspacePath}
-                errorMessage={newChatWorkspaceError}
-                onClearError={() => setNewChatWorkspaceError(null)}
-                placeholder="/absolute/path/to/project"
-              />
-            </div>
-
->>>>>>> 695bd528ac51477b805d7c04a1ee00683ccc68f8
             <DialogFooter>
               <Button
                 type="button"

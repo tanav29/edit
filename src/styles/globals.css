@@ -52,6 +52,14 @@
 }
 
 :root {
+    /* Giest font variables (provided by @fontsource/geist-sans and @fontsource/geist-mono) */
+    --font-geist-sans:
+        "Geist Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+        Roboto, "Helvetica Neue", Arial;
+    --font-geist-mono:
+        "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+        "Roboto Mono", monospace;
+
     --radius: 0.625rem;
     --background: var(--color-white);
     --foreground: var(--color-neutral-800);

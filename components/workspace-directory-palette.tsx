@@ -13,11 +13,8 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-<<<<<<< HEAD
   CommandPanel,
   CommandSeparator,
-=======
->>>>>>> 695bd528ac51477b805d7c04a1ee00683ccc68f8
 } from "@/components/ui/command";
 
 type DirectoryEntry = {
@@ -285,86 +282,83 @@ export default function WorkspaceDirectoryPalette({
   }
 
   return (
-    <Command items={isLoading ? [] : commandItems}>
-      <CommandInput
-        autoFocus={autoFocus}
-        value={rawQuery}
-        onChange={(v) => {
-          setRawQuery(v);
-          onValueChange(v);
-          if (errorMessage) onClearError?.();
-        }}
-        placeholder={placeholder}
-        aria-invalid={Boolean(errorMessage)}
-        aria-describedby={errorMessage ? "workspace-path-error" : undefined}
-      />
-      <CommandPanel>
-        <CommandEmpty>No folders found.</CommandEmpty>
-        <CommandList className={cn(!value.trim() && "hidden", "max-h-56")}>
-          {(group: { value: string; items: PaletteItem[] }, index: number) => (
-            <Fragment>
-              <CommandGroup items={group.items}>
-                <CommandGroupLabel>{group.value}</CommandGroupLabel>
-                <CommandCollection>
-                  {(item: PaletteItem) => (
-                    <CommandItem
-                      key={item.key}
-                      value={
-                        item.kind === "use-current"
-                          ? item.label
-                          : item.entry.name
-                      }
-                      onClick={() => acceptItem(item)}
-                    >
-                      {item.kind === "use-current" ? (
-                        <div className="gap-2 flex">
-                          <FolderOpen className="size-4 text-muted-foreground" />
-                          <span className="truncate">sd{item.label}</span>
-                          <span className="ml-auto truncate text-xs text-muted-foreground">
-                            {item.path}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="gap-2 flex">
-                          <Folder className="size-4 text-muted-foreground" />
-                          <span className="truncate">{item.entry.name}</span>
-                          <span className="ml-auto truncate text-xs text-muted-foreground">
-                            {item.entry.path}
-                          </span>
-                        </div>
-                      )}
-                    </CommandItem>
-                  )}
-                </CommandCollection>
-              </CommandGroup>
-              {index < commandItems.length - 1 && <CommandSeparator />}
-            </Fragment>
-          )}
-        </CommandList>
-<<<<<<< HEAD
-      </CommandPanel>
-    </Command>
-=======
+    <Fragment>
+      <Command items={isLoading ? [] : commandItems}>
+        <CommandInput
+          autoFocus={autoFocus}
+          value={rawQuery}
+          onChange={(nextValue: unknown) => {
+            const value =
+              typeof nextValue === "string"
+                ? nextValue
+                : nextValue &&
+                    typeof nextValue === "object" &&
+                    "target" in nextValue &&
+                    typeof (nextValue as { target?: { value?: unknown } })
+                      .target?.value === "string"
+                  ? (nextValue as { target: { value: string } }).target.value
+                  : "";
+
+            setRawQuery(value);
+            onValueChange(value);
+            if (errorMessage) onClearError?.();
+          }}
+          placeholder={placeholder}
+          aria-invalid={Boolean(errorMessage)}
+          aria-describedby={errorMessage ? "workspace-path-error" : undefined}
+        />
+        <CommandPanel>
+          <CommandEmpty>No folders found.</CommandEmpty>
+          <CommandList className={cn(!value.trim() && "hidden", "max-h-56")}>
+            {(
+              group: { value: string; items: PaletteItem[] },
+              index: number,
+            ) => (
+              <Fragment key={group.value}>
+                <CommandGroup items={group.items}>
+                  <CommandGroupLabel>{group.value}</CommandGroupLabel>
+                  <CommandCollection>
+                    {(item: PaletteItem) => (
+                      <CommandItem
+                        key={item.key}
+                        value={
+                          item.kind === "use-current"
+                            ? item.label
+                            : item.entry.name
+                        }
+                        onClick={() => acceptItem(item)}
+                      >
+                        {item.kind === "use-current" ? (
+                          <div className="gap-2 flex">
+                            <FolderOpen className="size-4 text-muted-foreground" />
+                            <span className="truncate">{item.label}</span>
+                            <span className="ml-auto truncate text-xs text-muted-foreground">
+                              {item.path}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="gap-2 flex">
+                            <Folder className="size-4 text-muted-foreground" />
+                            <span className="truncate">{item.entry.name}</span>
+                            <span className="ml-auto truncate text-xs text-muted-foreground">
+                              {item.entry.path}
+                            </span>
+                          </div>
+                        )}
+                      </CommandItem>
+                    )}
+                  </CommandCollection>
+                </CommandGroup>
+                {index < commandItems.length - 1 && <CommandSeparator />}
+              </Fragment>
+            )}
+          </CommandList>
+        </CommandPanel>
       </Command>
 
-      {errorMessage ? (
-        <p id="workspace-path-error" className="text-sm text-destructive">
-          {errorMessage}
-        </p>
-      ) : scanError ? (
+      {scanError && !errorMessage ? (
         <p className="text-sm text-destructive">{scanError}</p>
       ) : null}
-
-      {!errorMessage ? (
-        <div className="space-y-1">
-          <div className="mx-0 h-px bg-border" />
-          <p className="text-xs text-muted-foreground">
-            Use the command menu to search folders and press Enter to choose
-            one.
-          </p>
-        </div>
-      ) : null}
-    </div>
->>>>>>> 695bd528ac51477b805d7c04a1ee00683ccc68f8
+    </Fragment>
   );
 }
