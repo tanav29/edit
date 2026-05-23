@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently -n WEB,API -c blue,green \"npm run dev:web\" \"npm run dev:api\"",
     "dev:web": "vite",
-    "dev:api": "bun --hot server/index.ts",
+    "dev:api": "bun run --watch server/index.ts",
     "build:web": "vite build",
     "start:web": "vite preview",
     "start:api": "bun server/index.ts",

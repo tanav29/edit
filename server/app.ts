@@ -1,13 +1,9 @@
 import { exec, execSync } from "child_process";
-import { db } from "@/db";
-import { chats } from "@/db/schema";
+import { nanoid } from "nanoid";
 import { mkdir, readdir, stat } from "fs/promises";
-import { normalizeMessageOrder } from "@/lib/utils";
-import { parseMessages } from "@/lib/utils";
 import path from "path";
 import { join, relative } from "path";
 import { promisify } from "util";
-import { desc, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 
 import {
@@ -20,7 +16,13 @@ import {
 import { ollama } from "ollama-ai-provider-v2";
 
 import { createTools, DEFAULT_IGNORE_PATTERNS } from "@/lib/tool";
-import { storeMessages } from "./store";
+import {
+  createSession,
+  deleteSession,
+  getSession,
+  listSessions,
+  storeMessages,
+} from "./store";
 
 const execAsync = promisify(exec);
 
@@ -161,6 +163,63 @@ function runGit(command: string, cwd: string): string {
   }).trim();
 }
 
+async function ensureWorkspaceDirectory(
+  reqPath: string | undefined,
+  createIfMissing = false,
+): Promise<
+  { ok: true; path: string } | { ok: false; status: number; error: string }
+> {
+  const trimmedPath = reqPath?.trim();
+
+  if (!trimmedPath) {
+    return { ok: false, status: 400, error: "Path is required" };
+  }
+
+  const normalizedPath = path.normalize(trimmedPath);
+
+  try {
+    const info = await stat(normalizedPath);
+    if (!info.isDirectory()) {
+      return {
+        ok: false,
+        status: 400,
+        error: "Path must point to a directory",
+      };
+    }
+
+    return { ok: true, path: normalizedPath };
+  } catch (error) {
+    const code =
+      typeof error === "object" && error !== null && "code" in error
+        ? (error as { code?: string }).code
+        : undefined;
+
+    if (code !== "ENOENT") {
+      return {
+        ok: false,
+        status: 500,
+        error: error instanceof Error ? error.message : "Failed to open path",
+      };
+    }
+  }
+
+  if (!createIfMissing) {
+    return { ok: false, status: 404, error: "Path not found" };
+  }
+
+  try {
+    await mkdir(normalizedPath, { recursive: true });
+    return { ok: true, path: normalizedPath };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 500,
+      error:
+        error instanceof Error ? error.message : "Failed to create directory",
+    };
+  }
+}
+
 async function generateCommitMessage(diff: string): Promise<string> {
   try {
     const result = await generateText({
@@ -191,59 +250,24 @@ async function generateCommitMessage(diff: string): Promise<string> {
   }
 }
 
-export const app = new Elysia({ prefix: "/api" })
+const api = new Elysia({ prefix: "/api" })
+  .get("/health", async () => {
+    return { ok: true };
+  })
   .post(
     "/files/ensure",
     async ({ body, set }) => {
-      const reqPath = body?.path?.trim();
+      const result = await ensureWorkspaceDirectory(
+        body?.path,
+        Boolean(body?.createIfMissing),
+      );
 
-      if (!reqPath) {
-        set.status = 400;
-        return { error: "Path is required" };
+      if (!result.ok) {
+        set.status = result.status;
+        return { error: result.error };
       }
 
-      const normalizedPath = path.normalize(reqPath);
-
-      try {
-        const info = await stat(normalizedPath);
-        if (!info.isDirectory()) {
-          set.status = 400;
-          return { error: "Path must point to a directory" };
-        }
-
-        return { ok: true, path: normalizedPath };
-      } catch (error) {
-        const code =
-          typeof error === "object" && error !== null && "code" in error
-            ? (error as { code?: string }).code
-            : undefined;
-
-        if (code !== "ENOENT") {
-          set.status = 500;
-          return {
-            error:
-              error instanceof Error ? error.message : "Failed to open path",
-          };
-        }
-      }
-
-      if (!body?.createIfMissing) {
-        set.status = 404;
-        return { error: "Path not found" };
-      }
-
-      try {
-        await mkdir(normalizedPath, { recursive: true });
-        return { ok: true, path: normalizedPath };
-      } catch (error) {
-        set.status = 500;
-        return {
-          error:
-            error instanceof Error
-              ? error.message
-              : "Failed to create directory",
-        };
-      }
+      return { ok: true, path: result.path };
     },
     {
       body: t.Object({
@@ -499,42 +523,75 @@ export const app = new Elysia({ prefix: "/api" })
       }),
     },
   )
-  .get("/sessions", async () => {
-    const rows = await db
-      .select({
-        id: chats.id,
-        workspacePath: chats.workspacePath,
-        title: chats.title,
-        createdAt: chats.createdAt,
-        updatedAt: chats.updatedAt,
-      })
-      .from(chats)
-      .orderBy(desc(chats.updatedAt));
-    return rows;
-  })
+  .get("/sessions", async () => listSessions())
+  .post(
+    "/sessions",
+    async ({ body, set }) => {
+      const workspace = await ensureWorkspaceDirectory(
+        body.path,
+        Boolean(body.createIfMissing),
+      );
+
+      if (!workspace.ok) {
+        set.status = workspace.status;
+        return { error: workspace.error };
+      }
+
+      const id = nanoid();
+      const session = await createSession({
+        id,
+        workspacePath: workspace.path,
+      });
+
+      return {
+        ok: true,
+        id: session.id,
+        workspace: session.workspacePath,
+        session,
+      };
+    },
+    {
+      body: t.Object({
+        path: t.String(),
+        createIfMissing: t.Optional(t.Boolean()),
+      }),
+    },
+  )
+  .get(
+    "/sessions/:id",
+    async ({ params, set }) => {
+      const session = await getSession(params.id);
+
+      if (!session) {
+        set.status = 404;
+        return { error: "Session not found" };
+      }
+
+      return session;
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+    },
+  )
+  .delete(
+    "/sessions/:id",
+    async ({ params }) => {
+      await deleteSession(params.id);
+      return { ok: true };
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+    },
+  )
   .get(
     "/store/:id",
     async ({ params }) => {
-      if (!params.id) {
-        return { ok: false, msg: "sessionId and path are required" };
-      }
-
-      const chat = await db
-        .select()
-        .from(chats)
-        .where(eq(chats.id, params.id))
-        .limit(1)
-        .then((rows) => rows[0]);
-
-      if (!chat) {
-        return null;
-      }
-
-      return {
-        ...chat,
-        workspace: chat.workspacePath,
-        messages: normalizeMessageOrder(parseMessages(chat.messages)),
-      };
+      // Backwards-compatible alias for GET /sessions/:id.
+      return getSession(params.id);
     },
     {
       params: t.Object({
@@ -544,44 +601,44 @@ export const app = new Elysia({ prefix: "/api" })
   )
   .post(
     "/store",
-    async ({ body }) => {
-      const messages = Array.isArray(body.messages) ? body.messages : undefined;
+    async ({ body, set }) => {
+      try {
+        await storeMessages({
+          id: body.id,
+          messages: body.messages,
+          workspace: body.workspace,
+        });
 
-      if (!body.id || !body.workspace || !messages) {
+        return { ok: true };
+      } catch (error) {
+        set.status = 400;
         return {
-          ok: false,
-          msg: "sessionId, path and messages are required",
+          error:
+            error instanceof Error ? error.message : "Failed to store messages",
         };
       }
-
-      await storeMessages({
-        id: body.id,
-        messages,
-        workspace: body.workspace,
-      });
-
-      return { ok: true };
     },
     {
       body: t.Object({
         id: t.String(),
         workspace: t.String(),
-        messages: t.Any(),
+        messages: t.Array(t.Any()),
       }),
     },
   )
-  .get("/del/:id", async ({ params }) => {
-    if (!params.id) {
-      return {
-        ok: false,
-        msg: "sessionId and workspace are required",
-      };
-    }
-
-    await db.delete(chats).where(eq(chats.id, params.id));
-
-    return { ok: true };
-  })
+  .get(
+    "/del/:id",
+    async ({ params }) => {
+      // Legacy alias retained for the existing client. Prefer DELETE /sessions/:id.
+      await deleteSession(params.id);
+      return { ok: true };
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+    },
+  )
   .post(
     "/chat",
     async ({ body, set }) => {
@@ -649,3 +706,5 @@ export const app = new Elysia({ prefix: "/api" })
       }),
     },
   );
+
+export const app = new Elysia().use(api);

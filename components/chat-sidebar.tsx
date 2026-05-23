@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { nanoid } from "nanoid";
 import { ChevronDown, Folder, Plus, Shell, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -49,6 +48,14 @@ export default function ChatSidebar() {
     {},
   );
 
+  const { data: health, isLoading: healthChecking } = useQuery({
+    queryKey: ["health"],
+    queryFn: async () => {
+      const res = await api.health.get();
+      return res.data;
+    },
+  });
+
   const activeSessionId = session ?? null;
 
   const groupedSessions = useMemo(() => {
@@ -90,8 +97,8 @@ export default function ChatSidebar() {
     );
     if (!confirmed) return;
 
-    const res = await api.del({ id: chat.id }).get();
-    if (res.data?.ok) {
+    const res = await fetch(`/api/sessions/${chat.id}`, { method: "DELETE" });
+    if (res.ok) {
       if (activeSessionId === chat.id) {
         await setSession(null);
       }
@@ -109,27 +116,30 @@ export default function ChatSidebar() {
       return;
     }
 
-    const newSessionId = nanoid();
-    const res = await api.store.post({
-      id: newSessionId,
-      workspace,
-      messages: [],
+    const res = await api.sessions.post({
+      path: workspace,
     });
 
-    if (!res.data?.ok) {
+    if (!res.data?.ok || !res.data.id) {
       toast("Failed to create chat");
       return;
     }
 
     await queryClient.invalidateQueries({ queryKey: ["sessions"] });
-    await setSession(newSessionId);
+    await setSession(res.data.id);
   }
 
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-r bg-card/30">
       <div className="flex items-center justify-between border-b px-3 py-2">
-        <div className="flex items-center gap-2">
-          <Shell className="size-5 text-muted-foreground" />
+        <div className="flex items-center gap-2 select-none">
+          <Shell
+            className={cn(
+              "size-5 text-muted-foreground/40",
+              healthChecking && "animate-spin",
+              health?.ok && "text-muted-foreground",
+            )}
+          />
           <p className="text-sm font-medium">Sessions</p>
         </div>
 

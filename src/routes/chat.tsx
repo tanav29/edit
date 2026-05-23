@@ -65,7 +65,7 @@ export function ChatRouteComponent() {
     queryKey: ["session", session],
     queryFn: async () => {
       if (!session) return null;
-      const res = await fetch(`/api/store/${session}`);
+      const res = await fetch(`/api/sessions/${session}`);
       const data = await res.json();
       return {
         workspace:

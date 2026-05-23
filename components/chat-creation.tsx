@@ -1,27 +1,15 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { nanoid } from "nanoid";
+import type { KeyboardEvent } from "react";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
   CornerDownLeftIcon,
   Folder,
-  FolderOpen,
   Loader2,
   Plus,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 import { Button } from "./ui/button";
-import WorkspaceDirectoryPalette from "@/components/workspace-directory-palette";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
-import { api } from "@/lib/eden";
 import { useSessionParam } from "@/lib/session-param";
 import {
   Command,
@@ -37,8 +25,6 @@ import {
   CommandItem,
   CommandList,
   CommandPanel,
-  CommandSeparator,
-  CommandShortcut,
 } from "./ui/command";
 import { Kbd, KbdGroup } from "./ui/kbd";
 
@@ -46,15 +32,9 @@ type ChatCreationProps = {
   refetch?: () => void | Promise<unknown>;
 };
 
-type Item = {
-  label: string;
-  shortcut?: string;
-  value: string;
-};
-
 type Group = {
   value: string;
-  items: AnyItem[];
+  items: PaletteItem[];
 };
 
 type DirectoryEntry = {
@@ -62,37 +42,15 @@ type DirectoryEntry = {
   path: string;
 };
 
-type PaletteItem =
-  | {
-      kind: "use-current";
-      key: string;
-      label: string;
-      path: string;
-      keywords: string[];
-    }
-  | {
-      kind: "directory";
-      key: string;
-      entry: DirectoryEntry;
-      keywords: string[];
-    };
+type PaletteItem = {
+  kind: "directory";
+  key: string;
+  entry: DirectoryEntry;
+  keywords: string[];
+};
 
-type AnyItem = Item | PaletteItem;
+type JsonObject = Record<string, unknown>;
 
-export const suggestions: Item[] = [
-  { label: "Linear", shortcut: "⌘L", value: "linear" },
-  { label: "Figma", shortcut: "⌘F", value: "figma" },
-  { label: "Slack", shortcut: "⌘S", value: "slack" },
-  { label: "YouTube", shortcut: "⌘Y", value: "youtube" },
-  { label: "Raycast", shortcut: "⌘R", value: "raycast" },
-];
-export const commands: Item[] = [
-  { label: "Clipboard History", shortcut: "⌘⇧C", value: "clipboard-history" },
-  { label: "Import Extension", shortcut: "⌘I", value: "import-extension" },
-  { label: "Create Snippet", shortcut: "⌘N", value: "create-snippet" },
-  { label: "System Preferences", shortcut: "⌘,", value: "system-preferences" },
-  { label: "Window Management", shortcut: "⌘⇧W", value: "window-management" },
-];
 function inferSeparator(path: string) {
   return path.includes("\\") ? "\\" : "/";
 }
@@ -101,6 +59,19 @@ function trimTrailingSeparators(path: string) {
   const trimmed = path.trim();
   if (trimmed === "/" || /^[A-Za-z]:[\\/]+$/.test(trimmed)) return trimmed;
   return trimmed.replace(/[\\/]+$/g, "");
+}
+
+function normalizeWorkspacePath(value: string) {
+  return trimTrailingSeparators(value);
+}
+
+function isPathLike(value: string) {
+  return (
+    value.startsWith("/") ||
+    value.includes("\\") ||
+    value.includes("/") ||
+    /^[A-Za-z]:[\\/]/.test(value)
+  );
 }
 
 function splitPath(input: string): { dir: string; base: string } {
@@ -125,6 +96,17 @@ function splitPath(input: string): { dir: string; base: string } {
   return { dir, base };
 }
 
+async function readJsonResponse<T extends JsonObject>(response: Response) {
+  const text = await response.text();
+  if (!text) return undefined;
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return undefined;
+  }
+}
+
 async function fetchDirectoryEntries(
   path: string,
   signal: AbortSignal,
@@ -132,22 +114,11 @@ async function fetchDirectoryEntries(
   const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`, {
     signal,
   });
-  const text = await response.text();
-  let data:
-    | {
-        error?: string;
-        type?: "file" | "directory";
-        children?: Array<{ name: string; path: string; type: string }>;
-      }
-    | undefined;
-
-  if (text) {
-    try {
-      data = JSON.parse(text) as typeof data;
-    } catch {
-      data = undefined;
-    }
-  }
+  const data = await readJsonResponse<{
+    error?: string;
+    type?: "file" | "directory";
+    children?: Array<{ name: string; path: string; type: string }>;
+  }>(response);
 
   if (!response.ok) {
     throw new Error(
@@ -163,17 +134,56 @@ async function fetchDirectoryEntries(
     .map((child) => ({ name: child.name, path: child.path }));
 }
 
+async function ensureWorkspaceDirectory(path: string, createIfMissing = false) {
+  const normalizedPath = normalizeWorkspacePath(path);
+  if (!normalizedPath) throw new Error("Path is required");
+
+  const response = await fetch("/api/files/ensure", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: normalizedPath, createIfMissing }),
+  });
+  const data = await readJsonResponse<{ error?: string; path?: string }>(
+    response,
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || response.statusText || "Failed to open workspace",
+    );
+  }
+
+  return data?.path || normalizedPath;
+}
+
+async function createWorkspaceSession(path: string) {
+  const normalizedPath = normalizeWorkspacePath(path);
+  if (!normalizedPath) throw new Error("Path is required");
+
+  const response = await fetch("/api/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: normalizedPath, createIfMissing: true }),
+  });
+  const data = await readJsonResponse<{
+    ok?: boolean;
+    error?: string;
+    id?: string;
+    workspace?: string;
+  }>(response);
+
+  if (!response.ok || !data?.ok || !data.id) {
+    throw new Error(
+      data?.error || response.statusText || "Failed to create session",
+    );
+  }
+
+  return { id: data.id, workspace: data.workspace };
+}
+
 export default function ChatCreation({ refetch }: ChatCreationProps) {
   const [open, setOpen] = useState(false);
-  const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
-  const [newChatWorkspacePath, setNewChatWorkspacePath] = useState("");
-  const [newChatWorkspaceError, setNewChatWorkspaceError] = useState<
-    string | null
-  >(null);
-  const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
-  const [pendingWorkspacePath, setPendingWorkspacePath] = useState<
-    string | null
-  >(null);
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [, setSession] = useSessionParam();
 
   const cacheRef = useRef(new Map<string, DirectoryEntry[]>());
@@ -184,6 +194,14 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [commandInputValue, setCommandInputValue] = useState("");
+
+  const rawWorkspacePath = useMemo(
+    () =>
+      typeof commandInputValue === "string" ? commandInputValue.trim() : "",
+    [commandInputValue],
+  );
+
+  const canCreateSession = rawWorkspacePath.length > 0 && !isCreatingSession;
 
   function handleCommandInputChange(nextValue: unknown) {
     if (typeof nextValue === "string") {
@@ -199,121 +217,69 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
     ) {
       const targetValue = (nextValue as { target?: { value?: unknown } }).target
         ?.value;
-      if (typeof targetValue === "string") {
-        setCommandInputValue(targetValue);
-        return;
-      }
+      setCommandInputValue(typeof targetValue === "string" ? targetValue : "");
+      return;
     }
 
     setCommandInputValue("");
   }
 
-  function normalizeWorkspacePath(value: string) {
-    const trimmed = value.trim();
-    if (trimmed === "/" || /^[A-Za-z]:[\\/]+$/.test(trimmed)) return trimmed;
-    return trimmed.replace(/[\\/]+$/g, "");
+  function setInputToDirectory(path: string) {
+    const sep = inferSeparator(path);
+    setCommandInputValue(`${trimTrailingSeparators(path)}${sep}`);
+    setScanError(null);
   }
 
-  function handleNewChat(nextWorkspacePath?: string) {
-    setNewChatWorkspacePath(nextWorkspacePath ?? "");
-    setNewChatWorkspaceError(null);
-    setIsNewChatModalOpen(true);
-  }
-
-  async function openWorkspacePath(
-    nextWorkspacePath: string,
-    createIfMissing = false,
-  ) {
-    const normalizedPath = normalizeWorkspacePath(nextWorkspacePath);
-    if (!normalizedPath) return;
-
-    const response = await fetch("/api/files/ensure", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: normalizedPath, createIfMissing }),
-    });
-    const text = await response.text();
-    let data: { error?: string; path?: string } | undefined;
-
-    if (text) {
-      try {
-        data = JSON.parse(text) as typeof data;
-      } catch {
-        data = undefined;
-      }
-    }
-
-    if (!response.ok) {
-      throw new Error(
-        data?.error || response.statusText || "Failed to open workspace",
-      );
-    }
-
-    const finalPath = data?.path || normalizedPath;
-    const newSessionId = nanoid();
-    await api.store.post({
-      id: newSessionId,
-      workspace: finalPath,
-      messages: [],
-    });
-    setSession(newSessionId);
-    await Promise.resolve(refetch?.());
-  }
-
-  function handleCloseNewChatModal() {
-    if (isCreatingNewChat) return;
-    setIsNewChatModalOpen(false);
-    setNewChatWorkspaceError(null);
-  }
-
-  async function handleCreateNewChat(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const nextWorkspacePath = normalizeWorkspacePath(newChatWorkspacePath);
-    if (!nextWorkspacePath || isCreatingNewChat) return;
-
-    setIsCreatingNewChat(true);
-    setNewChatWorkspaceError(null);
+  async function openDirectory(path: string) {
+    if (!path.trim() || isLoading) return;
 
     try {
-      await openWorkspacePath(nextWorkspacePath);
-
-      setIsNewChatModalOpen(false);
-      setNewChatWorkspaceError(null);
+      setScanError(null);
+      const finalPath = await ensureWorkspaceDirectory(path);
+      setInputToDirectory(finalPath);
     } catch (error) {
-      setNewChatWorkspaceError(
-        error instanceof Error ? error.message : "Failed to open workspace",
+      setScanError(
+        error instanceof Error ? error.message : "Failed to open folder",
       );
-    } finally {
-      setIsCreatingNewChat(false);
     }
   }
 
-  function handleItemClick(item: AnyItem) {
-    if ("kind" in item) {
-      const paletteItem = item as PaletteItem;
-      if (paletteItem.kind === "use-current") {
-        handleNewChat(paletteItem.path);
-        setOpen(false);
-      } else if (paletteItem.kind === "directory") {
-        const dirItem = paletteItem as Extract<
-          PaletteItem,
-          { kind: "directory" }
-        >;
-        const sep = inferSeparator(dirItem.entry.path);
-        setCommandInputValue(
-          `${trimTrailingSeparators(dirItem.entry.path)}${sep}`,
-        );
-      }
-      return;
-    }
+  async function addWorkspaceSession() {
+    if (!canCreateSession) return;
 
-    const staticItem = item as Item;
-    console.log("Static item clicked:", staticItem);
+    try {
+      setIsCreatingSession(true);
+      setScanError(null);
+      const nextSession = await createWorkspaceSession(rawWorkspacePath);
+      await setSession(nextSession.id);
+      await Promise.resolve(refetch?.());
+      setOpen(false);
+      setCommandInputValue("");
+    } catch (error) {
+      setScanError(
+        error instanceof Error ? error.message : "Failed to create session",
+      );
+    } finally {
+      setIsCreatingSession(false);
+    }
+  }
+
+  function handleItemClick(item: PaletteItem) {
+    setInputToDirectory(item.entry.path);
+  }
+
+  function handleCommandKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    if (isCreatingSession || !rawWorkspacePath) return;
+
+    if (directoryItems.length > 0) return;
+
+    event.preventDefault();
+    void openDirectory(rawWorkspacePath);
   }
 
   useEffect(() => {
-    const down = (e: KeyboardEvent) => {
+    const down = (e: globalThis.KeyboardEvent) => {
       if (e.key === "j" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setOpen((open) => !open);
@@ -324,25 +290,10 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
   }, []);
 
   useEffect(() => {
-    const raw =
-      typeof commandInputValue === "string" ? commandInputValue.trim() : "";
+    const raw = rawWorkspacePath;
     abortRef.current?.abort();
 
-    if (!raw) {
-      setDirectoryItems([]);
-      setContextDir(null);
-      setIsLoading(false);
-      setScanError(null);
-      return;
-    }
-
-    const isPathQuery =
-      raw.startsWith("/") ||
-      raw.includes("\\") ||
-      raw.includes("/") ||
-      /^[A-Za-z]:[\\/]/.test(raw);
-
-    if (!isPathQuery) {
+    if (!raw || !isPathLike(raw)) {
       setDirectoryItems([]);
       setContextDir(null);
       setIsLoading(false);
@@ -372,7 +323,7 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
         if (endsWithSeparator) {
           const scanPath = trimTrailingSeparators(raw);
           const entries = await listFromCacheOrFetch(scanPath);
-          setContextDir(trimTrailingSeparators(scanPath));
+          setContextDir(scanPath);
           setDirectoryItems(
             entries.map((entry) => ({
               kind: "directory" as const,
@@ -399,25 +350,14 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
         if (exactMatch) {
           const childEntries = await listFromCacheOrFetch(exactMatch.path);
           setContextDir(exactMatch.path);
-          setDirectoryItems([
-            {
-              kind: "use-current" as const,
-              key: `use:${exactMatch.path}`,
-              label: `Use "${exactMatch.name}"`,
-              path: exactMatch.path,
-              keywords: [
-                exactMatch.name,
-                exactMatch.path,
-                "use current folder",
-              ],
-            },
-            ...childEntries.map((entry) => ({
+          setDirectoryItems(
+            childEntries.map((entry) => ({
               kind: "directory" as const,
               key: `dir:${entry.path}`,
               entry,
               keywords: [entry.name, entry.path],
             })),
-          ]);
+          );
           return;
         }
 
@@ -455,198 +395,72 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
     return () => {
       abortRef.current?.abort();
     };
-  }, [commandInputValue]);
+  }, [rawWorkspacePath]);
 
-  const combinedGroups = useMemo(() => {
-    const groups: Array<{ value: string; items: AnyItem[] }> = [
-      { value: "Suggestions", items: suggestions as AnyItem[] },
-      { value: "Commands", items: commands as AnyItem[] },
-    ];
-    if (directoryItems.length > 0 && contextDir) {
-      groups.push({
-        value: contextDir,
-        items: directoryItems as AnyItem[],
-      });
-    }
-    return groups;
-  }, [directoryItems, contextDir]);
-
-  const isPathQuery = useMemo(() => {
-    const raw =
-      typeof commandInputValue === "string" ? commandInputValue.trim() : "";
-    return (
-      raw.startsWith("/") ||
-      raw.includes("\\") ||
-      raw.includes("/") ||
-      /^[A-Za-z]:[\\/]/.test(raw)
-    );
-  }, [commandInputValue]);
-
-  const baseGroups: Group[] = [
-    { value: "Suggestions", items: suggestions as AnyItem[] },
-    { value: "Commands", items: commands as AnyItem[] },
-  ];
-  const groupsToRender = isPathQuery ? combinedGroups : baseGroups;
+  const groupsToRender: Group[] = useMemo(() => {
+    if (!contextDir || directoryItems.length === 0) return [];
+    return [{ value: contextDir, items: directoryItems }];
+  }, [contextDir, directoryItems]);
 
   return (
     <Fragment>
       <CommandDialog
         onOpenChange={(open) => {
           setOpen(open);
-          if (!open) setCommandInputValue("");
+          if (!open) {
+            setCommandInputValue("");
+            setScanError(null);
+          }
         }}
         open={open}
       >
-        <CommandDialogTrigger render={<Button variant="outline" size="icon" />}>
+        <CommandDialogTrigger
+          render={<Button variant="outline" size="icon-sm" />}
+        >
           <Plus />
         </CommandDialogTrigger>
         <CommandDialogPopup>
           <Command items={groupsToRender}>
             <CommandInput
-              placeholder="Search apps, commands, or directories..."
+              placeholder="Type a folder path..."
               value={commandInputValue}
               onChange={handleCommandInputChange}
-              onKeyDown={async (event) => {
-                if (event.key !== "Enter" || event.shiftKey) return;
-                if (isLoading || isCreatingNewChat) return;
-
-                const raw =
-                  typeof commandInputValue === "string"
-                    ? commandInputValue.trim()
-                    : "";
-                if (!raw) return;
-
-                event.preventDefault();
-
-                try {
-                  setIsCreatingNewChat(true);
-                  setScanError(null);
-                  await openWorkspacePath(raw);
-                  setOpen(false);
-                  setCommandInputValue("");
-                  setPendingWorkspacePath(null);
-                } catch (error) {
-                  const message =
-                    error instanceof Error
-                      ? error.message
-                      : "Failed to open workspace";
-                  setScanError(message);
-                  if (message.toLowerCase().includes("not found")) {
-                    setPendingWorkspacePath(raw);
-                  } else {
-                    setPendingWorkspacePath(null);
-                  }
-                } finally {
-                  setIsCreatingNewChat(false);
-                }
-              }}
+              onKeyDown={handleCommandKeyDown}
             />
             <CommandPanel>
               <CommandEmpty>
                 {isLoading ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : scanError ? (
-                  <div className="flex flex-col items-start gap-2">
-                    <span className="text-destructive">{scanError}</span>
-                    {pendingWorkspacePath && (
-                      <Button
-                        size="sm"
-                        onClick={async () => {
-                          if (isCreatingNewChat) return;
-                          try {
-                            setIsCreatingNewChat(true);
-                            setScanError(null);
-                            await openWorkspacePath(pendingWorkspacePath, true);
-                            setOpen(false);
-                            setCommandInputValue("");
-                            setPendingWorkspacePath(null);
-                          } catch (error) {
-                            setScanError(
-                              error instanceof Error
-                                ? error.message
-                                : "Failed to create workspace",
-                            );
-                          } finally {
-                            setIsCreatingNewChat(false);
-                          }
-                        }}
-                      >
-                        Create folder and open
-                      </Button>
-                    )}
-                  </div>
+                  <span className="text-destructive">{scanError}</span>
+                ) : rawWorkspacePath ? (
+                  "No folders found. Press Add to create a session here."
                 ) : (
-                  "No results found."
+                  "Enter an absolute folder path to browse."
                 )}
               </CommandEmpty>
               <CommandList className="max-h-56">
-                {(group: Group, index: number) => (
-                  <Fragment key={group.value}>
-                    <CommandGroup items={group.items}>
-                      <CommandGroupLabel>{group.value}</CommandGroupLabel>
-                      <CommandCollection>
-                        {(item: AnyItem) => {
-                          if ("kind" in item) {
-                            const paletteItem = item as PaletteItem;
-                            if (paletteItem.kind === "use-current") {
-                              return (
-                                <CommandItem
-                                  key={paletteItem.key}
-                                  value={paletteItem.label}
-                                  onClick={() => handleItemClick(paletteItem)}
-                                >
-                                  <FolderOpen className="size-4 text-muted-foreground" />
-                                  <span className="truncate flex-1">
-                                    {paletteItem.label}
-                                  </span>
-                                  <span className="ml-auto truncate text-xs text-muted-foreground">
-                                    {paletteItem.path}
-                                  </span>
-                                </CommandItem>
-                              );
-                            }
-
-                            const dirItem = paletteItem as Extract<
-                              PaletteItem,
-                              { kind: "directory" }
-                            >;
-                            return (
-                              <CommandItem
-                                key={dirItem.key}
-                                value={dirItem.entry.name}
-                                onClick={() => handleItemClick(dirItem)}
-                              >
-                                <Folder className="size-4 text-muted-foreground" />
-                                <span className="truncate flex-1">
-                                  {dirItem.entry.name}
-                                </span>
-                                <span className="ml-auto truncate text-xs text-muted-foreground">
-                                  {dirItem.entry.path}
-                                </span>
-                              </CommandItem>
-                            );
-                          }
-
-                          const staticItem = item as Item;
-                          return (
-                            <CommandItem
-                              key={staticItem.value}
-                              onClick={() => handleItemClick(staticItem)}
-                              value={staticItem.label}
-                            >
-                              <span className="flex-1">{staticItem.label}</span>
-                              {staticItem.shortcut && (
-                                <CommandShortcut>
-                                  {staticItem.shortcut}
-                                </CommandShortcut>
-                              )}
-                            </CommandItem>
-                          );
-                        }}
-                      </CommandCollection>
-                    </CommandGroup>
-                    {index < groupsToRender.length - 1 && <CommandSeparator />}
-                  </Fragment>
+                {(group: Group) => (
+                  <CommandGroup key={group.value} items={group.items}>
+                    <CommandGroupLabel>{group.value}</CommandGroupLabel>
+                    <CommandCollection>
+                      {(item: PaletteItem) => (
+                        <CommandItem
+                          key={item.key}
+                          value={item.entry.name}
+                          onClick={() => handleItemClick(item)}
+                        >
+                          <Folder className="size-4 text-muted-foreground" />
+                          <span className="truncate flex-1">
+                            {item.entry.name}
+                          </span>
+                          <span className="ml-auto truncate text-xs text-muted-foreground">
+                            {item.entry.path}
+                          </span>
+                        </CommandItem>
+                      )}
+                    </CommandCollection>
+                  </CommandGroup>
                 )}
               </CommandList>
             </CommandPanel>
@@ -667,58 +481,20 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
                   <Kbd>
                     <CornerDownLeftIcon />
                   </Kbd>
-                  <span>Open</span>
+                  <span>Open folder</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Kbd>Esc</Kbd>
-                <span>Close</span>
-              </div>
+              <Button
+                size="sm"
+                onClick={() => void addWorkspaceSession()}
+                disabled={!canCreateSession}
+              >
+                {isCreatingSession ? "Adding..." : "Add"}
+              </Button>
             </CommandFooter>
           </Command>
         </CommandDialogPopup>
       </CommandDialog>
-      <Dialog
-        open={isNewChatModalOpen}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) handleCloseNewChatModal();
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New chat</DialogTitle>
-            <DialogDescription>
-              Choose a workspace folder for this chat session.
-            </DialogDescription>
-          </DialogHeader>
-          <form className="space-y-4" onSubmit={handleCreateNewChat}>
-            <WorkspaceDirectoryPalette
-              autoFocus
-              value={newChatWorkspacePath}
-              onValueChange={(nextValue) => setNewChatWorkspacePath(nextValue)}
-              onClearError={() => setNewChatWorkspaceError(null)}
-              errorMessage={newChatWorkspaceError}
-            />
-            {newChatWorkspaceError && (
-              <p id="workspace-path-error" className="text-sm text-destructive">
-                {newChatWorkspaceError}
-              </p>
-            )}
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={handleCloseNewChatModal}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isCreatingNewChat}>
-                {isCreatingNewChat ? "Creating..." : "Create chat"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </Fragment>
   );
 }
