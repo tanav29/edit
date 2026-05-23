@@ -1,7 +1,7 @@
 import { exec, execSync } from "child_process";
 import { db } from "@/db";
 import { chats } from "@/db/schema";
-import { readdir, stat } from "fs/promises";
+import { mkdir, readdir, stat } from "fs/promises";
 import { normalizeMessageOrder } from "@/lib/utils";
 import { parseMessages } from "@/lib/utils";
 import path from "path";
@@ -62,16 +62,21 @@ async function scanDirectory(dirPath: string): Promise<FileNode[]> {
       }
 
       const fullPath = join(dirPath, entry.name);
-      const info = await stat(fullPath);
-      const isDir = entry.isDirectory();
 
-      return {
-        name: entry.name,
-        path: fullPath,
-        type: isDir ? "directory" : "file",
-        children: isDir ? [] : undefined,
-        mtimeMs: info.mtimeMs,
-      };
+      try {
+        const info = await stat(fullPath);
+        const isDir = entry.isDirectory();
+
+        return {
+          name: entry.name,
+          path: fullPath,
+          type: isDir ? "directory" : "file",
+          children: isDir ? [] : undefined,
+          mtimeMs: info.mtimeMs,
+        };
+      } catch {
+        return null;
+      }
     },
   );
 
@@ -177,6 +182,65 @@ async function generateCommitMessage(diff: string): Promise<string> {
 
 export const app = new Elysia({ prefix: "/api" })
   .post(
+    "/files/ensure",
+    async ({ body, set }) => {
+      const reqPath = body?.path?.trim();
+
+      if (!reqPath) {
+        set.status = 400;
+        return { error: "Path is required" };
+      }
+
+      const normalizedPath = path.normalize(reqPath);
+
+      try {
+        const info = await stat(normalizedPath);
+        if (!info.isDirectory()) {
+          set.status = 400;
+          return { error: "Path must point to a directory" };
+        }
+
+        return { ok: true, path: normalizedPath };
+      } catch (error) {
+        const code =
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error
+            ? (error as { code?: string }).code
+            : undefined;
+
+        if (code !== "ENOENT") {
+          set.status = 500;
+          return {
+            error: error instanceof Error ? error.message : "Failed to open path",
+          };
+        }
+      }
+
+      if (!body?.createIfMissing) {
+        set.status = 404;
+        return { error: "Path not found" };
+      }
+
+      try {
+        await mkdir(normalizedPath, { recursive: true });
+        return { ok: true, path: normalizedPath };
+      } catch (error) {
+        set.status = 500;
+        return {
+          error:
+            error instanceof Error ? error.message : "Failed to create directory",
+        };
+      }
+    },
+    {
+      body: t.Object({
+        path: t.String(),
+        createIfMissing: t.Optional(t.Boolean()),
+      }),
+    },
+  )
+  .post(
     "/exec",
     async ({ body, set }) => {
       try {
@@ -245,20 +309,30 @@ export const app = new Elysia({ prefix: "/api" })
           return { error: "Path parameter is required" };
         }
 
-        const file = Bun.file(reqPath);
-        if (await file.exists()) {
+        const normalizedPath = path.normalize(reqPath);
+
+        try {
+          const info = await stat(normalizedPath);
+          if (info.isFile()) {
+            return {
+              name: path.basename(normalizedPath),
+              path: normalizedPath,
+              type: "file",
+            };
+          }
+        } catch (error) {
+          set.status = 404;
           return {
-            name: reqPath.split("/").pop() || "",
-            path: reqPath,
-            type: "file",
+            error:
+              error instanceof Error ? error.message : "Path not found",
           };
         }
 
-        const children = await scanDirectory(reqPath);
+        const children = await scanDirectory(normalizedPath);
 
         return {
-          name: reqPath.split("/").pop() || "",
-          path: reqPath,
+          name: path.basename(normalizedPath),
+          path: normalizedPath,
           type: "directory",
           children,
         };

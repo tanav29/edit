@@ -1,16 +1,19 @@
 "use client";
 
 import { Folder, FolderOpen, Loader2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import {
   Command,
+  CommandCollection,
   CommandEmpty,
   CommandGroup,
+  CommandGroupLabel,
   CommandInput,
   CommandItem,
   CommandList,
+  CommandPanel,
   CommandSeparator,
 } from "@/components/ui/command";
 
@@ -82,7 +85,8 @@ async function fetchDirectoryEntries(
   const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`, {
     signal,
   });
-  const data = (await response.json()) as
+  const text = await response.text();
+  let data:
     | {
         error?: string;
         type?: "file" | "directory";
@@ -90,8 +94,18 @@ async function fetchDirectoryEntries(
       }
     | undefined;
 
+  if (text) {
+    try {
+      data = JSON.parse(text) as typeof data;
+    } catch {
+      data = undefined;
+    }
+  }
+
   if (!response.ok) {
-    throw new Error(data?.error || "Failed to scan directory");
+    throw new Error(
+      data?.error || response.statusText || "Failed to scan directory",
+    );
   }
 
   if (data?.type !== "directory") return [];
@@ -118,10 +132,6 @@ export default function WorkspaceDirectoryPalette({
   const [isLoading, setIsLoading] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [rawQuery, setRawQuery] = useState(value);
-
-  useEffect(() => {
-    setRawQuery(value);
-  }, [value]);
 
   useEffect(() => {
     const raw = value.trim();
@@ -245,15 +255,21 @@ export default function WorkspaceDirectoryPalette({
     };
   }, [value]);
 
-  const commandFilter = useMemo(() => {
-    return (itemValue: string, search: string, keywords?: string[]) => {
-      const haystack = [itemValue, ...(keywords ?? [])].join(" ").toLowerCase();
-      const needle = search.trim().toLowerCase();
+  const commandItems = useMemo(() => {
+    if (!items.length) return [];
 
-      if (!needle) return 1;
-      return haystack.includes(needle) ? 1 : 0;
-    };
-  }, []);
+    const groupValue = contextDir || "Folders";
+    const filteredItems = contextDir
+      ? items
+      : items.filter((item) => item.kind === "directory");
+
+    return [
+      {
+        value: groupValue,
+        items: filteredItems,
+      },
+    ];
+  }, [items, contextDir]);
 
   function acceptItem(item: PaletteItem) {
     if (item.kind === "use-current") {
@@ -266,116 +282,63 @@ export default function WorkspaceDirectoryPalette({
   }
 
   return (
-    <div className="space-y-2">
-      <Command
-        shouldFilter
-        filter={commandFilter}
-        value=""
-        className="rounded-lg border bg-background"
-      >
-        <CommandInput
-          autoFocus={autoFocus}
-          value={rawQuery}
-          onValueChange={(nextValue) => {
-            setRawQuery(nextValue);
-            onValueChange(nextValue);
-            if (errorMessage) onClearError?.();
-          }}
-          placeholder={placeholder}
-          aria-invalid={Boolean(errorMessage)}
-          aria-describedby={errorMessage ? "workspace-path-error" : undefined}
-        />
-
+    <Command items={isLoading ? [] : commandItems}>
+      <CommandInput
+        autoFocus={autoFocus}
+        value={rawQuery}
+        onChange={(v) => {
+          setRawQuery(v);
+          onValueChange(v);
+          if (errorMessage) onClearError?.();
+        }}
+        placeholder={placeholder}
+        aria-invalid={Boolean(errorMessage)}
+        aria-describedby={errorMessage ? "workspace-path-error" : undefined}
+      />
+      <CommandPanel>
+        <CommandEmpty>No folders found.</CommandEmpty>
         <CommandList className={cn(!value.trim() && "hidden", "max-h-56")}>
-          {isLoading ? (
-            <div className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              <span>Scanning folders...</span>
-            </div>
-          ) : (
-            <>
-              <CommandEmpty>No folders found.</CommandEmpty>
-
-              {contextDir ? (
-                <CommandGroup heading={contextDir}>
-                  {items.map((item) => {
-                    if (item.kind === "use-current") {
-                      return (
-                        <CommandItem
-                          key={item.key}
-                          value={item.label}
-                          keywords={item.keywords}
-                          onSelect={() => acceptItem(item)}
-                        >
+          {(group: { value: string; items: PaletteItem[] }, index: number) => (
+            <Fragment>
+              <CommandGroup items={group.items}>
+                <CommandGroupLabel>{group.value}</CommandGroupLabel>
+                <CommandCollection>
+                  {(item: PaletteItem) => (
+                    <CommandItem
+                      key={item.key}
+                      value={
+                        item.kind === "use-current"
+                          ? item.label
+                          : item.entry.name
+                      }
+                      onClick={() => acceptItem(item)}
+                    >
+                      {item.kind === "use-current" ? (
+                        <div className="gap-2 flex">
                           <FolderOpen className="size-4 text-muted-foreground" />
-                          <span className="truncate">{item.label}</span>
+                          <span className="truncate">sd{item.label}</span>
                           <span className="ml-auto truncate text-xs text-muted-foreground">
                             {item.path}
                           </span>
-                        </CommandItem>
-                      );
-                    }
-
-                    return (
-                      <CommandItem
-                        key={item.key}
-                        value={item.entry.name}
-                        keywords={item.keywords}
-                        onSelect={() => acceptItem(item)}
-                      >
-                        <Folder className="size-4 text-muted-foreground" />
-                        <span className="truncate">{item.entry.name}</span>
-                        <span className="ml-auto truncate text-xs text-muted-foreground">
-                          {item.entry.path}
-                        </span>
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              ) : (
-                <CommandGroup heading="Folders">
-                  {items.map((item) => {
-                    if (item.kind !== "directory") return null;
-
-                    return (
-                      <CommandItem
-                        key={item.key}
-                        value={item.entry.name}
-                        keywords={item.keywords}
-                        onSelect={() => acceptItem(item)}
-                      >
-                        <Folder className="size-4 text-muted-foreground" />
-                        <span className="truncate">{item.entry.name}</span>
-                        <span className="ml-auto truncate text-xs text-muted-foreground">
-                          {item.entry.path}
-                        </span>
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              )}
-            </>
+                        </div>
+                      ) : (
+                        <div className="gap-2 flex">
+                          <Folder className="size-4 text-muted-foreground" />
+                          <span className="truncate">{item.entry.name}</span>
+                          <span className="ml-auto truncate text-xs text-muted-foreground">
+                            {item.entry.path}
+                          </span>
+                        </div>
+                      )}
+                    </CommandItem>
+                  )}
+                </CommandCollection>
+              </CommandGroup>
+              {index < commandItems.length - 1 && <CommandSeparator />}
+            </Fragment>
           )}
         </CommandList>
-      </Command>
-
-      {errorMessage ? (
-        <p id="workspace-path-error" className="text-sm text-destructive">
-          {errorMessage}
-        </p>
-      ) : scanError ? (
-        <p className="text-sm text-destructive">{scanError}</p>
-      ) : null}
-
-      {!errorMessage ? (
-        <div className="space-y-1">
-          <CommandSeparator className="mx-0" />
-          <p className="text-xs text-muted-foreground">
-            Use the command menu to search folders and press Enter to choose
-            one.
-          </p>
-        </div>
-      ) : null}
-    </div>
+      </CommandPanel>
+    </Command>
   );
 }

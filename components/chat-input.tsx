@@ -85,12 +85,21 @@ async function scanWorkspaceFiles(
         signal,
       },
     );
-    const data = (await response.json()) as
-      | (FileTreeNode & { error?: string })
-      | undefined;
+    const text = await response.text();
+    let data: (FileTreeNode & { error?: string }) | undefined;
+
+    if (text) {
+      try {
+        data = JSON.parse(text) as typeof data;
+      } catch {
+        data = undefined;
+      }
+    }
 
     if (!response.ok) {
-      throw new Error(data?.error || "Failed to scan workspace files");
+      throw new Error(
+        data?.error || response.statusText || "Failed to scan workspace files",
+      );
     }
 
     if (data?.type !== "directory") {

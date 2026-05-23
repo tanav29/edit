@@ -7,6 +7,7 @@ import {
 import {
   Code,
   Copy,
+  FolderTree,
   Loader2,
   PanelRightClose,
   PanelRightOpen,
@@ -57,7 +58,7 @@ function queueReducer(state: string[], action: QueueAction) {
 
 export function ChatRouteComponent() {
   const [session] = useSessionParam();
-  const [isFileBarOpen, setIsFileBarOpen] = useState(true);
+  const [isFileBarOpen, setIsFileBarOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
 
   const { data: sessionData, isLoading: isSessionLoading } = useQuery({
@@ -378,11 +379,7 @@ function ChatLayout({
                       aria-label="Toggle file tree"
                       onClick={() => setIsFileBarOpen((prev) => !prev)}
                     >
-                      {isFileBarOpen ? (
-                        <PanelRightClose className="size-4" />
-                      ) : (
-                        <PanelRightOpen className="size-4" />
-                      )}
+                      <FolderTree />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">

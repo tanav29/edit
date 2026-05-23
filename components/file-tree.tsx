@@ -130,13 +130,23 @@ function WorkspaceFileTree({
       );
 
       if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as {
-          error?: string;
-        } | null;
+        const text = await res.text();
+        let payload: { error?: string } | null = null;
+        if (text) {
+          try {
+            payload = JSON.parse(text) as { error?: string } | null;
+          } catch {
+            payload = null;
+          }
+        }
         throw new Error(payload?.error || "Failed to load workspace tree");
       }
 
-      return (await res.json()) as WorkspaceTreePayload;
+      const text = await res.text();
+      if (!text) {
+        throw new Error("Failed to load workspace tree");
+      }
+      return JSON.parse(text) as WorkspaceTreePayload;
     },
     enabled: Boolean(rootPath),
     staleTime: 30_000,
