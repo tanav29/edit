@@ -40,18 +40,22 @@ function trimTrailingSeparators(path: string) {
   return trimmed.replace(/[\\/]+$/g, "");
 }
 
-function getRelativeFilePath(fullPath: string, workspacePath: string) {
-  const normalizedWorkspace = trimTrailingSeparators(workspacePath);
-  const normalizedPath = fullPath.trim();
+function normalizePathForComparison(path: string) {
+  const normalized = trimTrailingSeparators(path).replace(/\\/g, "/");
+  return /^[A-Za-z]:/.test(normalized) ? normalized.toLowerCase() : normalized;
+}
 
-  if (normalizedPath === normalizedWorkspace) {
+function getRelativeFilePath(fullPath: string, workspacePath: string) {
+  const normalizedWorkspace = normalizePathForComparison(workspacePath);
+  const normalizedPath = fullPath.trim().replace(/\\/g, "/");
+  const comparablePath = normalizePathForComparison(fullPath);
+
+  if (comparablePath === normalizedWorkspace) {
     return "";
   }
 
-  if (normalizedPath.startsWith(normalizedWorkspace)) {
-    return normalizedPath
-      .slice(normalizedWorkspace.length)
-      .replace(/^[\\/]+/, "");
+  if (comparablePath.startsWith(`${normalizedWorkspace}/`)) {
+    return normalizedPath.slice(normalizedWorkspace.length).replace(/^\/+/, "");
   }
 
   return normalizedPath;
@@ -282,7 +286,8 @@ export default function ChatInput({
             {queuedMessages.map((message, index) => (
               <div
                 key={`${index}-${message}`}
-                className="flex items-center gap-2 rounded-md border border-border/60 px-2 py-1 text-[10px] text-muted-foreground not-last:mb-1">
+                className="flex items-center gap-2 rounded-md border border-border/60 px-2 py-1 text-[10px] text-muted-foreground not-last:mb-1"
+              >
                 <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center font-medium">
                   {index + 1}
                 </span>
@@ -291,7 +296,8 @@ export default function ChatInput({
                   type="button"
                   className="shrink-0 rounded-full p-0.5 transition-colors hover:bg-background/80 hover:text-foreground"
                   aria-label={`Remove queued message ${index + 1}`}
-                  onClick={() => onDeleteQueuedMessage?.(index)}>
+                  onClick={() => onDeleteQueuedMessage?.(index)}
+                >
                   <X className="size-3" />
                 </button>
               </div>
@@ -326,7 +332,8 @@ export default function ChatInput({
                             isActive && "bg-accent",
                           )}
                           onMouseEnter={() => setActiveMentionIndex(index)}
-                          onClick={() => insertMention(file)}>
+                          onClick={() => insertMention(file)}
+                        >
                           <File className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate">{file.name}</span>
@@ -466,7 +473,8 @@ export default function ChatInput({
                   disabled={
                     isDisabled || (!input.trim() && !(isActive && !!stop))
                   }
-                  className="rounded-lg shrink-0">
+                  className="rounded-lg shrink-0"
+                >
                   {isActive && !input.trim() ? (
                     <Square className="size-3 fill-current" />
                   ) : (

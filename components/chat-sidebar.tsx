@@ -167,7 +167,8 @@ export default function ChatSidebar() {
                           [group.path]: !current[group.path],
                         }))
                       }
-                      aria-expanded={!isCollapsed}>
+                      aria-expanded={!isCollapsed}
+                    >
                       <div className="flex items-center justify-center relative w-4">
                         <Folder
                           className={cn(
@@ -184,14 +185,15 @@ export default function ChatSidebar() {
                       </div>
 
                       <span className="truncate flex-1 text-left font-semibold">
-                        {group.path.split("/").filter(Boolean).pop()}
+                        {group.path.split(/[\\/]/).filter(Boolean).pop()}
                       </span>
                     </button>
                     <button
                       type="button"
                       onClick={() => onNewChat(group.path)}
                       className="rounded p-1 hover:bg-accent/50 flex items-center justify-center"
-                      aria-label={`New chat in ${group.path}`}>
+                      aria-label={`New chat in ${group.path}`}
+                    >
                       <Plus className="size-3 opacity-70 active:opacity-100 cursor-pointer" />
                     </button>
                   </div>
@@ -204,7 +206,8 @@ export default function ChatSidebar() {
                         : "grid-rows-[1fr] opacity-100",
                       isCollapsed && "pointer-events-none",
                     )}
-                    aria-hidden={isCollapsed}>
+                    aria-hidden={isCollapsed}
+                  >
                     <div className="min-h-0 overflow-hidden">
                       <div className="space-y-1">
                         {group.chats.map((chat) => {
@@ -218,17 +221,20 @@ export default function ChatSidebar() {
                                 isActive
                                   ? "border-primary/30 bg-primary/10"
                                   : "border-transparent hover:border-border hover:bg-accent/40",
-                              )}>
+                              )}
+                            >
                               <button
                                 type="button"
                                 className="flex-1 text-left cursor-pointer"
                                 onClick={() => setSession(chat.id)}
-                                title={formatLabel(chat.title)}>
+                                title={formatLabel(chat.title)}
+                              >
                                 {formatLabel(chat.title)}
                               </button>
                               <button
                                 onClick={() => handleDeleteChat(chat)}
-                                className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 absolute delay-200 right-0 top-0 bottom-0 px-3 cursor-pointer">
+                                className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 absolute delay-200 right-0 top-0 bottom-0 px-3 cursor-pointer"
+                              >
                                 <Trash2 className="size-3 text-muted-foreground" />
                               </button>
                             </div>

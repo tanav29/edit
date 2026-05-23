@@ -13,8 +13,11 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+<<<<<<< HEAD
   CommandPanel,
   CommandSeparator,
+=======
+>>>>>>> 695bd528ac51477b805d7c04a1ee00683ccc68f8
 } from "@/components/ui/command";
 
 type DirectoryEntry = {
@@ -338,7 +341,30 @@ export default function WorkspaceDirectoryPalette({
             </Fragment>
           )}
         </CommandList>
+<<<<<<< HEAD
       </CommandPanel>
     </Command>
+=======
+      </Command>
+
+      {errorMessage ? (
+        <p id="workspace-path-error" className="text-sm text-destructive">
+          {errorMessage}
+        </p>
+      ) : scanError ? (
+        <p className="text-sm text-destructive">{scanError}</p>
+      ) : null}
+
+      {!errorMessage ? (
+        <div className="space-y-1">
+          <div className="mx-0 h-px bg-border" />
+          <p className="text-xs text-muted-foreground">
+            Use the command menu to search folders and press Enter to choose
+            one.
+          </p>
+        </div>
+      ) : null}
+    </div>
+>>>>>>> 695bd528ac51477b805d7c04a1ee00683ccc68f8
   );
 }

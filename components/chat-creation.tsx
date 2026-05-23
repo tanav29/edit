@@ -303,6 +303,7 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
       return;
     }
 
+<<<<<<< HEAD
     const staticItem = item as Item;
     console.log("Static item clicked:", staticItem);
   }
@@ -699,6 +700,22 @@ export default function ChatCreation({ refetch }: ChatCreationProps) {
                 {newChatWorkspaceError}
               </p>
             )}
+=======
+      <Dialog open={isNewChatModalOpen} onOpenChange={handleCloseNewChatModal}>
+        <DialogContent showCloseButton={false}>
+          <form onSubmit={handleCreateNewChat} className="space-y-4">
+            <div className="space-y-3">
+              <WorkspaceDirectoryPalette
+                autoFocus
+                value={newChatWorkspacePath}
+                onValueChange={setNewChatWorkspacePath}
+                errorMessage={newChatWorkspaceError}
+                onClearError={() => setNewChatWorkspaceError(null)}
+                placeholder="/absolute/path/to/project"
+              />
+            </div>
+
+>>>>>>> 695bd528ac51477b805d7c04a1ee00683ccc68f8
             <DialogFooter>
               <Button
                 type="button"

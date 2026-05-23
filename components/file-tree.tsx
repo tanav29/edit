@@ -46,22 +46,25 @@ function joinWorkspacePath(rootPath: string, relativePath: string) {
   )}`;
 }
 
-function toRelativeWorkspacePath(fullPath: string, rootPath: string) {
-  const normalizedRoot = trimTrailingSeparators(rootPath);
-  const normalizedFullPath = fullPath.trim();
+function normalizePathForComparison(path: string) {
+  const normalized = trimTrailingSeparators(path).replace(/\\/g, "/");
+  return /^[A-Za-z]:/.test(normalized) ? normalized.toLowerCase() : normalized;
+}
 
-  if (normalizedFullPath === normalizedRoot) {
+function toRelativeWorkspacePath(fullPath: string, rootPath: string) {
+  const normalizedRoot = normalizePathForComparison(rootPath);
+  const normalizedFullPath = fullPath.trim().replace(/\\/g, "/");
+  const comparableFullPath = normalizePathForComparison(fullPath);
+
+  if (comparableFullPath === normalizedRoot) {
     return "";
   }
 
-  if (normalizedFullPath.startsWith(normalizedRoot)) {
-    return normalizedFullPath
-      .slice(normalizedRoot.length)
-      .replace(/^[\\/]+/, "")
-      .replaceAll("\\", "/");
+  if (comparableFullPath.startsWith(`${normalizedRoot}/`)) {
+    return normalizedFullPath.slice(normalizedRoot.length).replace(/^\/+/, "");
   }
 
-  return normalizedFullPath.replaceAll("\\", "/");
+  return normalizedFullPath;
 }
 
 export default function FileTreeBar({
