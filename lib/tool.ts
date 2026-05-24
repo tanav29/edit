@@ -290,51 +290,6 @@ function grepWorkspace(params: {
         .filter((match): match is GrepMatch => match !== null);
 }
 
-async function readFile(params: {
-    workspacePath: string;
-    filePath: string;
-    offset?: number;
-    limit?: number;
-}) {
-    const { workspacePath, filePath, offset, limit } = params;
-    try {
-        const fullPath = resolveWorkspacePath(workspacePath, filePath);
-
-        if (!fs.existsSync(fullPath)) {
-            return {
-                filePath: fullPath,
-                relativePath: getRelativeWorkspacePath(workspacePath, fullPath),
-                error: `File not found: ${fullPath}`,
-            };
-        }
-
-        const content = fs.readFileSync(fullPath, "utf-8");
-        const lines = content.split("\n");
-        const totalLines = lines.length;
-        const requestedLimit = limit ?? DEFAULT_READ_LINE_LIMIT;
-        const startOffset = offset ? Math.max(offset - 1, 0) : 0;
-        const endOffset = Math.min(startOffset + requestedLimit, lines.length);
-        const selectedLines = lines.slice(startOffset, endOffset);
-
-        return {
-            filePath: fullPath,
-            relativePath: getRelativeWorkspacePath(workspacePath, fullPath),
-            content: selectedLines.join("\n"),
-            range: `${startOffset + 1}-${endOffset}`,
-            totalLines,
-            size: fs.statSync(fullPath).size,
-            truncated: endOffset < totalLines,
-            defaultLimitApplied: limit == null,
-        };
-    } catch (error) {
-        return {
-            filePath,
-            relativePath: filePath,
-            error: errorMessage(error),
-        };
-    }
-}
-
 async function scrapeUrl(url: string, maxChars: number = 8000) {
     try {
         const validatedUrl = ensureHttpUrl(url);
@@ -679,51 +634,41 @@ export function createTools(workspacePath: string) {
         }),
 
         read: tool({
-            description:
-                "Read one or more files from the workspace. Use this after locating the right path with ls, glob, or grep. Prefer focused reads when possible, and read before editing an existing file so you can supply exact old_str text.",
+            description: "Read a file from the workspace.",
             inputSchema: zodSchema(
                 z.object({
-                    filePaths: z
-                        .union([z.string(), z.array(z.string())])
-                        .describe(
-                            "Single relative file path or an array of file paths to read. Examples: 'src/main.ts' or ['src/main.ts', 'src/utils.ts']",
-                        ),
+                    filePath: z.string().describe("Relative path to the file"),
                     offset: z
                         .number()
                         .optional()
-                        .describe(
-                            "1-based line number to start reading from for a focused read",
-                        ),
+                        .describe("1-based line number to start (default: 1)"),
                     limit: z
                         .number()
                         .optional()
-                        .describe(
-                            "Maximum number of lines to read from each file",
-                        ),
+                        .describe("Number of lines to read (default: 250)"),
                 }),
             ),
-            execute: async ({ filePaths, offset, limit }) => {
+            execute: async ({
+                filePath,
+                offset = 1,
+                limit = DEFAULT_READ_LINE_LIMIT,
+            }) => {
                 try {
-                    const pathArray = Array.isArray(filePaths)
-                        ? filePaths
-                        : [filePaths];
-
-                    const results = await Promise.all(
-                        pathArray.map((filePath) =>
-                            readFile({
-                                workspacePath,
-                                filePath,
-                                offset,
-                                limit,
-                            }),
-                        ),
+                    const fullPath = resolveWorkspacePath(
+                        workspacePath,
+                        filePath,
                     );
+                    const content = fs.readFileSync(fullPath, "utf-8");
+                    const lines = content.split("\n");
+                    const start = Math.max(1, offset) - 1;
+                    const end = Math.min(start + limit, lines.length);
 
                     return {
-                        files: results,
-                        count: results.length,
-                        successCount: results.filter((r) => !r.error).length,
-                        errorCount: results.filter((r) => r.error).length,
+                        filePath,
+                        content: lines.slice(start, end).join("\n"),
+                        totalLines: lines.length,
+                        range: (start + 1).toString() + "-" + end.toString(),
+                        truncated: end < lines.length,
                     };
                 } catch (error) {
                     return { error: errorMessage(error) };

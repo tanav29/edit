@@ -168,7 +168,6 @@ function ToolPart({
 }) {
     const toolName = part.type.replace("tool-", "");
     const filePath = getInputString(part.input, "filePath");
-    const filePaths = getInputStringList(part.input, "filePaths");
     const pattern = getInputString(part.input, "pattern");
     const patterns = getInputStringList(part.input, "patterns");
     const command = getInputString(part.input, "command");
@@ -253,33 +252,17 @@ function ToolPart({
 
     return (
         <details>
-            <summary className="flex items-center gap-2 py-0 text-sm animate-fade-in text-muted-foreground/90 select-none outline-none">
+            <summary className="flex items-center gap-2 py-0 text-md animate-fade-in text-muted-foreground/90 select-none outline-none">
                 {part.state === "output-available" && (
                     <>
                         {toolName === "read" && (
                             <span className="text-muted-foreground/90 flex items-center gap-2">
-                                Read{" "}
-                                {String(
-                                    part.output &&
-                                        typeof part.output === "object" &&
-                                        part.output &&
-                                        "count" in part.output
-                                        ? part.output.count
-                                        : 0,
-                                )}{" "}
-                                file
-                                {part.output &&
-                                typeof part.output === "object" &&
-                                part.output &&
-                                "count" in part.output &&
-                                part.output.count !== 1
-                                    ? "s"
-                                    : ""}
+                                Read {filePath}
                             </span>
                         )}
                         {toolName === "ls" && (
                             <span className="text-muted-foreground/90 flex items-center gap-2">
-                                ls "{directoryPath}"
+                                Listed "{directoryPath}"
                             </span>
                         )}
                         {toolName === "glob" && (
@@ -300,7 +283,7 @@ function ToolPart({
                         )}
                         {toolName === "grep" && (
                             <span className="text-muted-foreground/90 flex items-center gap-2">
-                                Grep {pattern}
+                                Grep "{pattern}"
                             </span>
                         )}
                         {toolName === "edit_file" && part.output.patch && (
@@ -467,13 +450,8 @@ const ToolOutput = React.memo(function ToolOutput({
 
     if (toolName === "ls") {
         return (
-            <div className="space-y-2 rounded-lg border border-border/40 bg-card/70 p-3">
-                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                    {String(data.path ?? ".")} ·{" "}
-                    {String(data.totalReturned ?? 0)} entries
-                    {data.truncated ? " · truncated" : ""}
-                </div>
-                <pre className="overflow-auto whitespace-pre-wrap wrap-break-word font-mono text-xs rounded-md bg-background/60 p-2">
+            <div className="space-y-2 rounded-lg border border-border/40 bg-card/70 p-3 text-muted-foreground">
+                <pre className="overflow-auto whitespace-pre-wrap wrap-break-word font-mono text-xs">
                     {String(data.tree ?? "(empty)") || "(empty)"}
                 </pre>
             </div>
@@ -487,10 +465,6 @@ const ToolOutput = React.memo(function ToolOutput({
 
         return (
             <div className="space-y-2 rounded-lg border border-border/40 bg-card/70 p-3">
-                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                    {String(data.total ?? files.length)} matches
-                    {data.truncated ? " · truncated" : ""}
-                </div>
                 {files.length === 0 ? (
                     <div className="text-xs text-muted-foreground">
                         No files
@@ -500,7 +474,7 @@ const ToolOutput = React.memo(function ToolOutput({
                         {files.map((file, index) => (
                             <div
                                 key={`${file}-${index}`}
-                                className="font-mono text-xs rounded-md bg-background/60 p-2"
+                                className="text-xs text-muted-foreground"
                             >
                                 {file}
                             </div>
@@ -509,48 +483,6 @@ const ToolOutput = React.memo(function ToolOutput({
                 )}
             </div>
         );
-    }
-
-    if (
-        toolName === "read" &&
-        Array.isArray(data.files) &&
-        data.files.length > 1
-    ) {
-        const files = data.files as Array<Record<string, unknown>>;
-        return (
-            <div className="space-y-2 rounded-lg border border-border/40 bg-card/70 p-3">
-                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Read {String(data.successCount)} of {String(data.count)}{" "}
-                    files
-                </div>
-                {files.map((file, idx) => (
-                    <div key={idx} className="rounded-md bg-background/60 p-2">
-                        <div className="text-xs font-mono text-muted-foreground mb-1">
-                            {String(file.relativePath ?? file.filePath)}
-                        </div>
-                        {!file.error ? (
-                            <>
-                                <div className="text-[10px] text-muted-foreground/60 mb-1">
-                                    {String(file.range)} of{" "}
-                                    {String(file.totalLines)}
-                                </div>
-                                <pre className="text-xs overflow-auto max-h-32 bg-background/40 p-1 rounded border border-border/20">
-                                    {String(file.content ?? "")}
-                                </pre>
-                            </>
-                        ) : (
-                            <div className="text-xs text-red-400">
-                                {String(file.error)}
-                            </div>
-                        )}
-                    </div>
-                ))}
-            </div>
-        );
-    }
-
-    if (toolName === "read" && data.content) {
-        return null;
     }
 
     if (
@@ -654,40 +586,6 @@ const ToolOutput = React.memo(function ToolOutput({
         );
     }
 
-    if (toolName === "grep") {
-        const matches = Array.isArray(data.matches)
-            ? (data.matches as Array<Record<string, unknown>>)
-            : [];
-
-        return (
-            <div className="space-y-2 rounded-lg border border-border/40 bg-card/70 p-3">
-                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                    {String(data.total ?? matches.length)} matches
-                </div>
-                {matches.length === 0 ? (
-                    <div className="text-xs text-muted-foreground">
-                        No matches
-                    </div>
-                ) : (
-                    matches.map((match, index) => (
-                        <div
-                            key={index}
-                            className="space-y-1 rounded-md bg-background/60 p-2"
-                        >
-                            <div className="font-mono text-[11px] text-muted-foreground">
-                                {String(match.relativePath ?? match.filePath)}:
-                                {String(match.line)}:{String(match.column)}
-                            </div>
-                            <pre className="overflow-x-auto whitespace-pre-wrap wrap-break-word font-mono text-xs">
-                                {String(match.text ?? "")}
-                            </pre>
-                        </div>
-                    ))
-                )}
-            </div>
-        );
-    }
-
     if (toolName === "bash") {
         const stdout = typeof data.stdout === "string" ? data.stdout : "";
         const stderr = typeof data.stderr === "string" ? data.stderr : "";
@@ -740,6 +638,10 @@ const ToolOutput = React.memo(function ToolOutput({
             </Terminal>
         );
     }
+
+    if (toolName === "grep") return null;
+
+    if (toolName === "read") return null;
 
     if (toolName === "edit_file") return null;
 
