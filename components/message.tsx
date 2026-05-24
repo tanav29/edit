@@ -12,7 +12,7 @@ import {
     TerminalStatus,
     TerminalTitle,
 } from "./ai-elements/terminal";
-import { type ToolUIPart } from "ai";
+import { tool, type ToolUIPart } from "ai";
 import {
     BookSearch,
     Globe,
@@ -253,13 +253,26 @@ function ToolPart({
 
     return (
         <details>
-            <summary className="flex items-center gap-2 py-0 text-sm animate-fade-in text-muted-foreground/90 select-none cursor-pointer outline-none">
+            <summary className="flex items-center gap-2 py-0 text-sm animate-fade-in text-muted-foreground/90 select-none outline-none">
                 {part.state === "output-available" && (
                     <>
                         {toolName === "read" && (
                             <span className="text-muted-foreground/90 flex items-center gap-2">
-                                Read {part.output && part.output.count} file
-                                {part.output && part.output.count !== 1
+                                Read{" "}
+                                {String(
+                                    part.output &&
+                                        typeof part.output === "object" &&
+                                        part.output &&
+                                        "count" in part.output
+                                        ? part.output.count
+                                        : 0,
+                                )}{" "}
+                                file
+                                {part.output &&
+                                typeof part.output === "object" &&
+                                part.output &&
+                                "count" in part.output &&
+                                part.output.count !== 1
                                     ? "s"
                                     : ""}
                             </span>
@@ -280,11 +293,6 @@ function ToolPart({
                                 Ran {compactCommand}
                             </span>
                         )}
-                        {toolName === "patch" && (
-                            <span className="text-muted-foreground/90 flex items-center gap-2">
-                                {filePath}
-                            </span>
-                        )}
                         {toolName === "write" && (
                             <span className="text-muted-foreground/90 flex items-center gap-2">
                                 {filePath}
@@ -294,6 +302,17 @@ function ToolPart({
                             <span className="text-muted-foreground/90 flex items-center gap-2">
                                 Grep {pattern}
                             </span>
+                        )}
+                        {toolName === "edit_file" && part.output.patch && (
+                            <div className="w-full max-h-108 my-2 overflow-y-scroll border rounded-lg overflow-hidden">
+                                <PatchDiff
+                                    patch={part.output.patch}
+                                    options={{
+                                        overflow: "wrap",
+                                        diffStyle: "unified",
+                                    }}
+                                />
+                            </div>
                         )}
                         {toolName === "web" && (
                             <span className="text-muted-foreground/90 flex items-center gap-2">
@@ -427,42 +446,10 @@ function ToolPart({
                             );
                         }
                     }
-                    if (
-                        part.state === "output-available" &&
-                        (toolName === "patch" || toolName === "write") &&
-                        part.output &&
-                        typeof part.output === "object"
-                    ) {
-                        const out = part.output as Record<string, unknown>;
-                        const editCount =
-                            typeof out.editCount === "number"
-                                ? out.editCount
-                                : 1;
-                        const patchAdditions =
-                            typeof out.patchAdditions === "number"
-                                ? out.patchAdditions
-                                : 0;
-                        const patchDeletions =
-                            typeof out.patchDeletions === "number"
-                                ? out.patchDeletions
-                                : 0;
-                        const label =
-                            out.action === "created"
-                                ? "created"
-                                : out.action === "edited"
-                                  ? `${String(editCount)} edit${editCount === 1 ? "" : "s"}`
-                                  : "written";
-                        return (
-                            <span className="text-muted-foreground/70 ml-1">
-                                {label} (+{String(patchAdditions)}/-
-                                {String(patchDeletions)})
-                            </span>
-                        );
-                    }
                     return null;
                 })()}
             </summary>
-            <div className="mt-2">{toolOutput}</div>
+            <div className="">{toolOutput}</div>
         </details>
     );
 }
@@ -477,14 +464,6 @@ const ToolOutput = React.memo(function ToolOutput({
     if (!output) return null;
 
     const data = output as Record<string, unknown>;
-
-    if (data.error) {
-        return (
-            <div className="text-red-400 font-mono whitespace-pre-wrap max-h-48">
-                {String(data.error)}
-            </div>
-        );
-    }
 
     if (toolName === "ls") {
         return (
@@ -572,23 +551,6 @@ const ToolOutput = React.memo(function ToolOutput({
 
     if (toolName === "read" && data.content) {
         return null;
-    }
-
-    if (toolName === "patch" || toolName === "write") {
-        const patch = typeof data.patch === "string" ? data.patch : null;
-
-        return (
-            <div className="tool-card rounded-lg border border-border/40 h-96 overflow-auto">
-                {patch ? (
-                    <PatchDiff
-                        patch={patch}
-                        options={{
-                            diffStyle: "unified",
-                        }}
-                    />
-                ) : null}
-            </div>
-        );
     }
 
     if (
@@ -778,6 +740,8 @@ const ToolOutput = React.memo(function ToolOutput({
             </Terminal>
         );
     }
+
+    if (toolName === "edit_file") return null;
 
     return (
         <pre className="tool-card rounded-lg p-3.5 max-h-48 text-xs overflow-y-auto wrap-break-word">

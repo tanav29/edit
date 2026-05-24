@@ -27,12 +27,6 @@ type DirectoryEntry = {
     children?: DirectoryEntry[];
 };
 
-type PatchEdit = {
-    oldText: string;
-    newText: string;
-    replaceAll?: boolean;
-};
-
 export const DEFAULT_IGNORE_PATTERNS = [
     "node_modules",
     ".git",
@@ -531,88 +525,46 @@ function listWorkspaceDirectory(params: {
     };
 }
 
-const patchInputSchema = z
+export function buildAgentSystemPrompt(workspacePath: string): string {
+    return [
+        "You are Edit, a coding agent working inside a code-editing workspace.",
+        `Working directory: ${workspacePath}`,
+        "Solve the user's latest request directly and keep replies concise unless they ask for more detail.",
+        "The core loop is simple: inspect only what you need, use tools, observe results, then continue until the task is complete.",
+        "Never invent files, paths, symbols, tool results, command output, or validation status.",
+        "When the codebase is unclear, first get your bearings with ls, glob, or grep. Then read the smallest useful amount of code.",
+        "Prefer grep for symbols or strings, glob for filename discovery, ls for directory structure, and read for file contents.",
+        "Before editing an existing file, read it or search for the exact snippet you plan to change.",
+        "Use edit_file for every file modification.",
+        "edit_file works by exact old_str/new_str replacement.",
+        "To create a new file, use edit_file with old_str as an empty string and new_str as the full file contents.",
+        "If an edit fails, do not guess. Re-read the file, get a better exact snippet, and try again.",
+        "Use bash for validation, diagnostics, and project workflows. Never use bash to edit files.",
+        "If you change behavior, run a relevant validation command when practical and report the actual result.",
+        "Do not claim tests or commands passed unless you actually ran them.",
+        "If a truly important ambiguity would change the implementation, ask one brief question. Otherwise act.",
+        "Finish with a short summary of what changed and what validation you ran.",
+        "Ignore patterns:",
+        ...DEFAULT_IGNORE_PATTERNS.map((pattern) => `- ${pattern}`),
+    ].join("\n");
+}
+
+const editFileInputSchema = z
     .object({
-        filePath: z
+        path: z.string().describe("The path to the file"),
+        old_str: z
             .string()
             .describe(
-                "Relative path of the file to create or edit inside the workspace",
+                "Text to search for - must match exactly. Use an empty string only when creating a brand new file",
             ),
-        oldText: z
-            .string()
-            .optional()
-            .describe(
-                "Single-edit mode: exact existing text to replace. Use enough surrounding context to make the match unique. Use an empty string only when creating a brand new file",
-            ),
-        newText: z
-            .string()
-            .optional()
-            .describe(
-                "Single-edit mode: replacement text. When creating a new file, this should be the full initial file contents",
-            ),
-        replaceAll: z
-            .boolean()
-            .optional()
-            .describe(
-                "Single-edit mode: replace every exact match instead of only the first",
-            ),
-        edits: z
-            .array(
-                z.object({
-                    oldText: z
-                        .string()
-                        .min(1)
-                        .describe(
-                            "Batch mode: exact existing text to replace. Include enough surrounding context to identify the intended location",
-                        ),
-                    newText: z
-                        .string()
-                        .describe("Batch mode: replacement text for this edit"),
-                    replaceAll: z
-                        .boolean()
-                        .optional()
-                        .describe(
-                            "Batch mode: replace every exact match for this edit instead of only the first",
-                        ),
-                }),
-            )
-            .min(1)
-            .max(100)
-            .optional()
-            .describe(
-                "Batch mode: apply one or more exact oldText/newText replacements to the same existing file in order",
-            ),
+        new_str: z.string().describe("Text to replace old_str with"),
     })
     .superRefine((value, ctx) => {
-        const hasLegacy =
-            typeof value.oldText === "string" &&
-            typeof value.newText === "string";
-
-        if (!value.edits && !hasLegacy) {
+        if (!value.path || value.old_str === value.new_str) {
             ctx.addIssue({
                 code: "custom",
-                message: "Provide either edits or both oldText and newText",
-            });
-        }
-
-        if (value.edits && (value.oldText != null || value.newText != null)) {
-            ctx.addIssue({
-                code: "custom",
-                message: "Use either edits or oldText/newText, not both",
-            });
-        }
-
-        if (value.oldText != null && value.newText == null) {
-            ctx.addIssue({
-                code: "custom",
-                message: "newText is required when oldText is provided",
-            });
-        }
-
-        if (value.newText != null && value.oldText == null) {
-            ctx.addIssue({
-                code: "custom",
-                message: "oldText is required when newText is provided",
+                message:
+                    "invalid input parameters: path is required and old_str must be different from new_str",
             });
         }
     });
@@ -621,7 +573,7 @@ export function createTools(workspacePath: string) {
     return {
         ls: tool({
             description:
-                "List files and directories inside the workspace. Use this first when you need to understand local structure or confirm a path before reading or editing.",
+                "List files and directories inside the workspace. Use this to get your bearings, confirm a directory exists, or inspect local structure before reading or editing. Prefer this over read when you need navigation context rather than file contents.",
             inputSchema: zodSchema(
                 z.object({
                     path: z
@@ -670,7 +622,7 @@ export function createTools(workspacePath: string) {
 
         glob: tool({
             description:
-                "Find files by path pattern in the workspace. Use this when you know roughly what a file is called or where it lives but not its exact path.",
+                "Find files by glob pattern inside the workspace. Use this when you know roughly what a file is called or where it lives but do not know the exact path. Prefer this for filename discovery; prefer grep for symbols or code content.",
             inputSchema: zodSchema(
                 z.object({
                     patterns: z
@@ -728,7 +680,7 @@ export function createTools(workspacePath: string) {
 
         read: tool({
             description:
-                "Read one or more files from the workspace. Prefer focused ranges after locating the right file with ls, glob, or grep.",
+                "Read one or more files from the workspace. Use this after locating the right path with ls, glob, or grep. Prefer focused reads when possible, and read before editing an existing file so you can supply exact old_str text.",
             inputSchema: zodSchema(
                 z.object({
                     filePaths: z
@@ -779,118 +731,62 @@ export function createTools(workspacePath: string) {
             },
         }),
 
-        patch: tool({
+        edit_file: tool({
             description:
-                "The only file-editing tool. Create or modify files with exact oldText/newText replacements. Prefer single-edit mode for one change, batch mode for multiple changes in the same existing file, and create a new file by using oldText as an empty string with newText as the full contents.",
-            inputSchema: zodSchema(patchInputSchema),
-            execute: async ({
-                filePath,
-                oldText,
-                newText,
-                replaceAll = false,
-                edits,
-            }) => {
+                "Make edits to a text file. Replaces old_str with new_str in the given file. old_str and new_str must be different. If the file does not exist and old_str is empty, the file will be created.",
+            inputSchema: zodSchema(editFileInputSchema),
+            execute: async ({ path: filePath, old_str, new_str }) => {
                 try {
                     const fullPath = resolveWorkspacePath(
                         workspacePath,
                         filePath,
                     );
                     const existed = fs.existsSync(fullPath);
-                    const parentDir = path.dirname(fullPath);
-                    const patchEdits: PatchEdit[] = edits ?? [
-                        {
-                            oldText: oldText!,
-                            newText: newText ?? "",
-                            replaceAll,
-                        },
-                    ];
 
                     if (!existed) {
-                        if (edits) {
+                        if (old_str !== "") {
                             return {
-                                error: "Cannot create a new file with batch edits. Use single-edit mode with oldText set to an empty string and newText set to the full file contents.",
+                                error: `File not found: ${fullPath}`,
                             };
                         }
 
-                        if (oldText !== "") {
-                            return {
-                                error: `File not found: ${fullPath}. To create it with patch, use oldText as an empty string and newText as the full file contents.`,
-                            };
-                        }
-
+                        const parentDir = path.dirname(fullPath);
                         if (!fs.existsSync(parentDir)) {
                             fs.mkdirSync(parentDir, { recursive: true });
                         }
 
-                        const nextContent = newText ?? "";
-                        fs.writeFileSync(fullPath, nextContent, "utf-8");
+                        fs.writeFileSync(fullPath, new_str, "utf-8");
 
                         return {
                             ...getPatchedWriteResult({
                                 workspacePath,
                                 fullPath,
                                 previousContent: "",
-                                nextContent,
+                                nextContent: new_str,
                                 existed: false,
                                 includePatch: true,
                                 editCount: 1,
                             }),
-                            mode: "create",
-                            replacements: 1,
-                            editsApplied: 1,
-                            editSummaries: [
-                                {
-                                    index: 1,
-                                    replaced: 1,
-                                    replaceAll: false,
-                                    occurrencesFound: 1,
-                                },
-                            ],
+                            message: `Successfully created file ${filePath}`,
                         };
                     }
 
-                    const original = fs.readFileSync(fullPath, "utf-8");
-                    let nextContent = original;
-                    let totalReplacements = 0;
-                    const editSummaries: Array<{
-                        index: number;
-                        replaced: number;
-                        replaceAll: boolean;
-                        occurrencesFound: number;
-                    }> = [];
-
-                    for (const [index, edit] of patchEdits.entries()) {
-                        if (edit.oldText === "") {
-                            return {
-                                error: "Empty oldText is only supported when creating a brand new file. For existing files, read the file again and provide an exact non-empty oldText snippet.",
-                            };
-                        }
-
-                        const occurrences =
-                            nextContent.split(edit.oldText).length - 1;
-
-                        if (occurrences === 0) {
-                            return {
-                                error: `Exact match not found for edit ${index + 1}. Read the file again and use a more precise oldText snippet.`,
-                            };
-                        }
-
-                        const replaced = edit.replaceAll ? occurrences : 1;
-                        nextContent = edit.replaceAll
-                            ? nextContent.split(edit.oldText).join(edit.newText)
-                            : nextContent.replace(edit.oldText, edit.newText);
-                        totalReplacements += replaced;
-                        editSummaries.push({
-                            index: index + 1,
-                            replaced,
-                            replaceAll: Boolean(edit.replaceAll),
-                            occurrencesFound: occurrences,
-                        });
+                    if (old_str === "") {
+                        return {
+                            error: "old_str not found in file",
+                        };
                     }
 
-                    if (nextContent === original) {
+                    const previousContent = fs.readFileSync(fullPath, "utf-8");
+                    const occurrencesFound =
+                        previousContent.split(old_str).length - 1;
+                    const nextContent = previousContent
+                        .split(old_str)
+                        .join(new_str);
+
+                    if (previousContent === nextContent) {
                         return {
-                            error: "Patch produced no changes. Double-check the requested replacement text.",
+                            error: "old_str not found in file",
                         };
                     }
 
@@ -900,16 +796,13 @@ export function createTools(workspacePath: string) {
                         ...getPatchedWriteResult({
                             workspacePath,
                             fullPath,
-                            previousContent: original,
+                            previousContent,
                             nextContent,
                             existed: true,
                             includePatch: true,
-                            editCount: totalReplacements,
+                            editCount: occurrencesFound,
                         }),
-                        mode: patchEdits.length > 1 ? "batch" : "single",
-                        replacements: totalReplacements,
-                        editsApplied: editSummaries.length,
-                        editSummaries,
+                        replacements: occurrencesFound,
                     };
                 } catch (error) {
                     return { error: errorMessage(error) };
@@ -919,7 +812,7 @@ export function createTools(workspacePath: string) {
 
         grep: tool({
             description:
-                "Search file contents in the workspace for symbols, strings, or code patterns. Use this before reading or patching when you need to find the right file or snippet.",
+                "Search file contents in the workspace for symbols, strings, or code patterns. Use this to find the right file or the exact snippet to read or edit. Prefer this over glob when you know content but not the path.",
             inputSchema: zodSchema(
                 z.object({
                     pattern: z
@@ -972,7 +865,7 @@ export function createTools(workspacePath: string) {
 
         bash: tool({
             description:
-                "Execute a shell command in the selected workspace. Use this for validation, diagnostics, and project workflows, not for changing file contents.",
+                "Execute a shell command in the selected workspace. Use this for validation, diagnostics, builds, tests, and project workflows after or around code changes. Do not use this to edit files; use edit_file for every file modification.",
             inputSchema: zodSchema(
                 z.object({
                     command: z
@@ -1040,7 +933,7 @@ export function createTools(workspacePath: string) {
 
         scrape: tool({
             description:
-                "Fetch one or more URLs and extract readable text content from them in parallel",
+                "Fetch one or more URLs and extract readable text content from them in parallel. Use this only when the task needs external information from specific pages.",
             inputSchema: zodSchema(
                 z.object({
                     urls: z
