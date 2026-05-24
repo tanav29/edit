@@ -487,7 +487,7 @@ export default function ChatInput({
                         title="Press Enter to send. Shift+Enter for a new line."
                         rows={3}
                         disabled={isDisabled}
-                        className="ml-1 max-h-50 flex-1 resize-none bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
+                        className="mx-3 mt-2 mb-0 max-h-50 flex-1 resize-none bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
                     />
                     <div className="flex h-full items-end gap-1">
                         <Tooltip>
@@ -515,7 +515,7 @@ export default function ChatInput({
                                         isDisabled ||
                                         (!input.trim() && !(isActive && !!stop))
                                     }
-                                    className="rounded-lg shrink-0"
+                                    className="rounded-lg shrink-0 bg-blue-500 hover:bg-blue-600 border border-blue-500 text-primary shadow-blue-800"
                                 >
                                     {isActive && !input.trim() ? (
                                         <Square className="size-3 fill-current" />
