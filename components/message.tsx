@@ -281,7 +281,7 @@ function ToolPart({
 
     return (
         <details>
-            <summary className="flex items-center gap-2 py-0 text-md animate-fade-in text-muted-foreground/90 select-none outline-none">
+            <summary className="flex items-center gap-2 py-0 text-md text-muted-foreground/90 select-none outline-none">
                 {part.state === "output-available" && (
                     <>
                         <Hammer className="size-4 shrink-0 text-muted-foreground/90" />

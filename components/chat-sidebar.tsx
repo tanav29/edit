@@ -250,20 +250,17 @@ export default function ChatSidebar() {
                                                                 "flex truncate rounded-xl px-3 py-1.5 text-left text-sm group relative",
                                                                 isActive
                                                                     ? "border-primary/30 bg-primary/10"
-                                                                    : "border-transparent hover:border-border hover:bg-accent/40",
+                                                                    : "border-transparent hover:border-border hover:bg-accent",
                                                             )}
                                                         >
                                                             <button
                                                                 type="button"
-                                                                className="flex-1 text-left cursor-pointer"
+                                                                className="flex-1 text-left cursor-pointer truncate pr-5"
                                                                 onClick={() =>
                                                                     setSession(
                                                                         chat.id,
                                                                     )
                                                                 }
-                                                                title={formatLabel(
-                                                                    chat.title,
-                                                                )}
                                                             >
                                                                 {formatLabel(
                                                                     chat.title,
@@ -275,7 +272,7 @@ export default function ChatSidebar() {
                                                                         chat,
                                                                     )
                                                                 }
-                                                                className="opacity-0 bg-primary/10 group-hover:opacity-100 data-[state=open]:opacity-100 absolute delay-200 right-0 top-0 bottom-0 px-3 cursor-pointer"
+                                                                className="opacity-0 translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 data-[state=open]:opacity-100 absolute delay-50 right-0 top-0 bottom-0 px-3 cursor-pointer transition"
                                                             >
                                                                 <Trash2 className="size-3 text-muted-foreground" />
                                                             </button>
