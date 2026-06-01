@@ -24,6 +24,7 @@ import {
     Edit,
     FolderTree,
     FilePenLine,
+    Hammer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -113,6 +114,9 @@ export default function MessageUI({
                         </div>
                     );
 
+                case "reasoning":
+                    return <p key={key}>Thinking...</p>;
+
                 case "source-document":
                     return (
                         <div
@@ -141,7 +145,30 @@ export default function MessageUI({
                     );
 
                 default:
-                    if (part.type.startsWith("tool-")) {
+                    if (
+                        part.type == "tool-edit" &&
+                        part.state === "output-available" &&
+                        part.output
+                    ) {
+                        return (
+                            <div
+                                key={key}
+                                className="w-full max-h-108 my-2 overflow-y-scroll border rounded-lg overflow-hidden"
+                            >
+                                <PatchDiff
+                                    patch={
+                                        (part.output as { patch: string }).patch
+                                    }
+                                    options={{
+                                        overflow: "wrap",
+                                        diffStyle: "unified",
+                                        unsafeCSS:
+                                            "* { font-family: var(--font-geist-mono), monospace !important; }",
+                                    }}
+                                />
+                            </div>
+                        );
+                    } else if (part.type.startsWith("tool-")) {
                         return (
                             <ToolPart
                                 key={key}
@@ -250,11 +277,14 @@ function ToolPart({
         );
     }
 
+    if (toolName === "edit") return null;
+
     return (
         <details>
             <summary className="flex items-center gap-2 py-0 text-md animate-fade-in text-muted-foreground/90 select-none outline-none">
                 {part.state === "output-available" && (
                     <>
+                        <Hammer className="size-4 shrink-0 text-muted-foreground/90" />
                         {toolName === "read" && (
                             <span className="text-muted-foreground/90 flex items-center gap-2">
                                 Read {filePath}
@@ -262,17 +292,17 @@ function ToolPart({
                         )}
                         {toolName === "ls" && (
                             <span className="text-muted-foreground/90 flex items-center gap-2">
-                                Listed "{directoryPath}"
+                                Listed {directoryPath}
                             </span>
                         )}
                         {toolName === "glob" && (
                             <span className="text-muted-foreground/90 flex items-center gap-2">
-                                Searched for {patterns?.length ?? 0} pattern
+                                Glob for {patterns?.length ?? 0} pattern
                                 {(patterns?.length ?? 0) === 1 ? "" : "s"}
                             </span>
                         )}
                         {toolName === "bash" && (
-                            <span className="text-muted-foreground/90 flex items-center gap-2 min-w-0 truncate">
+                            <span className="text-muted-foreground/90 flex items-center gap-2 truncate text-ellipsis">
                                 Ran {compactCommand}
                             </span>
                         )}
@@ -283,40 +313,21 @@ function ToolPart({
                         )}
                         {toolName === "grep" && (
                             <span className="text-muted-foreground/90 flex items-center gap-2">
-                                Grep "{pattern}"
+                                Grep {pattern}
                             </span>
                         )}
-                        {toolName === "edit_file" && part.output.patch && (
-                            <div className="w-full max-h-108 my-2 overflow-y-scroll border rounded-lg overflow-hidden">
-                                <PatchDiff
-                                    patch={part.output.patch}
-                                    options={{
-                                        overflow: "wrap",
-                                        diffStyle: "unified",
-                                    }}
-                                />
-                            </div>
-                        )}
                         {toolName === "web" && (
-                            <span className="text-muted-foreground/90 flex items-center gap-2">
-                                Searched the web for
-                                <span className="flex flex-wrap gap-1 items-center">
-                                    {(queries ?? (query ? [query] : [])).map(
-                                        (item, i) => (
-                                            <span
-                                                key={i}
-                                                className="text-sm py-0.5 rounded"
-                                            >
-                                                {item}
-                                            </span>
-                                        ),
-                                    )}
-                                </span>
+                            <span className="text-muted-foreground/90 flex items-center gap-1.5">
+                                Searched the web
+                                {(queries ?? (query ? [query] : [])).map(
+                                    (item, i) => (
+                                        <span key={i}>{item}</span>
+                                    ),
+                                )}
                             </span>
                         )}
                         {toolName === "scrape" && (
                             <span className="text-muted-foreground/90 flex items-center gap-2">
-                                <ScrollText className="size-4" />
                                 Scraped
                                 <span className="flex flex-wrap gap-1 items-center">
                                     {(urls ?? (url ? [url] : [])).map(
@@ -326,21 +337,13 @@ function ToolPart({
                                                     item.trim(),
                                                 );
                                                 return (
-                                                    <span
-                                                        key={i}
-                                                        className="text-sm"
-                                                    >
+                                                    <span key={i}>
                                                         {urlObj.hostname}
                                                     </span>
                                                 );
                                             } catch {
                                                 return (
-                                                    <span
-                                                        key={i}
-                                                        className="text-sm"
-                                                    >
-                                                        {item}
-                                                    </span>
+                                                    <span key={i}>{item}</span>
                                                 );
                                             }
                                         },
@@ -350,87 +353,6 @@ function ToolPart({
                         )}
                     </>
                 )}
-                {(() => {
-                    if (
-                        part.state === "output-available" &&
-                        toolName === "read" &&
-                        part.output &&
-                        typeof part.output === "object"
-                    ) {
-                        const out = part.output as Record<string, unknown>;
-                        if (Array.isArray(out.files) && out.files.length > 1) {
-                            return (
-                                <span>
-                                    {String(out.successCount)}/
-                                    {String(out.count)} files
-                                </span>
-                            );
-                        }
-                    }
-                    if (
-                        part.state === "output-available" &&
-                        toolName === "ls" &&
-                        part.output &&
-                        typeof part.output === "object"
-                    ) {
-                        const out = part.output as Record<string, unknown>;
-                        return (
-                            <span className="text-muted-foreground/60 ml-2">
-                                {String(out.totalReturned ?? 0)} entries
-                                {out.truncated ? " (truncated)" : ""}
-                            </span>
-                        );
-                    }
-                    if (
-                        part.state === "output-available" &&
-                        toolName === "glob" &&
-                        part.output &&
-                        typeof part.output === "object"
-                    ) {
-                        const out = part.output as Record<string, unknown>;
-                        return (
-                            <span className="text-muted-foreground/60 ml-2">
-                                {String(out.total ?? 0)} matches
-                                {out.truncated ? " (truncated)" : ""}
-                            </span>
-                        );
-                    }
-                    if (
-                        part.state === "output-available" &&
-                        toolName === "web" &&
-                        part.output &&
-                        typeof part.output === "object"
-                    ) {
-                        const out = part.output as Record<string, unknown>;
-                        if (
-                            Array.isArray(out.searches) &&
-                            out.searches.length > 1
-                        ) {
-                            return (
-                                <span className="text-muted-foreground/60 ml-2">
-                                    {String(out.totalResults)} results
-                                </span>
-                            );
-                        }
-                    }
-                    if (
-                        part.state === "output-available" &&
-                        toolName === "scrape" &&
-                        part.output &&
-                        typeof part.output === "object"
-                    ) {
-                        const out = part.output as Record<string, unknown>;
-                        if (Array.isArray(out.pages) && out.pages.length > 1) {
-                            return (
-                                <span className="text-muted-foreground/60 ml-2">
-                                    {String(out.successCount)}/
-                                    {String(out.count)} pages
-                                </span>
-                            );
-                        }
-                    }
-                    return null;
-                })()}
             </summary>
             <div className="">{toolOutput}</div>
         </details>
@@ -447,144 +369,6 @@ const ToolOutput = React.memo(function ToolOutput({
     if (!output) return null;
 
     const data = output as Record<string, unknown>;
-
-    if (toolName === "ls") {
-        return (
-            <div className="space-y-2 rounded-lg border border-border/40 bg-card/70 p-3 text-muted-foreground">
-                <pre className="overflow-auto whitespace-pre-wrap wrap-break-word font-mono text-xs">
-                    {String(data.tree ?? "(empty)") || "(empty)"}
-                </pre>
-            </div>
-        );
-    }
-
-    if (toolName === "glob") {
-        const files = Array.isArray(data.files)
-            ? (data.files as unknown[]).map(String)
-            : [];
-
-        return (
-            <div className="space-y-2 rounded-lg border border-border/40 bg-card/70 p-3">
-                {files.length === 0 ? (
-                    <div className="text-xs text-muted-foreground">
-                        No files
-                    </div>
-                ) : (
-                    <div className="space-y-1">
-                        {files.map((file, index) => (
-                            <div
-                                key={`${file}-${index}`}
-                                className="text-xs text-muted-foreground"
-                            >
-                                {file}
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-        );
-    }
-
-    if (
-        toolName === "web" &&
-        Array.isArray(data.searches) &&
-        data.searches.length > 1
-    ) {
-        const searches = data.searches as Array<Record<string, unknown>>;
-        return (
-            <div className="space-y-3 rounded-lg border border-border/40 bg-card/70 p-3">
-                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                    {String(data.totalResults)} results from{" "}
-                    {String(data.count)} queries
-                </div>
-                {searches.map((search, queryIdx) => (
-                    <div
-                        key={queryIdx}
-                        className="rounded-md bg-background/60 p-2"
-                    >
-                        <div className="text-xs font-semibold text-blue-400 mb-2">
-                            {String(search.query)}
-                        </div>
-                        {!search.error ? (
-                            <div className="space-y-1">
-                                {Array.isArray(search.results) &&
-                                search.results.length > 0 ? (
-                                    (
-                                        search.results as Array<
-                                            Record<string, unknown>
-                                        >
-                                    ).map((result, idx) => (
-                                        <a
-                                            key={idx}
-                                            href={String(result.url)}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="block text-xs text-primary hover:underline truncate"
-                                        >
-                                            {String(result.title)}
-                                        </a>
-                                    ))
-                                ) : (
-                                    <div className="text-xs text-muted-foreground">
-                                        No results
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="text-xs text-red-400">
-                                {String(search.error)}
-                            </div>
-                        )}
-                    </div>
-                ))}
-            </div>
-        );
-    }
-
-    if (
-        toolName === "scrape" &&
-        Array.isArray(data.pages) &&
-        data.pages.length > 1
-    ) {
-        const pages = data.pages as Array<Record<string, unknown>>;
-        return (
-            <div className="space-y-2 rounded-lg border border-border/40 bg-card/70 p-3">
-                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Scraped {String(data.successCount)} of {String(data.count)}{" "}
-                    pages
-                </div>
-                {pages.map((page, idx) => (
-                    <div key={idx} className="rounded-md bg-background/60 p-2">
-                        <a
-                            href={String(page.url)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs font-mono text-blue-400 hover:underline truncate block mb-1"
-                        >
-                            {String(page.url)}
-                        </a>
-                        {!page.error ? (
-                            <>
-                                {page.title && (
-                                    <div className="text-xs font-semibold text-foreground/80 mb-1">
-                                        {String(page.title)}
-                                    </div>
-                                )}
-                                <pre className="text-xs overflow-auto max-h-32 bg-background/40 p-1 rounded border border-border/20 whitespace-pre-wrap">
-                                    {String(page.content ?? "").slice(0, 200)}
-                                    ...
-                                </pre>
-                            </>
-                        ) : (
-                            <div className="text-xs text-red-400">
-                                {String(page.error)}
-                            </div>
-                        )}
-                    </div>
-                ))}
-            </div>
-        );
-    }
 
     if (toolName === "bash") {
         const stdout = typeof data.stdout === "string" ? data.stdout : "";
@@ -613,6 +397,7 @@ const ToolOutput = React.memo(function ToolOutput({
                 isStreaming={false}
                 onClear={() => {}}
                 output={mergedOutput || "(no output)"}
+                className="m-2"
             >
                 <TerminalHeader>
                     <TerminalTitle>{String(data.path)}</TerminalTitle>
@@ -639,7 +424,7 @@ const ToolOutput = React.memo(function ToolOutput({
         );
     }
 
-    if (toolName === "grep") return null;
+    // if (toolName === "grep") return null;
 
     if (toolName === "read") return null;
 

@@ -218,7 +218,7 @@ export default function ChatSidebar() {
                                             onClick={() =>
                                                 onNewChat(group.path)
                                             }
-                                            className="rounded  flex items-center justify-center"
+                                            className="rounded flex items-center justify-center"
                                             aria-label={`New chat in ${group.path}`}
                                         >
                                             <Plus className="size-3.5 opacity-70 active:opacity-100 cursor-pointer" />
@@ -275,7 +275,7 @@ export default function ChatSidebar() {
                                                                         chat,
                                                                     )
                                                                 }
-                                                                className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 absolute delay-200 right-0 top-0 bottom-0 px-3 cursor-pointer"
+                                                                className="opacity-0 bg-primary/10 group-hover:opacity-100 data-[state=open]:opacity-100 absolute delay-200 right-0 top-0 bottom-0 px-3 cursor-pointer"
                                                             >
                                                                 <Trash2 className="size-3 text-muted-foreground" />
                                                             </button>

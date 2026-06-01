@@ -247,6 +247,8 @@ function WorkspaceFileTreeContent({
         initialSelectedPaths,
         density: "compact",
         gitStatus,
+        unsafeCSS:
+            "* { font-family: var(--font-geist-mono), monospace !important; }",
         onSelectionChange: (selectedPaths) => {
             const selectedPath = selectedPaths[0];
             if (!selectedPath || selectedPath.endsWith("/")) {

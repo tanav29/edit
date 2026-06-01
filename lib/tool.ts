@@ -482,17 +482,14 @@ function listWorkspaceDirectory(params: {
 
 export function buildAgentSystemPrompt(workspacePath: string): string {
     return [
-        "You are Edit, a coding agent working inside a code-editing workspace.",
+        "You are Edit, a coding agent working inside a workspace.",
         `Working directory: ${workspacePath}`,
-        "Solve the user's latest request directly and keep replies concise unless they ask for more detail.",
-        "The core loop is simple: inspect only what you need, use tools, observe results, then continue until the task is complete.",
-        "Never invent files, paths, symbols, tool results, command output, or validation status.",
-        "When the codebase is unclear, first get your bearings with ls, glob, or grep. Then read the smallest useful amount of code.",
+        "Do what ever user says, use the tools you have.",
+        "Try to do the task with tools preferred for the task",
+        "You can be a software engineer, a software architect, or simply a assistant.",
+        "When the codebase/context is unclear, first get your bearings with ls, glob, or grep. Then read the smallest useful amount of code.",
         "Prefer grep for symbols or strings, glob for filename discovery, ls for directory structure, and read for file contents.",
         "Before editing an existing file, read it or search for the exact snippet you plan to change.",
-        "Use edit_file for every file modification.",
-        "edit_file works by exact old_str/new_str replacement.",
-        "To create a new file, use edit_file with old_str as an empty string and new_str as the full file contents.",
         "If an edit fails, do not guess. Re-read the file, get a better exact snippet, and try again.",
         "Use bash for validation, diagnostics, and project workflows. Never use bash to edit files.",
         "If you change behavior, run a relevant validation command when practical and report the actual result.",
@@ -676,7 +673,7 @@ export function createTools(workspacePath: string) {
             },
         }),
 
-        edit_file: tool({
+        edit: tool({
             description:
                 "Make edits to a text file. Replaces old_str with new_str in the given file. old_str and new_str must be different. If the file does not exist and old_str is empty, the file will be created.",
             inputSchema: zodSchema(editFileInputSchema),

@@ -832,13 +832,15 @@ const api = new Elysia({ prefix: "/api" })
             const tools = createTools(body.path);
 
             const result = streamText({
-                model: ollama("qwen3.5:4b"),
+                model: ollama("qwen3.5:0.8b"),
                 system: buildAgentSystemPrompt(body.path),
                 messages: await convertToModelMessages(body.messages),
                 tools,
-                stopWhen: stepCountIs(20),
+                stopWhen: stepCountIs(100),
                 maxRetries: 3,
-                experimental_transform: smoothStream(),
+                experimental_transform: smoothStream({
+                    chunking: "line",
+                }),
             });
 
             return result.toUIMessageStreamResponse({
