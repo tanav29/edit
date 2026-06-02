@@ -155,46 +155,26 @@ export default function ChatSidebar({
         <>
             <aside
                 className={cn(
-                    "flex h-full shrink-0 flex-col border-r bg-card/30 transition-[width,opacity,transform] duration-200 ease-in-out",
+                    "flex h-full shrink-0 flex-col border-r bg-card/30 transition-transform duration-100 ease-in-out",
                     isOpen
                         ? "w-64 translate-x-0 opacity-100"
                         : "w-0 -translate-x-3 opacity-0 overflow-hidden border-r-0 pointer-events-none",
                 )}
-                aria-hidden={!isOpen}
             >
                 <div className="flex items-center justify-between border-b px-3 py-2 shrink-0">
-                    <div className="flex items-center gap-2 select-none min-w-0">
-                        <Shell
-                            className={cn(
-                                "size-5 shrink-0 text-muted-foreground/40",
-                                healthChecking && "animate-spin",
-                                health?.ok && "text-muted-foreground",
-                            )}
-                        />
-                        <p className="text-sm font-medium truncate">Sessions</p>
-                    </div>
-                    <div className="flex items-center gap-0.5 shrink-0">
-                        <ChatCreation refetch={refetch} />
-                        {onToggle && (
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon-sm"
-                                        onClick={onToggle}
-                                        aria-label="Close sessions sidebar"
-                                        className="text-muted-foreground hover:text-foreground"
-                                    >
-                                        <PanelLeftClose className="size-4" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent side="bottom">
-                                    Close sidebar
-                                </TooltipContent>
-                            </Tooltip>
-                        )}
-                    </div>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={onToggle}
+                        aria-label="Close sessions sidebar"
+                    >
+                        <PanelLeftClose />
+                    </Button>
+
+                    <p className="text-sm font-medium truncate">Sessions</p>
+
+                    <ChatCreation refetch={refetch} />
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
@@ -337,23 +317,6 @@ export default function ChatSidebar({
                     )}
                 </div>
             </aside>
-            {!isOpen && onToggle && (
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <button
-                            type="button"
-                            onClick={onToggle}
-                            className={cn(
-                                "shrink-0 group flex w-8 flex-col items-center gap-1.5 border-r border-border/70 bg-card/30 px-0.5 py-3 cursor-pointer text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-                            )}
-                            aria-label="Open sessions sidebar"
-                        >
-                            <PanelLeftOpen className="size-4" />
-                        </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">Open sidebar</TooltipContent>
-                </Tooltip>
-            )}
         </>
     );
 }

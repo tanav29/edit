@@ -4,14 +4,15 @@ import {
     lastAssistantMessageIsCompleteWithApprovalResponses,
     type UIMessage,
 } from "ai";
+import { Code, Copy, FolderTree, Loader2, PanelLeftClose } from "lucide-react";
 import {
-    Code,
-    Copy,
-    FolderTree,
-    Loader2,
-    PanelLeftClose,
-} from "lucide-react";
-import { memo, useCallback, useEffect, useReducer, useRef, useState } from "react";
+    memo,
+    useCallback,
+    useEffect,
+    useReducer,
+    useRef,
+    useState,
+} from "react";
 
 import ChatSidebar from "@/components/chat-sidebar";
 import ChatInput from "@/components/chat-input";
@@ -159,7 +160,6 @@ export function ChatRouteComponent() {
         />
     );
 }
-
 
 type LoadedSessionChatProps = {
     session: string;
@@ -431,6 +431,20 @@ function ChatLayout({
                                         Toggle sessions
                                     </TooltipContent>
                                 </Tooltip>
+                                <div className="truncate text-md mx-2 font-medium">
+                                    {currentSessionTitle}
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-1 rounded-md">
+                                <CustomCommandButtons
+                                    workspacePath={workspace ?? ""}
+                                    isBusy={isActive}
+                                />
+                                <CommitButton
+                                    workspacePath={workspace ?? ""}
+                                    isBusy={isActive}
+                                />
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <Button
@@ -450,20 +464,6 @@ function ChatLayout({
                                         Toggle file tree
                                     </TooltipContent>
                                 </Tooltip>
-                                <div className="truncate text-sm font-medium">
-                                    {currentSessionTitle}
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-1 rounded-md">
-                                <CustomCommandButtons
-                                    workspacePath={workspace ?? ""}
-                                    isBusy={isActive}
-                                />
-                                <CommitButton
-                                    workspacePath={workspace ?? ""}
-                                    isBusy={isActive}
-                                />
                             </div>
                         </div>
 
