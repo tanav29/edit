@@ -1,12 +1,26 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, Folder, Plus, Shell, Trash2 } from "lucide-react";
+import {
+    ChevronDown,
+    Folder,
+    PanelLeftClose,
+    PanelLeftOpen,
+    Plus,
+    Shell,
+    Trash2,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { api } from "@/lib/eden";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 import ChatCreation from "./chat-creation";
 import { useSessionParam } from "@/lib/session-param";
 
@@ -27,7 +41,13 @@ function comparePath(valueA: string, valueB: string) {
     return valueA.localeCompare(valueB, undefined, { sensitivity: "base" });
 }
 
-export default function ChatSidebar() {
+export default function ChatSidebar({
+    isOpen,
+    onToggle,
+}: {
+    isOpen: boolean;
+    onToggle?: () => void;
+}) {
     const queryClient = useQueryClient();
     const {
         data: sessions,
@@ -132,162 +152,208 @@ export default function ChatSidebar() {
     }
 
     return (
-        <aside className="flex h-full w-64 shrink-0 flex-col border-r bg-card/30">
-            <div className="flex items-center justify-between border-b px-3 py-2">
-                <div className="flex items-center gap-2 select-none">
-                    <Shell
-                        className={cn(
-                            "size-5 text-muted-foreground/40",
-                            healthChecking && "animate-spin",
-                            health?.ok && "text-muted-foreground",
+        <>
+            <aside
+                className={cn(
+                    "flex h-full shrink-0 flex-col border-r bg-card/30 transition-[width,opacity,transform] duration-200 ease-in-out",
+                    isOpen
+                        ? "w-64 translate-x-0 opacity-100"
+                        : "w-0 -translate-x-3 opacity-0 overflow-hidden border-r-0 pointer-events-none",
+                )}
+                aria-hidden={!isOpen}
+            >
+                <div className="flex items-center justify-between border-b px-3 py-2 shrink-0">
+                    <div className="flex items-center gap-2 select-none min-w-0">
+                        <Shell
+                            className={cn(
+                                "size-5 shrink-0 text-muted-foreground/40",
+                                healthChecking && "animate-spin",
+                                health?.ok && "text-muted-foreground",
+                            )}
+                        />
+                        <p className="text-sm font-medium truncate">Sessions</p>
+                    </div>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                        <ChatCreation refetch={refetch} />
+                        {onToggle && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        onClick={onToggle}
+                                        aria-label="Close sessions sidebar"
+                                        className="text-muted-foreground hover:text-foreground"
+                                    >
+                                        <PanelLeftClose className="size-4" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom">
+                                    Close sidebar
+                                </TooltipContent>
+                            </Tooltip>
                         )}
-                    />
-                    <p className="text-sm font-medium">Sessions</p>
+                    </div>
                 </div>
 
-                <ChatCreation refetch={refetch} />
-            </div>
+                <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+                    {isLoading ? (
+                        <div className="px-2 py-4 text-sm text-muted-foreground">
+                            Loading chats...
+                        </div>
+                    ) : groupedSessions.length === 0 ? (
+                        <div className="px-2 py-4 text-sm text-muted-foreground">
+                            No chat history yet.
+                        </div>
+                    ) : (
+                        <div className="space-y-1">
+                            {groupedSessions.map((group) => {
+                                const isCollapsed =
+                                    group.path !== workspacePath &&
+                                    Boolean(collapsedPaths[group.path]);
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-                {isLoading ? (
-                    <div className="px-2 py-4 text-sm text-muted-foreground">
-                        Loading chats...
-                    </div>
-                ) : groupedSessions.length === 0 ? (
-                    <div className="px-2 py-4 text-sm text-muted-foreground">
-                        No chat history yet.
-                    </div>
-                ) : (
-                    <div className="space-y-1">
-                        {groupedSessions.map((group) => {
-                            // Keep the active session's workspace expanded so deep links don't hide it.
-                            const isCollapsed =
-                                group.path !== workspacePath &&
-                                Boolean(collapsedPaths[group.path]);
-
-                            return (
-                                <div key={group.path} className="space-y-1">
-                                    <div
-                                        className={cn(
-                                            "flex items-center justify-center gap-1 px-2.5 py-1.5 hover:bg-accent rounded-xl select-none",
-                                            group.path === workspacePath &&
-                                                "text-foreground",
-                                        )}
-                                    >
-                                        <button
-                                            className="flex items-center justify-center relative w-4 cursor-pointer"
-                                            onClick={() =>
-                                                setCollapsedPaths(
-                                                    (current) => ({
-                                                        ...current,
-                                                        [group.path]:
-                                                            !current[
-                                                                group.path
-                                                            ],
-                                                    }),
-                                                )
-                                            }
+                                return (
+                                    <div key={group.path} className="space-y-1">
+                                        <div
+                                            className={cn(
+                                                "flex items-center justify-center gap-1 px-2.5 py-1.5 hover:bg-accent rounded-xl select-none",
+                                                group.path === workspacePath &&
+                                                    "text-foreground",
+                                            )}
                                         >
-                                            <Folder
-                                                className={cn(
-                                                    "size-3 transform-all absolute",
-                                                    isCollapsed
-                                                        ? "opacity-100"
-                                                        : "opacity-0",
-                                                )}
-                                            />
-                                            <ChevronDown
-                                                className={cn(
-                                                    "size-3 transition-all absolute",
-                                                    isCollapsed
-                                                        ? "opacity-0"
-                                                        : "opacity-100",
-                                                )}
-                                            />
-                                        </button>
+                                            <button
+                                                className="flex items-center justify-center relative w-4 cursor-pointer"
+                                                onClick={() =>
+                                                    setCollapsedPaths(
+                                                        (current) => ({
+                                                            ...current,
+                                                            [group.path]:
+                                                                !current[
+                                                                    group.path
+                                                                ],
+                                                        }),
+                                                    )
+                                                }
+                                            >
+                                                <Folder
+                                                    className={cn(
+                                                        "size-3 transform-all absolute",
+                                                        isCollapsed
+                                                            ? "opacity-100"
+                                                            : "opacity-0",
+                                                    )}
+                                                />
+                                                <ChevronDown
+                                                    className={cn(
+                                                        "size-3 transition-all absolute",
+                                                        isCollapsed
+                                                            ? "opacity-0"
+                                                            : "opacity-100",
+                                                    )}
+                                                />
+                                            </button>
 
-                                        <span className="truncate flex-1 text-left text-sm">
-                                            {group.path
-                                                .split(/[\\/]/)
-                                                .filter(Boolean)
-                                                .pop()}
-                                        </span>
+                                            <span className="truncate flex-1 text-left text-sm">
+                                                {group.path
+                                                    .split(/[\\/]/)
+                                                    .filter(Boolean)
+                                                    .pop()}
+                                            </span>
 
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                onNewChat(group.path)
-                                            }
-                                            className="rounded flex items-center justify-center"
-                                            aria-label={`New chat in ${group.path}`}
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    onNewChat(group.path)
+                                                }
+                                                className="rounded flex items-center justify-center"
+                                                aria-label={`New chat in ${group.path}`}
+                                            >
+                                                <Plus className="size-3.5 opacity-70 active:opacity-100 cursor-pointer" />
+                                            </button>
+                                        </div>
+
+                                        <div
+                                            className={cn(
+                                                "grid transition-all border-l ml-1 pl-1",
+                                                isCollapsed
+                                                    ? "grid-rows-[0fr] opacity-0"
+                                                    : "grid-rows-[1fr] opacity-100",
+                                                isCollapsed &&
+                                                    "pointer-events-none",
+                                            )}
+                                            aria-hidden={isCollapsed}
                                         >
-                                            <Plus className="size-3.5 opacity-70 active:opacity-100 cursor-pointer" />
-                                        </button>
-                                    </div>
+                                            <div className="min-h-0 overflow-hidden">
+                                                <div>
+                                                    {group.chats.map((chat) => {
+                                                        const isActive =
+                                                            chat.id ===
+                                                            activeSessionId;
 
-                                    <div
-                                        className={cn(
-                                            "grid transition-all border-l ml-1 pl-1",
-                                            isCollapsed
-                                                ? "grid-rows-[0fr] opacity-0"
-                                                : "grid-rows-[1fr] opacity-100",
-                                            isCollapsed &&
-                                                "pointer-events-none",
-                                        )}
-                                        aria-hidden={isCollapsed}
-                                    >
-                                        <div className="min-h-0 overflow-hidden">
-                                            <div>
-                                                {group.chats.map((chat) => {
-                                                    const isActive =
-                                                        chat.id ===
-                                                        activeSessionId;
-
-                                                    return (
-                                                        <div
-                                                            key={chat.id}
-                                                            className={cn(
-                                                                "flex truncate rounded-xl px-3 py-1.5 text-left text-sm group relative",
-                                                                isActive
-                                                                    ? "border-primary/30 bg-primary/10"
-                                                                    : "border-transparent hover:border-border hover:bg-accent",
-                                                            )}
-                                                        >
-                                                            <button
-                                                                type="button"
-                                                                className="flex-1 text-left cursor-pointer truncate pr-5"
-                                                                onClick={() =>
-                                                                    setSession(
-                                                                        chat.id,
-                                                                    )
-                                                                }
-                                                            >
-                                                                {formatLabel(
-                                                                    chat.title,
+                                                        return (
+                                                            <div
+                                                                key={chat.id}
+                                                                className={cn(
+                                                                    "flex truncate rounded-xl px-3 py-1.5 text-left text-sm group relative",
+                                                                    isActive
+                                                                        ? "border-primary/30 bg-primary/10"
+                                                                        : "border-transparent hover:border-border hover:bg-accent",
                                                                 )}
-                                                            </button>
-                                                            <button
-                                                                onClick={() =>
-                                                                    handleDeleteChat(
-                                                                        chat,
-                                                                    )
-                                                                }
-                                                                className="opacity-0 translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 data-[state=open]:opacity-100 absolute delay-50 right-0 top-0 bottom-0 px-3 cursor-pointer transition"
                                                             >
-                                                                <Trash2 className="size-3 text-muted-foreground" />
-                                                            </button>
-                                                        </div>
-                                                    );
-                                                })}
+                                                                <button
+                                                                    type="button"
+                                                                    className="flex-1 text-left cursor-pointer truncate pr-5"
+                                                                    onClick={() =>
+                                                                        setSession(
+                                                                            chat.id,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    {formatLabel(
+                                                                        chat.title,
+                                                                    )}
+                                                                </button>
+                                                                <button
+                                                                    onClick={() =>
+                                                                        handleDeleteChat(
+                                                                            chat,
+                                                                        )
+                                                                    }
+                                                                    className="opacity-0 translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 data-[state=open]:opacity-100 absolute delay-50 right-0 top-0 bottom-0 px-3 cursor-pointer transition"
+                                                                >
+                                                                    <Trash2 className="size-3 text-muted-foreground" />
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
-        </aside>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            </aside>
+            {!isOpen && onToggle && (
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <button
+                            type="button"
+                            onClick={onToggle}
+                            className={cn(
+                                "shrink-0 group flex w-8 flex-col items-center gap-1.5 border-r border-border/70 bg-card/30 px-0.5 py-3 cursor-pointer text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+                            )}
+                            aria-label="Open sessions sidebar"
+                        >
+                            <PanelLeftOpen className="size-4" />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">Open sidebar</TooltipContent>
+                </Tooltip>
+            )}
+        </>
     );
 }

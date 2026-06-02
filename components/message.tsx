@@ -33,6 +33,7 @@ import { code } from "@streamdown/code";
 import { mermaid } from "@streamdown/mermaid";
 import { math } from "@streamdown/math";
 import { cjk } from "@streamdown/cjk";
+import { cn } from "@/lib/utils";
 
 type ToolApprovalResponse = {
     id: string;
@@ -91,13 +92,33 @@ export default function MessageUI({
     useJsonRenderMessage(parts);
 
     const renderedParts = useMemo(() => {
-        return parts.map((part, partIndex) => {
-            const key = part.toolCallId ? part.toolCallId : partIndex;
+        const result: React.ReactNode[] = [];
+        let toolBuffer: React.ReactNode[] = [];
+        let lastWasTool = false;
+
+        const flushTools = (flushKey: string) => {
+            if (toolBuffer.length === 0) return;
+            if (toolBuffer.length === 1) {
+                result.push(toolBuffer[0]);
+            } else {
+                result.push(
+                    <div key={flushKey} className="flex flex-col">
+                        {toolBuffer}
+                    </div>,
+                );
+            }
+            toolBuffer = [];
+        };
+
+        parts.forEach((part, partIndex) => {
+            const key = part.toolCallId ?? `part-${partIndex}`;
+            const isTool = part.type.startsWith("tool-");
+            let rendered: React.ReactNode = null;
 
             switch (part.type) {
                 case "text":
-                    return (
-                        <div key={key} className="text-md">
+                    rendered = (
+                        <div key={key} className="text-md my-5">
                             <Streamdown
                                 plugins={{
                                     code: code,
@@ -113,12 +134,14 @@ export default function MessageUI({
                             </Streamdown>
                         </div>
                     );
+                    break;
 
                 case "reasoning":
-                    return <p key={key}>Thinking...</p>;
+                    rendered = <p key={key}>Thinking...</p>;
+                    break;
 
                 case "source-document":
-                    return (
+                    rendered = (
                         <div
                             key={key}
                             className="inline-flex items-center gap-1.5 text-xs bg-card border border-border/50 rounded-md px-2 py-1 text-muted-foreground"
@@ -127,9 +150,10 @@ export default function MessageUI({
                             <span className="font-mono">{part.filename}</span>
                         </div>
                     );
+                    break;
 
                 case "source-url":
-                    return (
+                    rendered = (
                         <a
                             key={key}
                             href={part.url}
@@ -143,6 +167,7 @@ export default function MessageUI({
                             </span>
                         </a>
                     );
+                    break;
 
                 default:
                     if (
@@ -150,14 +175,15 @@ export default function MessageUI({
                         part.state === "output-available" &&
                         part.output
                     ) {
-                        return (
-                            <div
-                                key={key}
-                                className="w-full max-h-108 my-2 overflow-y-scroll border rounded-lg overflow-hidden"
-                            >
+        rendered = (
+            <div
+                key={key}
+                className="w-full max-h-108 mt-2 overflow-y-scroll border rounded-lg overflow-hidden"
+            >
                                 <PatchDiff
                                     patch={
-                                        (part.output as { patch: string }).patch
+                                        (part.output as { patch: string })
+                                            .patch
                                     }
                                     options={{
                                         overflow: "wrap",
@@ -169,7 +195,7 @@ export default function MessageUI({
                             </div>
                         );
                     } else if (part.type.startsWith("tool-")) {
-                        return (
+                        rendered = (
                             <ToolPart
                                 key={key}
                                 part={part as ToolUIPart}
@@ -179,9 +205,23 @@ export default function MessageUI({
                             />
                         );
                     }
-                    return null;
+                    break;
+            }
+
+            if (isTool) {
+                toolBuffer.push(rendered);
+                lastWasTool = true;
+            } else {
+                if (lastWasTool) {
+                    flushTools(`tool-group-${result.length}`);
+                    lastWasTool = false;
+                }
+                if (rendered != null) result.push(rendered);
             }
         });
+
+        flushTools(`tool-group-${result.length}`);
+        return result;
     }, [parts, addToolApprovalResponseAction]);
     return <>{renderedParts}</>;
 }
@@ -282,76 +322,62 @@ function ToolPart({
     return (
         <details>
             <summary className="flex items-center gap-2 py-0 text-md text-muted-foreground/90 select-none outline-none">
-                {part.state === "output-available" && (
-                    <>
-                        <Hammer className="size-4 shrink-0 text-muted-foreground/90" />
-                        {toolName === "read" && (
-                            <span className="text-muted-foreground/90 flex items-center gap-2">
-                                Read {filePath}
-                            </span>
-                        )}
-                        {toolName === "ls" && (
-                            <span className="text-muted-foreground/90 flex items-center gap-2">
-                                Listed {directoryPath}
-                            </span>
-                        )}
-                        {toolName === "glob" && (
-                            <span className="text-muted-foreground/90 flex items-center gap-2">
-                                Glob for {patterns?.length ?? 0} pattern
-                                {(patterns?.length ?? 0) === 1 ? "" : "s"}
-                            </span>
-                        )}
-                        {toolName === "bash" && (
-                            <span className="text-muted-foreground/90 flex items-center gap-2 truncate text-ellipsis">
-                                Ran {compactCommand}
-                            </span>
-                        )}
-                        {toolName === "write" && (
-                            <span className="text-muted-foreground/90 flex items-center gap-2">
-                                {filePath}
-                            </span>
-                        )}
-                        {toolName === "grep" && (
-                            <span className="text-muted-foreground/90 flex items-center gap-2">
-                                Grep {pattern}
-                            </span>
-                        )}
-                        {toolName === "web" && (
-                            <span className="text-muted-foreground/90 flex items-center gap-1.5">
-                                Searched the web
-                                {(queries ?? (query ? [query] : [])).map(
-                                    (item, i) => (
-                                        <span key={i}>{item}</span>
-                                    ),
-                                )}
-                            </span>
-                        )}
-                        {toolName === "scrape" && (
-                            <span className="text-muted-foreground/90 flex items-center gap-2">
-                                Scraped
-                                <span className="flex flex-wrap gap-1 items-center">
-                                    {(urls ?? (url ? [url] : [])).map(
-                                        (item, i) => {
-                                            try {
-                                                const urlObj = new URL(
-                                                    item.trim(),
-                                                );
-                                                return (
-                                                    <span key={i}>
-                                                        {urlObj.hostname}
-                                                    </span>
-                                                );
-                                            } catch {
-                                                return (
-                                                    <span key={i}>{item}</span>
-                                                );
-                                            }
-                                        },
-                                    )}
-                                </span>
-                            </span>
-                        )}
-                    </>
+                <Hammer className="size-4 shrink-0 text-muted-foreground/90" />
+                {toolName === "read" && (
+                    <span className="text-muted-foreground/90 flex items-center gap-2">
+                        Read {filePath}
+                    </span>
+                )}
+                {toolName === "ls" && (
+                    <span className="text-muted-foreground/90 flex items-center gap-2">
+                        Listed {directoryPath}
+                    </span>
+                )}
+                {toolName === "glob" && (
+                    <span className="text-muted-foreground/90 flex items-center gap-2">
+                        Glob for {patterns?.length ?? 0} pattern
+                        {(patterns?.length ?? 0) === 1 ? "" : "s"}
+                    </span>
+                )}
+                {toolName === "bash" && (
+                    <span className="text-muted-foreground/90 flex items-center gap-2 truncate text-ellipsis">
+                        Ran {compactCommand}
+                    </span>
+                )}
+                {toolName === "write" && (
+                    <span className="text-muted-foreground/90 flex items-center gap-2">
+                        {filePath}
+                    </span>
+                )}
+                {toolName === "grep" && (
+                    <span className="text-muted-foreground/90 flex items-center gap-2">
+                        Grep {pattern}
+                    </span>
+                )}
+                {toolName === "web" && (
+                    <span className="text-muted-foreground/90 flex items-center gap-1.5">
+                        Searched the web
+                        {(queries ?? (query ? [query] : [])).map((item, i) => (
+                            <span key={i}>{item}</span>
+                        ))}
+                    </span>
+                )}
+                {toolName === "scrape" && (
+                    <span className="text-muted-foreground/90 flex items-center gap-2">
+                        Scraped
+                        <span className="flex flex-wrap gap-1 items-center">
+                            {(urls ?? (url ? [url] : [])).map((item, i) => {
+                                try {
+                                    const urlObj = new URL(item.trim());
+                                    return (
+                                        <span key={i}>{urlObj.hostname}</span>
+                                    );
+                                } catch {
+                                    return <span key={i}>{item}</span>;
+                                }
+                            })}
+                        </span>
+                    </span>
                 )}
             </summary>
             <div className="">{toolOutput}</div>
@@ -397,7 +423,7 @@ const ToolOutput = React.memo(function ToolOutput({
                 isStreaming={false}
                 onClear={() => {}}
                 output={mergedOutput || "(no output)"}
-                className="m-2"
+                className="mt-2"
             >
                 <TerminalHeader>
                     <TerminalTitle>{String(data.path)}</TerminalTitle>

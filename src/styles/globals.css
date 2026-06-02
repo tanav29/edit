@@ -278,6 +278,19 @@
     backdrop-filter: blur(8px);
 }
 
+/* ── Tool calls: pack consecutive <details> tight ─────────── */
+details,
+details > summary {
+    margin: 0;
+    padding: 0;
+}
+details > summary {
+    list-style: none;
+}
+details > summary::-webkit-details-marker {
+    display: none;
+}
+
 /* ── Gradient text ────────────────────────────────────────── */
 .gradient-text {
     background: linear-gradient(
