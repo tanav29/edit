@@ -118,7 +118,7 @@ export default function MessageUI({
             switch (part.type) {
                 case "text":
                     rendered = (
-                        <div key={key} className="text-md my-5">
+                        <div key={key} className="text-sm my-5">
                             <Streamdown
                                 plugins={{
                                     code: code,
@@ -128,7 +128,6 @@ export default function MessageUI({
                                 }}
                                 shikiTheme={["github-light", "github-dark"]}
                                 mermaid={{ config: { theme: "dark" } }}
-                                animated
                             >
                                 {part.text}
                             </Streamdown>

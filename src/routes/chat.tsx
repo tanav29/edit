@@ -40,7 +40,7 @@ import { useSessionParam } from "@/lib/session-param";
 import { getTitleFromMessages, parseMessages } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useSide } from "@/store/store";
-import { Badge } from "@/components/ui/badge";
+import BranchSelector from "@/components/branch-selector";
 import { useWebSocket, wsUrl } from "@/hooks/use-socket";
 
 const MemoMessageUI = memo(MessageUI);
@@ -454,9 +454,7 @@ function ChatLayout({
                                 <div className="truncate text-md mx-2 font-medium">
                                     {currentSessionTitle}
                                 </div>
-                                <Badge variant={"secondary"}>
-                                    git (dialoag ot switch branch)
-                                </Badge>
+                                {workspace && <BranchSelector workspacePath={workspace} />}
                             </div>
 
                             <div className="flex items-center gap-1 rounded-md">

@@ -153,7 +153,7 @@ export default function ChatSidebar() {
         <>
             <aside
                 className={cn(
-                    "flex h-full shrink-0 flex-col border-r bg-card/30 transition-transform duration-100 ease-in-out",
+                    "flex h-full shrink-0 flex-col border-r bg-card/30",
                     side
                         ? "w-64 translate-x-0 opacity-100"
                         : "w-0 -translate-x-3 opacity-0 overflow-hidden border-r-0 pointer-events-none",
@@ -290,7 +290,7 @@ export default function ChatSidebar() {
                                                                 >
                                                                     <div className="flex items-center gap-1 w-full">
                                                                         <div
-                                                                            className={`w-2 h-2 ${chat.status ? "bg-green-500" : "bg-muted-foreground"} rounded-full`}
+                                                                            className={`w-2 h-2 ${chat.status ? "bg-green-500 animate-pulse" : "hidden"} rounded-full`}
                                                                         />
                                                                         <p className="overflow-hidden truncate w-full">
                                                                             {
@@ -318,7 +318,7 @@ export default function ChatSidebar() {
                                                                             chat,
                                                                         )
                                                                     }
-                                                                    className="opacity-0 translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 data-[state=open]:opacity-100 absolute delay-50 right-0 top-0 bottom-0 px-3 cursor-pointer transition"
+                                                                    className="opacity-0 translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 data-[state=open]:opacity-100 absolute delay-50 right-0 top-0 bottom-0 px-3 cursor-pointer transition duration-100 ease-in-out"
                                                                 >
                                                                     <Trash2 className="size-3 text-muted-foreground" />
                                                                 </button>

@@ -820,6 +820,101 @@ const api = new Elysia({ prefix: "/api" })
             }),
         },
     )
+    .get(
+        "/git/branches",
+        async ({ query, set }) => {
+            const workspacePath = query.path?.trim();
+
+            if (!workspacePath) {
+                set.status = 400;
+                return { error: "Path is required" };
+            }
+
+            try {
+                runGit("git rev-parse --git-dir", workspacePath);
+            } catch {
+                return { current: null, branches: [], isGitRepo: false };
+            }
+
+            try {
+                const branchOutput = runGit(
+                    "git branch --list --format='%(refname:short)'",
+                    workspacePath,
+                );
+                const branches = branchOutput
+                    ? branchOutput.split(/\r?\n/).filter(Boolean)
+                    : [];
+
+                const current = runGit(
+                    "git rev-parse --abbrev-ref HEAD",
+                    workspacePath,
+                );
+
+                return { current, branches, isGitRepo: true };
+            } catch {
+                set.status = 500;
+                return { error: "Failed to list branches" };
+            }
+        },
+        {
+            query: t.Object({
+                path: t.Optional(t.String()),
+            }),
+        },
+    )
+    .post(
+        "/git/checkout",
+        async ({ body, set }) => {
+            const { path: workspacePath, branch } = body;
+
+            if (!workspacePath || !branch) {
+                set.status = 400;
+                return { error: "Path and branch are required" };
+            }
+
+            try {
+                runGit(`git checkout ${JSON.stringify(branch)}`, workspacePath);
+                return { ok: true, branch };
+            } catch (error) {
+                const message =
+                    error instanceof Error ? error.message : "Checkout failed";
+                set.status = 500;
+                return { error: message };
+            }
+        },
+        {
+            body: t.Object({
+                path: t.String(),
+                branch: t.String(),
+            }),
+        },
+    )
+    .post(
+        "/git/init",
+        async ({ body, set }) => {
+            const workspacePath = body.path?.trim();
+
+            if (!workspacePath) {
+                set.status = 400;
+                return { error: "Path is required" };
+            }
+
+            try {
+                runGit("git init", workspacePath);
+                return { ok: true };
+            } catch (error) {
+                const message =
+                    error instanceof Error ? error.message : "Init failed";
+                set.status = 500;
+                return { error: message };
+            }
+        },
+        {
+            body: t.Object({
+                path: t.String(),
+            }),
+        },
+    )
     .get("/sessions", async () => listSessions())
     .post(
         "/sessions",

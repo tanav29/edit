@@ -175,7 +175,7 @@
         font-family: var(--font-geist-mono), monospace;
     }
     ::selection {
-        @apply bg-accent;
+        @apply bg-primary/20;
     }
 }
 
