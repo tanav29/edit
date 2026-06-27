@@ -23,6 +23,9 @@ import {
     listSessions,
     storeMessages,
 } from "./store";
+import { db } from "@/db";
+import { chats } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 const execAsync = promisify(exec);
 
@@ -408,9 +411,129 @@ async function generateCommitMessage(diff: string): Promise<string> {
     }
 }
 
+function cleanEnv(): Record<string, string> {
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) {
+        if (v !== undefined) env[k] = v;
+    }
+    return env;
+}
+
+const userSockets = new Set<any>();
+
+function broadcast(data: object) {
+    const msg = JSON.stringify(data);
+    for (const ws of userSockets) {
+        try {
+            ws.send(msg);
+        } catch (e) {
+            userSockets.delete(ws);
+        }
+    }
+}
+
 const api = new Elysia({ prefix: "/api" })
     .get("/health", async () => {
         return { ok: true };
+    })
+    .ws("/ws", {
+        open(ws) {
+            userSockets.add(ws);
+        },
+        close(ws) {
+            userSockets.delete(ws);
+        },
+        async message(ws, message) {
+            console.log(`ws message: ${message}`);
+            switch (message) {
+                case "session":
+                    const sessions = await listSessions();
+                    ws.send(JSON.stringify(sessions));
+                    break;
+            }
+        },
+    })
+    .ws("/terminal", {
+        async open(ws) {
+            (ws as any).__pty = null;
+        },
+        async message(ws, message) {
+            const msg = message as string | Buffer;
+            const input = typeof msg === "string" ? msg : msg.toString("utf-8");
+
+            if (input.startsWith("\x1b[RESIZE:")) {
+                const match = input.match(/\x1b\[RESIZE:(\d+);(\d+)\]/);
+                if (match) {
+                    const cols = parseInt(match[1], 10);
+                    const rows = parseInt(match[2], 10);
+                    let proc = (ws as any).__pty;
+
+                    if (!proc) {
+                        try {
+                            const shell = process.env.SHELL || "/bin/bash";
+                            const env = cleanEnv();
+                            env.TERM = "xterm-256color";
+
+                            proc = Bun.spawn([shell, "-li"], {
+                                terminal: {
+                                    cols,
+                                    rows,
+                                    data(_terminal, data) {
+                                        if (ws.readyState === WebSocket.OPEN) {
+                                            ws.send(
+                                                new TextDecoder().decode(data),
+                                            );
+                                        }
+                                    },
+                                },
+                                cwd: process.env.HOME || process.cwd(),
+                                env,
+                            });
+
+                            proc.exited.then((exitCode) => {
+                                console.error(`PTY exited: code=${exitCode}`);
+                                if (ws.readyState === WebSocket.OPEN) {
+                                    ws.send(
+                                        `\r\n\x1b[90m[process exited] (code: ${exitCode})\x1b[0m\r\n`,
+                                    );
+                                    ws.close();
+                                }
+                            });
+
+                            (ws as any).__pty = proc;
+                        } catch (err) {
+                            const errorMsg =
+                                err instanceof Error
+                                    ? err.message
+                                    : String(err);
+                            console.error(`Failed to spawn PTY: ${errorMsg}`);
+                            if (ws.readyState === WebSocket.OPEN) {
+                                ws.send(
+                                    `\r\n\x1b[31mFailed to spawn shell: ${errorMsg}\x1b[0m\r\n`,
+                                );
+                                ws.close();
+                            }
+                        }
+                    } else {
+                        proc.terminal?.resize(cols, rows);
+                    }
+                    return;
+                }
+            }
+
+            const proc = (ws as any).__pty;
+            if (proc) proc.terminal?.write(input);
+        },
+        async close(ws) {
+            const proc = (ws as any).__pty;
+            if (proc) {
+                try {
+                    proc.kill();
+                } catch {
+                    // process already exited
+                }
+            }
+        },
     })
     .post(
         "/files/ensure",
@@ -717,6 +840,8 @@ const api = new Elysia({ prefix: "/api" })
                 workspacePath: workspace.path,
             });
 
+            broadcast({ type: "sessions-changed" });
+
             return {
                 ok: true,
                 id: session.id,
@@ -753,6 +878,7 @@ const api = new Elysia({ prefix: "/api" })
         "/sessions/:id",
         async ({ params }) => {
             await deleteSession(params.id);
+            broadcast({ type: "sessions-changed" });
             return { ok: true };
         },
         {
@@ -807,6 +933,7 @@ const api = new Elysia({ prefix: "/api" })
         async ({ params }) => {
             // Legacy alias retained for the existing client. Prefer DELETE /sessions/:id.
             await deleteSession(params.id);
+            broadcast({ type: "sessions-changed" });
             return { ok: true };
         },
         {
@@ -843,9 +970,32 @@ const api = new Elysia({ prefix: "/api" })
                 }),
             });
 
+            try {
+                await db
+                    .update(chats)
+                    .set({ status: 1 })
+                    .where(eq(chats.id, body.id));
+                broadcast({
+                    type: "status-update",
+                    id: body.id,
+                    status: 1,
+                });
+            } catch (e) {
+                console.error(e);
+            }
+
             return result.toUIMessageStreamResponse({
                 originalMessages: body.messages,
                 onFinish: async ({ messages }) => {
+                    await db
+                        .update(chats)
+                        .set({ status: 0 })
+                        .where(eq(chats.id, body.id));
+                    broadcast({
+                        type: "status-update",
+                        id: body.id,
+                        status: 0,
+                    });
                     await storeMessages({
                         id: body.id,
                         messages,

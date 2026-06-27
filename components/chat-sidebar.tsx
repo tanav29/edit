@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ChevronDown,
     Folder,
@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/tooltip";
 import ChatCreation from "./chat-creation";
 import { useSessionParam } from "@/lib/session-param";
+import { useSide } from "@/store/store";
+import { useWebSocket, wsUrl } from "@/hooks/use-socket";
 
 export type ChatSessionSummary = {
     id: string;
@@ -32,22 +34,13 @@ export type ChatSessionSummary = {
     updatedAt: number;
 };
 
-function formatLabel(value: string | null) {
-    const normalized = value?.trim();
-    return normalized && normalized.length > 0 ? normalized : "New chat";
-}
-
 function comparePath(valueA: string, valueB: string) {
     return valueA.localeCompare(valueB, undefined, { sensitivity: "base" });
 }
 
-export default function ChatSidebar({
-    isOpen,
-    onToggle,
-}: {
-    isOpen: boolean;
-    onToggle?: () => void;
-}) {
+export default function ChatSidebar() {
+    const [side, toggleSide] = useSide();
+
     const queryClient = useQueryClient();
     const {
         data: sessions,
@@ -63,18 +56,23 @@ export default function ChatSidebar({
             return 30 * 1000;
         },
     });
+
+    const { lastMessage } = useWebSocket(wsUrl);
+
+    useEffect(() => {
+        if (
+            lastMessage?.type === "status-update" ||
+            lastMessage?.type === "sessions-changed"
+        ) {
+            refetch();
+        }
+    }, [lastMessage]);
+
     const [session, setSession] = useSessionParam();
+
     const [collapsedPaths, setCollapsedPaths] = useState<
         Record<string, boolean>
     >({});
-
-    const { data: health, isLoading: healthChecking } = useQuery({
-        queryKey: ["health"],
-        queryFn: async () => {
-            const res = await api.health.get();
-            return res.data;
-        },
-    });
 
     const activeSessionId = session ?? null;
 
@@ -113,7 +111,7 @@ export default function ChatSidebar({
         if (!chat.id) return;
 
         const confirmed = window.confirm(
-            `Delete this session?\n\n${formatLabel(chat.title)}`,
+            `Delete this session?\n\n${chat.title}`,
         );
         if (!confirmed) return;
 
@@ -156,7 +154,7 @@ export default function ChatSidebar({
             <aside
                 className={cn(
                     "flex h-full shrink-0 flex-col border-r bg-card/30 transition-transform duration-100 ease-in-out",
-                    isOpen
+                    side
                         ? "w-64 translate-x-0 opacity-100"
                         : "w-0 -translate-x-3 opacity-0 overflow-hidden border-r-0 pointer-events-none",
                 )}
@@ -164,9 +162,9 @@ export default function ChatSidebar({
                 <div className="flex items-center justify-between border-b px-3 py-2 shrink-0">
                     <Button
                         type="button"
-                        variant="ghost"
+                        variant="outline"
                         size="icon-sm"
-                        onClick={onToggle}
+                        onClick={toggleSide}
                         aria-label="Close sessions sidebar"
                     >
                         <PanelLeftClose />
@@ -255,7 +253,7 @@ export default function ChatSidebar({
 
                                         <div
                                             className={cn(
-                                                "grid transition-all border-l ml-1 pl-1",
+                                                "grid transition-all border-l ml-0 pl-1",
                                                 isCollapsed
                                                     ? "grid-rows-[0fr] opacity-0"
                                                     : "grid-rows-[1fr] opacity-100",
@@ -265,7 +263,7 @@ export default function ChatSidebar({
                                             aria-hidden={isCollapsed}
                                         >
                                             <div className="min-h-0 overflow-hidden">
-                                                <div>
+                                                <div className="space-y-1">
                                                     {group.chats.map((chat) => {
                                                         const isActive =
                                                             chat.id ===
@@ -290,9 +288,29 @@ export default function ChatSidebar({
                                                                         )
                                                                     }
                                                                 >
-                                                                    {formatLabel(
-                                                                        chat.title,
-                                                                    )}
+                                                                    <div className="flex items-center gap-1 w-full">
+                                                                        <div
+                                                                            className={`w-2 h-2 ${chat.status ? "bg-green-500" : "bg-muted-foreground"} rounded-full`}
+                                                                        />
+                                                                        <p className="overflow-hidden truncate w-full">
+                                                                            {
+                                                                                chat.title
+                                                                            }
+                                                                        </p>
+                                                                    </div>
+                                                                    <p className="text-xs text-muted-foreground">
+                                                                        {new Date(
+                                                                            chat.updatedAt,
+                                                                        ).toLocaleString(
+                                                                            "en-US",
+                                                                            {
+                                                                                day: "numeric",
+                                                                                month: "short",
+                                                                                hour: "numeric",
+                                                                                minute: "numeric",
+                                                                            },
+                                                                        )}
+                                                                    </p>
                                                                 </button>
                                                                 <button
                                                                     onClick={() =>

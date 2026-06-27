@@ -40,6 +40,8 @@
         "@tanstack/react-query": "^5.99.0",
         "@tanstack/react-router": "^1.130.11",
         "@tavily/core": "^0.7.2",
+        "@wterm/dom": "^0.3.0",
+        "@wterm/react": "^0.3.0",
         "ai": "^6.0.168",
         "ansi-to-react": "^6.2.6",
         "better-sqlite3": "^12.9.0",
@@ -53,6 +55,7 @@
         "lucide-react": "^1.16.0",
         "motion": "^12.38.0",
         "nanoid": "^5.1.9",
+        "node-pty": "^1.1.0",
         "ollama-ai-provider-v2": "^3.5.0",
         "qrcode.react": "^4.2.0",
         "radix-ui": "^1.4.3",
@@ -62,7 +65,8 @@
         "sonner": "^2.0.7",
         "streamdown": "^2.5.0",
         "tailwind-merge": "^3.5.0",
-        "zod": "^4.3.6"
+        "zod": "^4.3.6",
+        "zustand": "^5.0.14"
     },
     "devDependencies": {
         "@tailwindcss/postcss": "^4.2.2",

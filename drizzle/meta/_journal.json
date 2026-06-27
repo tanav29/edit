@@ -15,6 +15,13 @@
       "when": 1775134372321,
       "tag": "0001_happy_la_nuit",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1782531942505,
+      "tag": "0002_pretty_ultimates",
+      "breakpoints": true
     }
   ]
 }

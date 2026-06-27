@@ -1,0 +1,1 @@
+ALTER TABLE `chats` ADD `status` integer DEFAULT 0;

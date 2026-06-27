@@ -175,15 +175,14 @@ export default function MessageUI({
                         part.state === "output-available" &&
                         part.output
                     ) {
-        rendered = (
-            <div
-                key={key}
-                className="w-full max-h-108 mt-2 overflow-y-scroll border rounded-lg overflow-hidden"
-            >
+                        rendered = (
+                            <div
+                                key={key}
+                                className="w-full max-h-108 mt-2 overflow-y-scroll border rounded-lg overflow-hidden"
+                            >
                                 <PatchDiff
                                     patch={
-                                        (part.output as { patch: string })
-                                            .patch
+                                        (part.output as { patch: string }).patch
                                     }
                                     options={{
                                         overflow: "wrap",

@@ -4,7 +4,14 @@ import {
     lastAssistantMessageIsCompleteWithApprovalResponses,
     type UIMessage,
 } from "ai";
-import { Code, Copy, FolderTree, Loader2, PanelLeftClose } from "lucide-react";
+import {
+    Code,
+    Copy,
+    FolderTree,
+    Loader2,
+    PanelLeftClose,
+    PanelRightClose,
+} from "lucide-react";
 import {
     memo,
     useCallback,
@@ -32,6 +39,9 @@ import {
 import { useSessionParam } from "@/lib/session-param";
 import { getTitleFromMessages, parseMessages } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
+import { useSide } from "@/store/store";
+import { Badge } from "@/components/ui/badge";
+import { useWebSocket, wsUrl } from "@/hooks/use-socket";
 
 const MemoMessageUI = memo(MessageUI);
 
@@ -91,7 +101,11 @@ export function ChatRouteComponent() {
         return () => window.removeEventListener("keydown", onKeyDown);
     }, []);
 
-    const { data: sessionData, isLoading: isSessionLoading } = useQuery({
+    const {
+        data: sessionData,
+        isLoading: isSessionLoading,
+        refetch,
+    } = useQuery({
         queryKey: ["session", session],
         queryFn: async () => {
             if (!session) return null;
@@ -111,6 +125,17 @@ export function ChatRouteComponent() {
         },
         enabled: Boolean(session),
     });
+
+    const { lastMessage } = useWebSocket(wsUrl);
+
+    useEffect(() => {
+        if (
+            lastMessage?.type === "sessions-changed" &&
+            lastMessage.id === session
+        ) {
+            refetch();
+        }
+    }, [lastMessage]);
 
     const workspace = sessionData?.workspace ?? null;
 
@@ -132,8 +157,6 @@ export function ChatRouteComponent() {
                 isActive={false}
                 isFileBarOpen={isFileBarOpen}
                 setIsFileBarOpen={setIsFileBarOpen}
-                isSidebarOpen={isSidebarOpen}
-                toggleSidebar={toggleSidebar}
                 workspace={null}
                 selectedFile={selectedFile}
                 setSelectedFile={setSelectedFile}
@@ -330,8 +353,6 @@ function LoadedSessionChat({
             isActive={isActive}
             isFileBarOpen={isFileBarOpen}
             setIsFileBarOpen={setIsFileBarOpen}
-            isSidebarOpen={isSidebarOpen}
-            toggleSidebar={toggleSidebar}
             workspace={workspace}
             selectedFile={selectedFile}
             setSelectedFile={setSelectedFile}
@@ -387,8 +408,6 @@ type ChatLayoutProps = {
     isActive: boolean;
     isFileBarOpen: boolean;
     setIsFileBarOpen: React.Dispatch<React.SetStateAction<boolean>>;
-    isSidebarOpen: boolean;
-    toggleSidebar: () => void;
     workspace: string | null;
     selectedFile: string | undefined;
     setSelectedFile: React.Dispatch<React.SetStateAction<string | undefined>>;
@@ -400,40 +419,44 @@ function ChatLayout({
     isActive,
     isFileBarOpen,
     setIsFileBarOpen,
-    isSidebarOpen,
-    toggleSidebar,
     workspace,
     selectedFile,
     setSelectedFile,
 }: ChatLayoutProps) {
+    const [side, toggleSide] = useSide();
     return (
         <div className="relative flex h-screen overflow-hidden bg-background text-foreground">
             <div className="pointer-events-none absolute inset-0" />
-            <ChatSidebar isOpen={isSidebarOpen} onToggle={toggleSidebar} />
+            <ChatSidebar />
 
             <main className="relative z-10 flex min-w-0 flex-1 flex-col">
                 <div className="flex min-h-0 flex-1">
                     <section className="relative flex min-w-0 flex-1 flex-col select-none">
                         <div className="flex items-center justify-between gap-3 border-b border-border/70 bg-background/95 px-3 py-2">
                             <div className="flex items-center gap-1 min-w-0">
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button
-                                            variant="outline"
-                                            size="icon-sm"
-                                            aria-label="Toggle sessions sidebar"
-                                            onClick={toggleSidebar}
-                                        >
-                                            <PanelLeftClose />
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="bottom">
-                                        Toggle sessions
-                                    </TooltipContent>
-                                </Tooltip>
+                                {!side && (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button
+                                                variant="outline"
+                                                size="icon-sm"
+                                                aria-label="Toggle sessions sidebar"
+                                                onClick={toggleSide}
+                                            >
+                                                <PanelRightClose />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="bottom">
+                                            Toggle sessions
+                                        </TooltipContent>
+                                    </Tooltip>
+                                )}
                                 <div className="truncate text-md mx-2 font-medium">
                                     {currentSessionTitle}
                                 </div>
+                                <Badge variant={"secondary"}>
+                                    git (dialoag ot switch branch)
+                                </Badge>
                             </div>
 
                             <div className="flex items-center gap-1 rounded-md">
@@ -519,8 +542,6 @@ function EmptyChatPage({
             isActive={false}
             isFileBarOpen={isFileBarOpen}
             setIsFileBarOpen={setIsFileBarOpen}
-            isSidebarOpen={isSidebarOpen}
-            toggleSidebar={toggleSidebar}
             workspace={null}
             selectedFile={undefined}
             setSelectedFile={() => undefined}
