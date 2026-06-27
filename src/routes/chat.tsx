@@ -11,6 +11,7 @@ import {
     Loader2,
     PanelLeftClose,
     PanelRightClose,
+    Terminal,
 } from "lucide-react";
 import {
     memo,
@@ -24,7 +25,6 @@ import {
 import ChatSidebar from "@/components/chat-sidebar";
 import ChatInput from "@/components/chat-input";
 import CommitButton from "@/components/commit-button";
-import CustomCommandButtons from "@/components/custom-command-buttons";
 import FileTreeBar from "@/components/file-tree";
 import { FileViewer } from "@/components/file-viewer";
 import Loader from "@/components/loader";
@@ -44,6 +44,39 @@ import BranchSelector from "@/components/branch-selector";
 import { useWebSocket, wsUrl } from "@/hooks/use-socket";
 
 const MemoMessageUI = memo(MessageUI);
+
+function getMessageTime(message: unknown): Date | string | number | undefined {
+    if (typeof message !== "object" || message === null) return undefined;
+    return (message as Record<string, unknown>).createdAt as
+        | Date
+        | string
+        | number
+        | undefined;
+}
+
+function formatMessageTime(
+    createdAt: Date | string | number | undefined | null,
+): string | null {
+    if (createdAt == null) return null;
+    const date = new Date(createdAt);
+    if (isNaN(date.getTime())) return null;
+
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    const time = date.toLocaleTimeString(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+
+    if (!isToday) {
+        const dateStr = date.toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+        });
+        return `${dateStr} ${time}`;
+    }
+    return time;
+}
 
 type QueueAction =
     | { type: "enqueue"; value: string }
@@ -287,61 +320,131 @@ function LoadedSessionChat({
                       .join("\n")
                 : "";
 
+        const aiMessageText =
+            message.role === "assistant"
+                ? message.parts
+                      .flatMap((part) =>
+                          part.type === "text" && typeof part.text === "string"
+                              ? [part.text]
+                              : [],
+                      )
+                      .join("\n")
+                : "";
+
         return (
             <div key={message.id || index}>
                 {message.role === "user" ? (
                     <div className="flex justify-end py-2">
-                        <div className="flex items-center gap-2 max-w-[85%]">
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon-sm"
-                                        aria-label="Copy user message"
-                                        className="text-muted-foreground hover:text-primary"
-                                        onClick={() => {
-                                            if (
-                                                !userMessageText ||
-                                                typeof navigator === "undefined"
-                                            ) {
-                                                return;
-                                            }
+                        <div className="flex flex-col items-end gap-1 max-w-[85%]">
+                            <div className="flex items-center gap-2">
+                                <div className="rounded-2xl rounded-br-md bg-primary/12 px-4 py-2.5">
+                                    {message.parts.map((part, partIndex) => {
+                                        if (part.type !== "text") return null;
 
-                                            void navigator.clipboard.writeText(
-                                                userMessageText,
-                                            );
-                                        }}
-                                    >
-                                        <Copy className="size-3" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent side="left">
-                                    Copy
-                                </TooltipContent>
-                            </Tooltip>
+                                        return (
+                                            <p
+                                                key={partIndex}
+                                                className="whitespace-pre-wrap text-sm leading-relaxed"
+                                            >
+                                                {part.text}
+                                            </p>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            <div>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon-sm"
+                                            aria-label="Copy user message"
+                                            className="text-muted-foreground hover:text-primary"
+                                            onClick={() => {
+                                                if (
+                                                    !userMessageText ||
+                                                    typeof navigator ===
+                                                        "undefined"
+                                                ) {
+                                                    return;
+                                                }
 
-                            <div className="rounded-2xl rounded-br-md bg-primary/12 px-4 py-2.5">
-                                {message.parts.map((part, partIndex) => {
-                                    if (part.type !== "text") return null;
-
-                                    return (
-                                        <p
-                                            key={partIndex}
-                                            className="whitespace-pre-wrap text-sm leading-relaxed"
+                                                void navigator.clipboard.writeText(
+                                                    userMessageText,
+                                                );
+                                            }}
                                         >
-                                            {part.text}
-                                        </p>
-                                    );
-                                })}
+                                            <Copy className="size-3" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left">
+                                        Copy
+                                    </TooltipContent>
+                                </Tooltip>
+                                {getMessageTime(message) && (
+                                    <span className="text-[10px] text-muted-foreground/60">
+                                        {formatMessageTime(
+                                            getMessageTime(message),
+                                        )}
+                                    </span>
+                                )}
                             </div>
                         </div>
                     </div>
                 ) : (
-                    <MemoMessageUI
-                        parts={message.parts}
-                        addToolApprovalResponseAction={addToolApprovalResponse}
-                    />
+                    <div className="flex justify-start py-2">
+                        <div className="flex-col items-start max-w-[85%]">
+                            <div className="flex-1 min-w-0">
+                                <MemoMessageUI
+                                    parts={message.parts}
+                                    addToolApprovalResponseAction={
+                                        addToolApprovalResponse
+                                    }
+                                />
+                            </div>
+                            <div>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon-sm"
+                                            aria-label="Copy AI message"
+                                            className="text-muted-foreground hover:text-primary"
+                                            onClick={() => {
+                                                if (
+                                                    !aiMessageText ||
+                                                    typeof navigator ===
+                                                        "undefined"
+                                                ) {
+                                                    return;
+                                                }
+
+                                                void navigator.clipboard.writeText(
+                                                    aiMessageText,
+                                                );
+                                            }}
+                                        >
+                                            <Copy className="size-3" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right">
+                                        Copy
+                                    </TooltipContent>
+                                </Tooltip>
+                                {getMessageTime(message) && (
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] text-muted-foreground/60">
+                                            {formatMessageTime(
+                                                getMessageTime(message),
+                                            )}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 )}
             </div>
         );
@@ -451,17 +554,35 @@ function ChatLayout({
                                         </TooltipContent>
                                     </Tooltip>
                                 )}
-                                <div className="truncate text-md mx-2 font-medium">
+                                <div className="truncate text-sm mx-2 font-medium">
                                     {currentSessionTitle}
                                 </div>
-                                {workspace && <BranchSelector workspacePath={workspace} />}
+                                {workspace && (
+                                    <BranchSelector workspacePath={workspace} />
+                                )}
                             </div>
 
                             <div className="flex items-center gap-1 rounded-md">
-                                <CustomCommandButtons
-                                    workspacePath={workspace ?? ""}
-                                    isBusy={isActive}
-                                />
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            aria-label="Toggle file tree"
+                                            onClick={() =>
+                                                setIsFileBarOpen(
+                                                    (prev) => !prev,
+                                                )
+                                            }
+                                        >
+                                            <Terminal />
+                                            Terminal
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="bottom">
+                                        Toggle terminal
+                                    </TooltipContent>
+                                </Tooltip>
                                 <CommitButton
                                     workspacePath={workspace ?? ""}
                                     isBusy={isActive}
@@ -470,7 +591,7 @@ function ChatLayout({
                                     <TooltipTrigger asChild>
                                         <Button
                                             variant="outline"
-                                            size="icon-sm"
+                                            size="sm"
                                             aria-label="Toggle file tree"
                                             onClick={() =>
                                                 setIsFileBarOpen(
@@ -479,6 +600,7 @@ function ChatLayout({
                                             }
                                         >
                                             <FolderTree />
+                                            Files
                                         </Button>
                                     </TooltipTrigger>
                                     <TooltipContent side="bottom">

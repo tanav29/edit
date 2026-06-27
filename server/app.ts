@@ -730,6 +730,74 @@ const api = new Elysia({ prefix: "/api" })
         },
     )
     .post(
+        "/git/status",
+        async ({ query, set }) => {
+            const workspacePath = query.path?.trim();
+
+            if (!workspacePath) {
+                set.status = 400;
+                return { error: "Path is required" };
+            }
+
+            let gitRoot = "";
+
+            try {
+                gitRoot = runGit(
+                    "git rev-parse --show-toplevel",
+                    workspacePath,
+                );
+            } catch {
+                set.status = 400;
+                return {
+                    error: "Selected directory is not a git repository",
+                };
+            }
+
+            const selectedRelativePath =
+                path.relative(gitRoot, workspacePath) || ".";
+
+            if (selectedRelativePath.startsWith("..")) {
+                set.status = 400;
+                return {
+                    error: "Selected directory must be inside the git repository",
+                };
+            }
+
+            const pathSpec =
+                selectedRelativePath === "."
+                    ? "."
+                    : JSON.stringify(selectedRelativePath);
+
+            try {
+                const porcelainOutput = runGit(
+                    `git status --porcelain --untracked-files=all -- ${pathSpec}`,
+                    gitRoot,
+                );
+
+                const entries: GitStatusEntry[] = [];
+
+                if (porcelainOutput) {
+                    for (const line of porcelainOutput.split(/\r?\n/)) {
+                        const parsed = parseGitStatusLine(line);
+                        if (parsed) entries.push(parsed);
+                    }
+                }
+
+                return { ok: true, entries, gitRoot };
+            } catch (error) {
+                const message =
+                    error instanceof Error ? error.message : "Status failed";
+                set.status = 500;
+                return { error: message };
+            }
+        },
+        {
+            query: t.Object({
+                path: t.Optional(t.String()),
+            }),
+        },
+    )
+    .post(
         "/git/commit",
         async ({ body, set }) => {
             try {
@@ -789,7 +857,9 @@ const api = new Elysia({ prefix: "/api" })
                     };
                 }
 
-                const commitMessage = await generateCommitMessage(stagedDiff);
+                const userMessage = body?.message?.trim();
+                const commitMessage =
+                    userMessage || (await generateCommitMessage(stagedDiff));
 
                 runGit(
                     `git commit -m ${JSON.stringify(commitMessage)} -- ${pathSpec}`,
@@ -800,6 +870,8 @@ const api = new Elysia({ prefix: "/api" })
                     "git rev-parse --short HEAD",
                     gitRoot,
                 );
+
+                broadcast({ type: "git-status-changed", path: workspacePath });
 
                 return {
                     ok: true,
@@ -817,6 +889,7 @@ const api = new Elysia({ prefix: "/api" })
         {
             body: t.Object({
                 path: t.Optional(t.String()),
+                message: t.Optional(t.String()),
             }),
         },
     )
@@ -912,6 +985,167 @@ const api = new Elysia({ prefix: "/api" })
         {
             body: t.Object({
                 path: t.String(),
+            }),
+        },
+    )
+    .get(
+        "/git/remote",
+        async ({ query, set }) => {
+            const workspacePath = query.path?.trim();
+
+            if (!workspacePath) {
+                set.status = 400;
+                return { error: "Path is required" };
+            }
+
+            try {
+                const remotesOutput = runGit(
+                    "git remote -v",
+                    workspacePath,
+                );
+
+                const remotes: { name: string; url: string }[] = [];
+                const seen = new Set<string>();
+
+                if (remotesOutput) {
+                    for (const line of remotesOutput.split(/\r?\n/)) {
+                        const parts = line.split(/\s+/);
+                        if (parts.length >= 2) {
+                            const name = parts[0]!;
+                            const url = parts[1]!;
+                            const key = `${name}:${url}`;
+                            if (!seen.has(key)) {
+                                seen.add(key);
+                                remotes.push({ name, url });
+                            }
+                        }
+                    }
+                }
+
+                let ahead = 0;
+                let behind = 0;
+
+                try {
+                    const revListOutput = runGit(
+                        "git rev-list --left-right --count HEAD...@{upstream}",
+                        workspacePath,
+                    );
+                    if (revListOutput) {
+                        const counts = revListOutput.split(/\s+/);
+                        ahead = parseInt(counts[0] ?? "0", 10);
+                        behind = parseInt(counts[1] ?? "0", 10);
+                    }
+                } catch {
+                    // no upstream configured or no remote
+                }
+
+                const currentBranch = runGit(
+                    "git rev-parse --abbrev-ref HEAD",
+                    workspacePath,
+                );
+
+                let commitHash = "";
+                try {
+                    commitHash = runGit(
+                        "git rev-parse --short HEAD",
+                        workspacePath,
+                    );
+                } catch {
+                    // no commits yet
+                }
+
+                return {
+                    ok: true,
+                    remotes,
+                    ahead,
+                    behind,
+                    currentBranch,
+                    commitHash,
+                };
+            } catch (error) {
+                const message =
+                    error instanceof Error ? error.message : "Remote info failed";
+                set.status = 500;
+                return { error: message };
+            }
+        },
+        {
+            query: t.Object({
+                path: t.Optional(t.String()),
+            }),
+        },
+    )
+    .post(
+        "/git/push",
+        async ({ body, set }) => {
+            const workspacePath = body.path?.trim();
+
+            if (!workspacePath) {
+                set.status = 400;
+                return { error: "Path is required" };
+            }
+
+            try {
+                const remote = body.remote?.trim() || "origin";
+                const branch = body.branch?.trim() || "";
+                const cmd = branch
+                    ? `git push ${JSON.stringify(remote)} ${JSON.stringify(branch)}`
+                    : `git push ${JSON.stringify(remote)}`;
+
+                runGit(cmd, workspacePath);
+
+                broadcast({ type: "git-status-changed", path: workspacePath });
+
+                return { ok: true };
+            } catch (error) {
+                const message =
+                    error instanceof Error ? error.message : "Push failed";
+                set.status = 500;
+                return { error: message };
+            }
+        },
+        {
+            body: t.Object({
+                path: t.String(),
+                remote: t.Optional(t.String()),
+                branch: t.Optional(t.String()),
+            }),
+        },
+    )
+    .post(
+        "/git/pull",
+        async ({ body, set }) => {
+            const workspacePath = body.path?.trim();
+
+            if (!workspacePath) {
+                set.status = 400;
+                return { error: "Path is required" };
+            }
+
+            try {
+                const remote = body.remote?.trim() || "origin";
+                const branch = body.branch?.trim() || "";
+                const cmd = branch
+                    ? `git pull ${JSON.stringify(remote)} ${JSON.stringify(branch)}`
+                    : `git pull ${JSON.stringify(remote)}`;
+
+                runGit(cmd, workspacePath);
+
+                broadcast({ type: "git-status-changed", path: workspacePath });
+
+                return { ok: true };
+            } catch (error) {
+                const message =
+                    error instanceof Error ? error.message : "Pull failed";
+                set.status = 500;
+                return { error: message };
+            }
+        },
+        {
+            body: t.Object({
+                path: t.String(),
+                remote: t.Optional(t.String()),
+                branch: t.Optional(t.String()),
             }),
         },
     )

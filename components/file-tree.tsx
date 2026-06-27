@@ -107,7 +107,7 @@ export default function FileTreeBar({
     return (
         <aside
             className={cn(
-                "shrink-0 min-h-0 z-50 flex-col border-l transition-transform duration-100 ease-in-out bg-background",
+                "shrink-0 min-h-0 z-50 flex-col border-l bg-background",
                 isOpen
                     ? "flex w-64 translate-x-0 opacity-100"
                     : "pointer-events-none w-0 flex translate-x-3 opacity-0 overflow-hidden border-l-0",

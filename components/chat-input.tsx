@@ -292,7 +292,7 @@ export default function ChatInput({
     }
 
     return (
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-3xl mx-auto">
             <div className="rounded-2xl border bg-card p-2 transition-colors focus-within:border-muted-foreground/50">
                 {queuedMessages.length > 0 ? (
                     <div className="mb-2 rounded-lg">
