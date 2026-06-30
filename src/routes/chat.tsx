@@ -9,9 +9,10 @@ import {
     Copy,
     Loader2,
     FolderTree,
-    PanelLeftClose,
     PanelRightClose,
     Terminal,
+    PanelLeftClose,
+    PanelRightOpen,
 } from "lucide-react";
 import {
     memo,
@@ -26,7 +27,6 @@ import ChatSidebar from "@/components/chat-sidebar";
 import ChatInput from "@/components/chat-input";
 import CommitButton from "@/components/commit-button";
 import FileTreeBar from "@/components/file-tree";
-import { FileViewer } from "@/components/file-viewer";
 import Loader from "@/components/loader";
 import MessageUI from "@/components/message";
 import { TerminalInput } from "@/components/terminal-input";
@@ -39,9 +39,10 @@ import {
 import { useSessionParam } from "@/lib/session-param";
 import { getTitleFromMessages, parseMessages } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { useSide } from "@/store/store";
+import { useRightSide, useSide } from "@/store/store";
 import BranchSelector from "@/components/branch-selector";
 import { useWebSocket, wsUrl } from "@/hooks/use-socket";
+import RightSidebar from "@/components/right-sidebar";
 
 const MemoMessageUI = memo(MessageUI);
 
@@ -527,6 +528,8 @@ function ChatLayout({
     setSelectedFile,
 }: ChatLayoutProps) {
     const [side, toggleSide] = useSide();
+    const [rside, rtoggleSide] = useRightSide();
+
     return (
         <div className="relative flex h-screen overflow-hidden bg-background text-foreground">
             <div className="pointer-events-none absolute inset-0" />
@@ -563,50 +566,27 @@ function ChatLayout({
                             </div>
 
                             <div className="flex items-center gap-1 rounded-md">
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            aria-label="Toggle file tree"
-                                            onClick={() =>
-                                                setIsFileBarOpen(
-                                                    (prev) => !prev,
-                                                )
-                                            }
-                                        >
-                                            <Terminal />
-                                            Terminal
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="bottom">
-                                        Toggle terminal
-                                    </TooltipContent>
-                                </Tooltip>
                                 <CommitButton
                                     workspacePath={workspace ?? ""}
                                     isBusy={isActive}
                                 />
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            aria-label="Toggle file tree"
-                                            onClick={() =>
-                                                setIsFileBarOpen(
-                                                    (prev) => !prev,
-                                                )
-                                            }
-                                        >
-                                            <FolderTree />
-                                            Files
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="bottom">
-                                        Toggle file tree
-                                    </TooltipContent>
-                                </Tooltip>
+                                {!rside && (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button
+                                                variant="outline"
+                                                size="icon-sm"
+                                                aria-label="Toggle file tree"
+                                                onClick={rtoggleSide}
+                                            >
+                                                <PanelRightOpen />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="bottom">
+                                            Toggle right panel
+                                        </TooltipContent>
+                                    </Tooltip>
+                                )}
                             </div>
                         </div>
 
@@ -614,16 +594,19 @@ function ChatLayout({
                             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                                 {children}
                             </div>
-                            <FileTreeBar
-                                rootPath={workspace}
-                                isOpen={isFileBarOpen}
-                                selectedFile={selectedFile}
-                                onFileSelect={setSelectedFile}
-                            />
                         </div>
                     </section>
                 </div>
             </main>
+
+            <RightSidebar />
+
+            {/*<FileTreeBar
+                rootPath={workspace}
+                isOpen={isFileBarOpen}
+                selectedFile={selectedFile}
+                onFileSelect={setSelectedFile}
+            />*/}
         </div>
     );
 }

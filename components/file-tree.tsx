@@ -4,9 +4,7 @@ import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import { preparePresortedFileTreeInput } from "@pierre/trees";
-import { cn } from "@/lib/utils";
-import { File } from "@pierre/diffs/react";
-import { Loader2 } from "lucide-react";
+import FileViewer from "@/components/file-viewer";
 
 type GitStatus =
     | "added"
@@ -106,21 +104,26 @@ export default function FileTreeBar({
         return () => window.removeEventListener("keydown", onKeyDown);
     }, [onFileSelect, selectedFile]);
 
+    if (!isOpen) {
+        return null;
+    }
+
     return (
-        <section>
+        <section className="flex h-full min-h-0 w-[420px] shrink-0 flex-col border-l bg-background">
             {rootPath ? (
-                <div className="flex min-h-0">
-                    {selectedFile && (
-                        <FileViewer
-                            filePath={"/home/tanav/p/simple-auth/tsconfig.json"}
-                        />
-                    )}
+                <div className="flex min-h-0 flex-1 overflow-hidden">
                     <WorkspaceFileTree
                         key={rootPath}
                         rootPath={rootPath}
                         selectedFile={selectedFile}
                         onFileSelect={onFileSelect}
                     />
+                    {selectedFile && (
+                        <FileViewer
+                            filePath={selectedFile}
+                            className="border-l"
+                        />
+                    )}
                 </div>
             ) : (
                 <div className="p-3 text-xs text-muted-foreground">
@@ -128,56 +131,6 @@ export default function FileTreeBar({
                 </div>
             )}
         </section>
-    );
-}
-
-function FileViewer({ filePath }: { filePath: string }) {
-    const extension = filePath.split(".").pop() || "";
-
-    const { data: content, isLoading: loading } = useQuery<string, Error>({
-        queryKey: ["files", filePath],
-        queryFn: async () => {
-            const res = await fetch(
-                `/api/files/content?path=${encodeURIComponent(filePath)}`,
-            );
-            if (!res.ok) {
-                const payload = (await res.json().catch(() => null)) as {
-                    error?: string;
-                } | null;
-                throw new Error(payload?.error || "Failed to load file");
-            }
-
-            const data = (await res.json()) as { content: string };
-            return data.content;
-        },
-        enabled: Boolean(filePath),
-        staleTime: 60_000,
-        gcTime: 10 * 60_000,
-    });
-
-    return (
-        <div className="flex flex-col h-fit max-h-full select-none overflow-scroll">
-            {loading ? (
-                <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
-                    <Loader2 className="size-6 animate-spin" />
-                    <span>Loading file content...</span>
-                </div>
-            ) : (
-                content && (
-                    <File
-                        file={{
-                            name: filePath,
-                            contents: content,
-                        }}
-                        options={{
-                            theme: "aurora-x",
-                            unsafeCSS:
-                                "* { font-family: var(--font-geist-mono), monospace !important; }",
-                        }}
-                    />
-                )
-            )}
-        </div>
     );
 }
 
@@ -252,8 +205,6 @@ function WorkspaceFileTree({
         <WorkspaceFileTreeContent
             key={`${data.rootPath}:${data.paths.join("\n")}`}
             rootPath={rootPath}
-            rootName={data.rootName}
-            workspaceDisplayPath={data.rootPath}
             paths={data.paths}
             gitStatus={data.gitStatus}
             selectedFile={selectedFile}
@@ -264,16 +215,12 @@ function WorkspaceFileTree({
 
 function WorkspaceFileTreeContent({
     rootPath,
-    rootName,
-    workspaceDisplayPath,
     paths,
     gitStatus,
     selectedFile,
     onFileSelect,
 }: {
     rootPath: string;
-    rootName: string;
-    workspaceDisplayPath: string;
     paths: string[];
     gitStatus: GitStatusEntry[];
     selectedFile?: string;
@@ -311,7 +258,7 @@ function WorkspaceFileTreeContent({
     });
 
     return (
-        <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-auto">
             <FileTree
                 model={model}
                 className="h-full w-full"
