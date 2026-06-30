@@ -490,11 +490,13 @@ const api = new Elysia({ prefix: "/api" })
                                 env,
                             });
 
+                            proc.terminal?.write("stty -echo\n");
+
                             proc.exited.then((exitCode) => {
                                 console.error(`PTY exited: code=${exitCode}`);
                                 if (ws.readyState === WebSocket.OPEN) {
                                     ws.send(
-                                        `\r\n\x1b[90m[process exited] (code: ${exitCode})\x1b[0m\r\n`,
+                                        `\r\n[process exited] (code: ${exitCode})\r\n`,
                                     );
                                     ws.close();
                                 }
@@ -509,7 +511,7 @@ const api = new Elysia({ prefix: "/api" })
                             console.error(`Failed to spawn PTY: ${errorMsg}`);
                             if (ws.readyState === WebSocket.OPEN) {
                                 ws.send(
-                                    `\r\n\x1b[31mFailed to spawn shell: ${errorMsg}\x1b[0m\r\n`,
+                                    `\r\nFailed to spawn shell: ${errorMsg}\r\n`,
                                 );
                                 ws.close();
                             }
@@ -517,8 +519,8 @@ const api = new Elysia({ prefix: "/api" })
                     } else {
                         proc.terminal?.resize(cols, rows);
                     }
-                    return;
                 }
+                return;
             }
 
             const proc = (ws as any).__pty;
@@ -999,10 +1001,7 @@ const api = new Elysia({ prefix: "/api" })
             }
 
             try {
-                const remotesOutput = runGit(
-                    "git remote -v",
-                    workspacePath,
-                );
+                const remotesOutput = runGit("git remote -v", workspacePath);
 
                 const remotes: { name: string; url: string }[] = [];
                 const seen = new Set<string>();
@@ -1064,7 +1063,9 @@ const api = new Elysia({ prefix: "/api" })
                 };
             } catch (error) {
                 const message =
-                    error instanceof Error ? error.message : "Remote info failed";
+                    error instanceof Error
+                        ? error.message
+                        : "Remote info failed";
                 set.status = 500;
                 return { error: message };
             }
@@ -1315,6 +1316,9 @@ const api = new Elysia({ prefix: "/api" })
 
             return result.toUIMessageStreamResponse({
                 originalMessages: body.messages,
+                consumeSseStream: async ({ stream }) => {
+                    // use redis for saving in parallel
+                },
                 onFinish: async ({ messages }) => {
                     await db
                         .update(chats)

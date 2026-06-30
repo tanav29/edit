@@ -7,8 +7,8 @@ import {
 import {
     Code,
     Copy,
-    FolderTree,
     Loader2,
+    FolderTree,
     PanelLeftClose,
     PanelRightClose,
     Terminal,
@@ -163,12 +163,12 @@ export function ChatRouteComponent() {
 
     useEffect(() => {
         if (
-            lastMessage?.type === "sessions-changed" &&
+            lastMessage?.type === "status-update" &&
             lastMessage.id === session
         ) {
             refetch();
         }
-    }, [lastMessage]);
+    }, [lastMessage, refetch, session]);
 
     const workspace = sessionData?.workspace ?? null;
 
@@ -335,7 +335,7 @@ function LoadedSessionChat({
             <div key={message.id || index}>
                 {message.role === "user" ? (
                     <div className="flex justify-end py-2">
-                        <div className="flex flex-col items-end gap-1 max-w-[85%]">
+                        <div className="flex flex-col items-end gap-1">
                             <div className="flex items-center gap-2">
                                 <div className="rounded-2xl rounded-br-md bg-primary/12 px-4 py-2.5">
                                     {message.parts.map((part, partIndex) => {
@@ -624,23 +624,6 @@ function ChatLayout({
                     </section>
                 </div>
             </main>
-
-            {selectedFile ? (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4">
-                    <button
-                        type="button"
-                        aria-label="Close file viewer"
-                        className="absolute inset-0"
-                        onClick={() => setSelectedFile(undefined)}
-                    />
-                    <div className="relative z-10 h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-none">
-                        <FileViewer
-                            filePath={selectedFile}
-                            onClose={() => setSelectedFile(undefined)}
-                        />
-                    </div>
-                </div>
-            ) : null}
         </div>
     );
 }

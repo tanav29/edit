@@ -60,10 +60,7 @@ export default function ChatSidebar() {
     const { lastMessage } = useWebSocket(wsUrl);
 
     useEffect(() => {
-        if (
-            lastMessage?.type === "status-update" ||
-            lastMessage?.type === "sessions-changed"
-        ) {
+        if (lastMessage?.type === "status-update") {
             refetch();
         }
     }, [lastMessage]);
@@ -288,17 +285,15 @@ export default function ChatSidebar() {
                                                                         )
                                                                     }
                                                                 >
-                                                                    <div className="flex items-center gap-1 w-full">
+                                                                    <p className="overflow-hidden truncate w-full">
+                                                                        {
+                                                                            chat.title
+                                                                        }
+                                                                    </p>
+                                                                    <p className="text-xs text-muted-foreground flex items-center gap-1">
                                                                         <div
                                                                             className={`w-2 h-2 ${chat.status ? "bg-green-500 animate-pulse" : "hidden"} rounded-full`}
                                                                         />
-                                                                        <p className="overflow-hidden truncate w-full">
-                                                                            {
-                                                                                chat.title
-                                                                            }
-                                                                        </p>
-                                                                    </div>
-                                                                    <p className="text-xs text-muted-foreground">
                                                                         {new Date(
                                                                             chat.updatedAt,
                                                                         ).toLocaleString(

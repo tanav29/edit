@@ -5,6 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import { preparePresortedFileTreeInput } from "@pierre/trees";
 import { cn } from "@/lib/utils";
+import { File } from "@pierre/diffs/react";
+import { Loader2 } from "lucide-react";
 
 type GitStatus =
     | "added"
@@ -105,29 +107,77 @@ export default function FileTreeBar({
     }, [onFileSelect, selectedFile]);
 
     return (
-        <aside
-            className={cn(
-                "shrink-0 min-h-0 z-50 flex-col border-l bg-background",
-                isOpen
-                    ? "flex w-64 translate-x-0 opacity-100"
-                    : "pointer-events-none w-0 flex translate-x-3 opacity-0 overflow-hidden border-l-0",
-            )}
-        >
-            <div className="flex min-h-0 flex-1 overflow-hidden">
-                {rootPath ? (
+        <section>
+            {rootPath ? (
+                <div className="flex min-h-0">
+                    {selectedFile && (
+                        <FileViewer
+                            filePath={"/home/tanav/p/simple-auth/tsconfig.json"}
+                        />
+                    )}
                     <WorkspaceFileTree
                         key={rootPath}
                         rootPath={rootPath}
                         selectedFile={selectedFile}
                         onFileSelect={onFileSelect}
                     />
-                ) : (
-                    <div className="p-3 text-xs text-muted-foreground">
-                        Select or create a chat to browse files
-                    </div>
-                )}
-            </div>
-        </aside>
+                </div>
+            ) : (
+                <div className="p-3 text-xs text-muted-foreground">
+                    Select or create a chat to browse files
+                </div>
+            )}
+        </section>
+    );
+}
+
+function FileViewer({ filePath }: { filePath: string }) {
+    const extension = filePath.split(".").pop() || "";
+
+    const { data: content, isLoading: loading } = useQuery<string, Error>({
+        queryKey: ["files", filePath],
+        queryFn: async () => {
+            const res = await fetch(
+                `/api/files/content?path=${encodeURIComponent(filePath)}`,
+            );
+            if (!res.ok) {
+                const payload = (await res.json().catch(() => null)) as {
+                    error?: string;
+                } | null;
+                throw new Error(payload?.error || "Failed to load file");
+            }
+
+            const data = (await res.json()) as { content: string };
+            return data.content;
+        },
+        enabled: Boolean(filePath),
+        staleTime: 60_000,
+        gcTime: 10 * 60_000,
+    });
+
+    return (
+        <div className="flex flex-col h-fit max-h-full select-none overflow-scroll">
+            {loading ? (
+                <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
+                    <Loader2 className="size-6 animate-spin" />
+                    <span>Loading file content...</span>
+                </div>
+            ) : (
+                content && (
+                    <File
+                        file={{
+                            name: filePath,
+                            contents: content,
+                        }}
+                        options={{
+                            theme: "aurora-x",
+                            unsafeCSS:
+                                "* { font-family: var(--font-geist-mono), monospace !important; }",
+                        }}
+                    />
+                )
+            )}
+        </div>
     );
 }
 
@@ -246,6 +296,7 @@ function WorkspaceFileTreeContent({
         initialExpansion: 1,
         initialSelectedPaths,
         density: "compact",
+
         gitStatus,
         unsafeCSS:
             "* { font-family: var(--font-geist-mono), monospace !important; }",

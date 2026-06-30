@@ -6,7 +6,7 @@ type SideStore = {
 };
 
 const useSideStore = create<SideStore>((set) => ({
-    side: true,
+    side: false,
     toggleSide: () => set((state) => ({ side: !state.side })),
 }));
 
