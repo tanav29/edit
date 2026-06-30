@@ -16,19 +16,9 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
-import { api } from "@/lib/eden";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip";
-import ChatCreation from "./chat-creation";
-import { useSessionParam } from "@/lib/session-param";
-import { useRightSide, useSide } from "@/store/store";
-import { useWebSocket, wsUrl } from "@/hooks/use-socket";
+import { useRightSide } from "@/store/store";
+import FileTree from "./file-tree";
 
 export type ChatSessionSummary = {
     id: string;
@@ -38,11 +28,7 @@ export type ChatSessionSummary = {
     updatedAt: number;
 };
 
-function comparePath(valueA: string, valueB: string) {
-    return valueA.localeCompare(valueB, undefined, { sensitivity: "base" });
-}
-
-export default function RightSidebar() {
+export default function RightSidebar({ workspace }: any) {
     const [side, toggleSide] = useRightSide();
 
     return (
@@ -98,6 +84,10 @@ export default function RightSidebar() {
                     >
                         <PanelRightClose />
                     </Button>
+                </div>
+
+                <div>
+                    <FileTree rootPath={workspace} />
                 </div>
             </aside>
         </>

@@ -8,28 +8,16 @@ import {
     Code,
     Copy,
     Loader2,
-    FolderTree,
     PanelRightClose,
-    Terminal,
-    PanelLeftClose,
     PanelRightOpen,
 } from "lucide-react";
-import {
-    memo,
-    useCallback,
-    useEffect,
-    useReducer,
-    useRef,
-    useState,
-} from "react";
+import { memo, useEffect, useReducer, useRef } from "react";
 
 import ChatSidebar from "@/components/chat-sidebar";
 import ChatInput from "@/components/chat-input";
 import CommitButton from "@/components/commit-button";
-import FileTreeBar from "@/components/file-tree";
 import Loader from "@/components/loader";
 import MessageUI from "@/components/message";
-import { TerminalInput } from "@/components/terminal-input";
 import { Button } from "@/components/ui/button";
 import {
     Tooltip,
@@ -102,38 +90,6 @@ function queueReducer(state: string[], action: QueueAction) {
 
 export function ChatRouteComponent() {
     const [session] = useSessionParam();
-    const [isFileBarOpen, setIsFileBarOpen] = useState(false);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-    const [selectedFile, setSelectedFile] = useState<string | undefined>();
-
-    const toggleSidebar = useCallback(() => {
-        setIsSidebarOpen((prev) => !prev);
-    }, []);
-
-    useEffect(() => {
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (
-                event.key.toLowerCase() === "b" &&
-                (event.metaKey || event.ctrlKey) &&
-                !event.shiftKey &&
-                !event.altKey
-            ) {
-                const target = event.target as HTMLElement | null;
-                if (
-                    target &&
-                    (target.isContentEditable ||
-                        target.tagName === "INPUT" ||
-                        target.tagName === "TEXTAREA")
-                ) {
-                    return;
-                }
-                event.preventDefault();
-                setIsSidebarOpen((prev) => !prev);
-            }
-        };
-        window.addEventListener("keydown", onKeyDown);
-        return () => window.removeEventListener("keydown", onKeyDown);
-    }, []);
 
     const {
         data: sessionData,
@@ -174,14 +130,7 @@ export function ChatRouteComponent() {
     const workspace = sessionData?.workspace ?? null;
 
     if (!session) {
-        return (
-            <EmptyChatPage
-                isFileBarOpen={isFileBarOpen}
-                setIsFileBarOpen={setIsFileBarOpen}
-                isSidebarOpen={isSidebarOpen}
-                toggleSidebar={toggleSidebar}
-            />
-        );
+        return <EmptyChatPage />;
     }
 
     if (isSessionLoading) {
@@ -189,11 +138,7 @@ export function ChatRouteComponent() {
             <ChatLayout
                 currentSessionTitle="Select a session"
                 isActive={false}
-                isFileBarOpen={isFileBarOpen}
-                setIsFileBarOpen={setIsFileBarOpen}
                 workspace={null}
-                selectedFile={selectedFile}
-                setSelectedFile={setSelectedFile}
             >
                 <div className="flex h-full items-center justify-center">
                     <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -208,12 +153,6 @@ export function ChatRouteComponent() {
             session={session}
             workspace={workspace}
             initialMessages={sessionData?.messages ?? []}
-            isFileBarOpen={isFileBarOpen}
-            setIsFileBarOpen={setIsFileBarOpen}
-            isSidebarOpen={isSidebarOpen}
-            toggleSidebar={toggleSidebar}
-            selectedFile={selectedFile}
-            setSelectedFile={setSelectedFile}
         />
     );
 }
@@ -222,24 +161,12 @@ type LoadedSessionChatProps = {
     session: string;
     workspace: string | null;
     initialMessages: UIMessage[];
-    isFileBarOpen: boolean;
-    setIsFileBarOpen: React.Dispatch<React.SetStateAction<boolean>>;
-    isSidebarOpen: boolean;
-    toggleSidebar: () => void;
-    selectedFile: string | undefined;
-    setSelectedFile: React.Dispatch<React.SetStateAction<string | undefined>>;
 };
 
 function LoadedSessionChat({
     session,
     workspace,
     initialMessages,
-    isFileBarOpen,
-    setIsFileBarOpen,
-    isSidebarOpen,
-    toggleSidebar,
-    selectedFile,
-    setSelectedFile,
 }: LoadedSessionChatProps) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [queuedMessages, dispatchQueue] = useReducer(queueReducer, []);
@@ -455,11 +382,7 @@ function LoadedSessionChat({
         <ChatLayout
             currentSessionTitle={currentSessionTitle}
             isActive={isActive}
-            isFileBarOpen={isFileBarOpen}
-            setIsFileBarOpen={setIsFileBarOpen}
             workspace={workspace}
-            selectedFile={selectedFile}
-            setSelectedFile={setSelectedFile}
         >
             <div
                 ref={scrollRef}
@@ -483,7 +406,7 @@ function LoadedSessionChat({
                     </div>
                 )}
             </div>
-            <div className="bg-background/85 p-2 pt-0">
+            <div className="bg-background/85 pb-4">
                 <ChatInput
                     onSend={handleSend}
                     isActive={isActive}
@@ -496,12 +419,6 @@ function LoadedSessionChat({
                     workspacePath={workspace}
                 />
             </div>
-            {workspace && (
-                <TerminalInput
-                    workspacePath={workspace}
-                    isDisabled={!session}
-                />
-            )}
         </ChatLayout>
     );
 }
@@ -510,22 +427,14 @@ type ChatLayoutProps = {
     children: React.ReactNode;
     currentSessionTitle: string;
     isActive: boolean;
-    isFileBarOpen: boolean;
-    setIsFileBarOpen: React.Dispatch<React.SetStateAction<boolean>>;
     workspace: string | null;
-    selectedFile: string | undefined;
-    setSelectedFile: React.Dispatch<React.SetStateAction<string | undefined>>;
 };
 
 function ChatLayout({
     children,
     currentSessionTitle,
     isActive,
-    isFileBarOpen,
-    setIsFileBarOpen,
     workspace,
-    selectedFile,
-    setSelectedFile,
 }: ChatLayoutProps) {
     const [side, toggleSide] = useSide();
     const [rside, rtoggleSide] = useRightSide();
@@ -599,38 +508,17 @@ function ChatLayout({
                 </div>
             </main>
 
-            <RightSidebar />
-
-            {/*<FileTreeBar
-                rootPath={workspace}
-                isOpen={isFileBarOpen}
-                selectedFile={selectedFile}
-                onFileSelect={setSelectedFile}
-            />*/}
+            <RightSidebar workspace={workspace} />
         </div>
     );
 }
 
-function EmptyChatPage({
-    isFileBarOpen,
-    setIsFileBarOpen,
-    isSidebarOpen,
-    toggleSidebar,
-}: {
-    isFileBarOpen: boolean;
-    setIsFileBarOpen: React.Dispatch<React.SetStateAction<boolean>>;
-    isSidebarOpen: boolean;
-    toggleSidebar: () => void;
-}) {
+function EmptyChatPage() {
     return (
         <ChatLayout
             currentSessionTitle="Select a session"
             isActive={false}
-            isFileBarOpen={isFileBarOpen}
-            setIsFileBarOpen={setIsFileBarOpen}
             workspace={null}
-            selectedFile={undefined}
-            setSelectedFile={() => undefined}
         >
             <div className="relative flex-1 overflow-y-auto px-4 py-6">
                 <div className="flex h-full items-center justify-center">
@@ -655,7 +543,6 @@ function EmptyChatPage({
                     workspacePath={null}
                 />
             </div>
-            <TerminalInput workspacePath="" isDisabled />
         </ChatLayout>
     );
 }

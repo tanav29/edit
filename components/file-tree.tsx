@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FileTree, useFileTree } from "@pierre/trees/react";
+import { FileTree as TreeFileTree, useFileTree } from "@pierre/trees/react";
 import { preparePresortedFileTreeInput } from "@pierre/trees";
 import FileViewer from "@/components/file-viewer";
 
@@ -85,45 +85,27 @@ function toRelativeWorkspacePath(fullPath: string, rootPath: string) {
     return normalizedFullPath;
 }
 
-export default function FileTreeBar({
-    rootPath,
-    isOpen,
-    selectedFile,
-    onFileSelect,
-}: FileTreeBarProps) {
-    useEffect(() => {
-        if (!selectedFile) return;
-
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-                onFileSelect(undefined);
-            }
-        };
-
-        window.addEventListener("keydown", onKeyDown);
-        return () => window.removeEventListener("keydown", onKeyDown);
-    }, [onFileSelect, selectedFile]);
-
-    if (!isOpen) {
-        return null;
-    }
+export default function FileTree({ rootPath }: any) {
+    const [selectedFile, setSelectedFile] = useState("");
 
     return (
         <section className="flex h-full min-h-0 w-[420px] shrink-0 flex-col border-l bg-background">
             {rootPath ? (
-                <div className="flex min-h-0 flex-1 overflow-hidden">
-                    <WorkspaceFileTree
-                        key={rootPath}
-                        rootPath={rootPath}
-                        selectedFile={selectedFile}
-                        onFileSelect={onFileSelect}
-                    />
+                <div className="flex min-h-0 flex-1">
                     {selectedFile && (
                         <FileViewer
                             filePath={selectedFile}
                             className="border-l"
                         />
                     )}
+                    <WorkspaceFileTree
+                        key={rootPath}
+                        rootPath={rootPath}
+                        selectedFile={selectedFile}
+                        onFileSelect={(path) => {
+                            if (path) setSelectedFile(path);
+                        }}
+                    />
                 </div>
             ) : (
                 <div className="p-3 text-xs text-muted-foreground">
@@ -259,7 +241,7 @@ function WorkspaceFileTreeContent({
 
     return (
         <div className="min-h-0 flex-1 overflow-auto">
-            <FileTree
+            <TreeFileTree
                 model={model}
                 className="h-full w-full"
                 style={
