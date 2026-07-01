@@ -20,7 +20,10 @@ export default function BottomTerminal() {
     }, []);
 
     useEffect(() => {
-        const ws = new WebSocket(`ws://localhost:3000/api/terminal`);
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const ws = new WebSocket(
+            `${protocol}//${window.location.host}/api/terminal`,
+        );
         wsRef.current = ws;
 
         ws.onopen = () => {

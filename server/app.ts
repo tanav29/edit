@@ -492,7 +492,7 @@ const api = new Elysia({ prefix: "/api" })
 
                             proc.terminal?.write("stty -echo\n");
 
-                            proc.exited.then((exitCode) => {
+                            proc.exited.then((exitCode: number) => {
                                 console.error(`PTY exited: code=${exitCode}`);
                                 if (ws.readyState === WebSocket.OPEN) {
                                     ws.send(
