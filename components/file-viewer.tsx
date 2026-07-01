@@ -46,11 +46,10 @@ export default function FileViewer({
     });
 
     return (
-        <div className={cn("min-w-0 flex-1 overflow-auto", className)}>
+        <div className={cn("flex-1 overflow-auto h-full", className)}>
             {isLoading ? (
-                <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-muted-foreground">
-                    <Loader2 className="size-6 animate-spin" />
-                    <span>Loading file content...</span>
+                <div className="p-4 text-sm text-muted-foreground">
+                    Loading file content...
                 </div>
             ) : isError ? (
                 <div className="p-4 text-sm text-destructive">
@@ -62,6 +61,7 @@ export default function FileViewer({
                         name: displayName,
                         contents: content,
                     }}
+                    className="border w-full h-full"
                     options={{
                         theme: "aurora-x",
                         unsafeCSS:
@@ -70,7 +70,7 @@ export default function FileViewer({
                 />
             ) : (
                 <div className="p-4 text-sm text-muted-foreground">
-                    No content to display
+                    Select file preview.
                 </div>
             )}
         </div>

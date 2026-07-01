@@ -96,27 +96,26 @@ export default function MessageUI({
         let toolBuffer: React.ReactNode[] = [];
         let lastWasTool = false;
 
-        const flushTools = (n: number) => {
-            if (toolBuffer.length == 0) return;
-            else {
-                result.push(
-                    <details className="flex flex-col text-sm text-muted-foreground/90 select-none outline-none font-mono">
-                        <summary className="gap-2 flex">
-                            {toolBuffer.length}{" "}
-                            {toolBuffer.length > 1 ? "tools" : "tool"} called
-                        </summary>
-                        <div className="flex flex-col py-3 px-2">
-                            {toolBuffer}
-                        </div>
-                    </details>,
-                );
-            }
+        const flushTools = () => {
+            if (toolBuffer.length === 0) return;
+            result.push(
+                <details className="flex flex-col text-sm text-muted-foreground/90 select-none outline-none font-mono">
+                    <summary className="gap-2 flex">
+                        {toolBuffer.length}{" "}
+                        {toolBuffer.length > 1 ? "tools" : "tool"} called
+                    </summary>
+                    <div className="flex flex-col py-3 px-2">
+                        {toolBuffer}
+                    </div>
+                </details>,
+            );
             toolBuffer = [];
         };
 
         parts.forEach((part, partIndex) => {
             const key = part.toolCallId ?? `part-${partIndex}`;
             const isTool = part.type.startsWith("tool-");
+            const isEdit = part.type === "tool-edit";
             let rendered: React.ReactNode = null;
 
             switch (part.type) {
@@ -143,7 +142,6 @@ export default function MessageUI({
                     rendered = <p key={key}>Thinking...</p>;
                     break;
 
-                // maek that working and clickable
                 case "source-document":
                     rendered = (
                         <div
@@ -189,7 +187,6 @@ export default function MessageUI({
                                         (part.output as { patch: string }).patch
                                     }
                                     options={{
-                                        collapsed: true,
                                         overflow: "wrap",
                                         diffStyle: "unified",
                                         unsafeCSS:
@@ -212,19 +209,19 @@ export default function MessageUI({
                     break;
             }
 
-            if (isTool) {
+            if (isTool && !isEdit) {
                 toolBuffer.push(rendered);
                 lastWasTool = true;
             } else {
-                if (rendered != null) result.push(rendered);
                 if (lastWasTool) {
-                    flushTools(result.length);
+                    flushTools();
                     lastWasTool = false;
                 }
+                if (rendered != null) result.push(rendered);
             }
         });
 
-        flushTools(result.length);
+        flushTools();
         return result;
     }, [parts, addToolApprovalResponseAction]);
 
@@ -317,7 +314,15 @@ function ToolPart({
         );
     }
 
-    if (toolName === "edit") return null;
+    if (toolName === "edit") {
+        const editFilePath = getInputString(part.input, "filePath");
+        return (
+            <div className="flex items-center gap-2 py-1 text-sm text-muted-foreground/90 select-none outline-none font-mono">
+                <FilePenLine className="size-4 shrink-0 text-muted-foreground/90" />
+                <span>Edit {editFilePath}</span>
+            </div>
+        );
+    }
 
     return (
         <div className="flex items-center gap-2 py-0 text-sm text-muted-foreground/90 select-none outline-none font-mono">

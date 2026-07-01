@@ -37,7 +37,7 @@ export default function RightSidebar({ workspace }: any) {
                 className={cn(
                     "flex h-full shrink-0 flex-col border-l bg-card/30",
                     side
-                        ? "w-[55rem] translate-x-0 opacity-100"
+                        ? "w-[50rem] translate-x-0 opacity-100"
                         : "w-0 -translate-x-3 opacity-0 overflow-hidden border-r-0 pointer-events-none",
                 )}
             >
@@ -86,7 +86,7 @@ export default function RightSidebar({ workspace }: any) {
                     </Button>
                 </div>
 
-                <div>
+                <div className="w-full h-full">
                     <FileTree rootPath={workspace} />
                 </div>
             </aside>
