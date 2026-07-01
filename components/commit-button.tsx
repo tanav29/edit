@@ -24,28 +24,15 @@ export default function CommitButton({
 
     return (
         <>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        aria-label={
-                            isBusy
-                                ? "Busy"
-                                : "Commit all changes"
-                        }
-                        onClick={() => setIsDialogOpen(true)}
-                        disabled={isBusy}
-                    >
-                        <GitCommit /> Commit All
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                    {isBusy
-                        ? "Busy"
-                        : "Commit all changes"}
-                </TooltipContent>
-            </Tooltip>
+            <Button
+                variant="outline"
+                size="sm"
+                aria-label={isBusy ? "Busy" : "Commit all changes"}
+                onClick={() => setIsDialogOpen(true)}
+                disabled={isBusy}
+            >
+                <GitCommit /> Commit All
+            </Button>
             <GitCommitDialog
                 workspacePath={workspacePath}
                 isBusy={isBusy}
