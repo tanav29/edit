@@ -1,14 +1,81 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import {
+    useEffect,
+    useRef,
+    useState,
+    useCallback,
+    type FormEvent,
+} from "react";
 import { ArrowLeft, ArrowRight, Globe, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+const WS_URL = "ws://127.0.0.1:44863";
+
 export default function BrowserView() {
-    const [url, setUrl] = useState("https://example.com");
-    const [src, setSrc] = useState("https://example.com");
-    const [history, setHistory] = useState<string[]>(["https://example.com"]);
-    const [historyIndex, setHistoryIndex] = useState(0);
+    const [urlInput, setUrlInput] = useState("");
+    const [frame, setFrame] = useState<string | null>(null);
+    const [connected, setConnected] = useState(false);
+    const [viewport] = useState({ width: 1280, height: 720 });
+    const ws = useRef<WebSocket | null>(null);
+    const imgRef = useRef<HTMLImageElement>(null);
+
+    useEffect(() => {
+        const socket = new WebSocket(WS_URL);
+        socket.binaryType = "arraybuffer";
+        socket.onopen = () => setConnected(true);
+        socket.onclose = () => setConnected(false);
+        socket.onmessage = (event) => {
+            if (event.data instanceof ArrayBuffer) {
+                const bytes = new Uint8Array(event.data);
+                let binary = "";
+                for (let i = 0; i < bytes.length; i++) {
+                    binary += String.fromCharCode(bytes[i]);
+                }
+                setFrame(`data:image/jpeg;base64,${btoa(binary)}`);
+            }
+        };
+        ws.current = socket;
+        return () => socket.close();
+    }, []);
+
+    const send = useCallback((msg: object) => {
+        ws.current?.send(JSON.stringify(msg));
+    }, []);
+
+    const sendClick = useCallback(
+        (x: number, y: number) => {
+            send({ action: "click", x, y });
+        },
+        [send],
+    );
+
+    const sendKey = useCallback(
+        (key: string, code: string) => {
+            send({ action: "keyDown", key, code });
+            send({ action: "keyUp", key, code });
+        },
+        [send],
+    );
+
+    const sendText = useCallback(
+        (text: string) => {
+            for (const char of text) {
+                send({ action: "keyPress", key: char, code: char });
+            }
+        },
+        [send],
+    );
+
+    const typeAndEnter = useCallback(
+        (text: string) => {
+            sendKey("Control", "ControlLeft");
+            sendKey("l", "KeyL");
+            sendText(text);
+            sendKey("Enter", "Enter");
+        },
+        [sendKey, sendText],
+    );
 
     function navigate(to: string) {
         let resolved = to.trim();
@@ -16,42 +83,39 @@ export default function BrowserView() {
         if (!/^https?:\/\//i.test(resolved)) {
             resolved = "https://" + resolved;
         }
-        setUrl(resolved);
-        setSrc(resolved);
-        const newHistory = history.slice(0, historyIndex + 1);
-        newHistory.push(resolved);
-        setHistory(newHistory);
-        setHistoryIndex(newHistory.length - 1);
+        setUrlInput(resolved);
+        send({ action: "navigate", url: resolved });
     }
 
     function handleSubmit(e: FormEvent) {
         e.preventDefault();
-        navigate(url);
+        navigate(urlInput);
     }
 
     function goBack() {
-        if (historyIndex > 0) {
-            const idx = historyIndex - 1;
-            setHistoryIndex(idx);
-            setSrc(history[idx]);
-            setUrl(history[idx]);
-        }
+        send({ action: "navigate", url: "about:blank" });
+        sendKey("Alt", "ArrowLeft");
     }
 
     function goForward() {
-        if (historyIndex < history.length - 1) {
-            const idx = historyIndex + 1;
-            setHistoryIndex(idx);
-            setSrc(history[idx]);
-            setUrl(history[idx]);
-        }
+        sendKey("Alt", "ArrowRight");
     }
 
     function refresh() {
-        setSrc((prev) => {
-            const newSrc = prev.includes("?") ? prev + "&_t=" + Date.now() : prev + "?_t=" + Date.now();
-            return newSrc;
-        });
+        sendKey("F5", "F5");
+    }
+
+    function handleImageClick(e: React.MouseEvent<HTMLImageElement>) {
+        const img = imgRef.current;
+        if (!img) return;
+        const rect = img.getBoundingClientRect();
+        const naturalWidth = img.naturalWidth || viewport.width;
+        const naturalHeight = img.naturalHeight || viewport.height;
+        const scaleX = naturalWidth / rect.width;
+        const scaleY = naturalHeight / rect.height;
+        const x = Math.round((e.clientX - rect.left) * scaleX);
+        const y = Math.round((e.clientY - rect.top) * scaleY);
+        sendClick(x, y);
     }
 
     return (
@@ -61,7 +125,7 @@ export default function BrowserView() {
                     variant="ghost"
                     size="icon-sm"
                     onClick={goBack}
-                    disabled={historyIndex <= 0}
+                    disabled={!connected}
                     aria-label="Go back"
                 >
                     <ArrowLeft className="size-4" />
@@ -70,7 +134,7 @@ export default function BrowserView() {
                     variant="ghost"
                     size="icon-sm"
                     onClick={goForward}
-                    disabled={historyIndex >= history.length - 1}
+                    disabled={!connected}
                     aria-label="Go forward"
                 >
                     <ArrowRight className="size-4" />
@@ -79,6 +143,7 @@ export default function BrowserView() {
                     variant="ghost"
                     size="icon-sm"
                     onClick={refresh}
+                    disabled={!connected}
                     aria-label="Refresh"
                 >
                     <RotateCw className="size-4" />
@@ -88,12 +153,10 @@ export default function BrowserView() {
                         <Globe className="size-3.5 shrink-0 text-muted-foreground" />
                         <input
                             type="text"
-                            value={url}
-                            onChange={(e) => setUrl(e.target.value)}
+                            value={urlInput}
+                            onChange={(e) => setUrlInput(e.target.value)}
                             onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                    handleSubmit(e);
-                                }
+                                if (e.key === "Enter") handleSubmit(e);
                             }}
                             className="min-w-0 flex-1 bg-transparent outline-none text-foreground placeholder:text-muted-foreground/50"
                             placeholder="Enter URL..."
@@ -101,13 +164,21 @@ export default function BrowserView() {
                     </div>
                 </form>
             </div>
-            <div className="flex-1 bg-white">
-                <iframe
-                    src={src}
-                    className="h-full w-full"
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                    title="Browser preview"
-                />
+            <div className="flex flex-1 items-start justify-center overflow-auto bg-white">
+                {!connected && (
+                    <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+                        Connecting...
+                    </div>
+                )}
+                {frame && (
+                    <img
+                        ref={imgRef}
+                        src={frame}
+                        alt="Browser viewport"
+                        className="cursor-crosshair shrink-0"
+                        onClick={handleImageClick}
+                    />
+                )}
             </div>
         </div>
     );

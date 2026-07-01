@@ -43,6 +43,7 @@
         "@wterm/dom": "^0.3.0",
         "@wterm/ghostty": "^0.3.0",
         "@wterm/react": "^0.3.0",
+        "agent-browser": "^0.31.1",
         "ai": "^6.0.168",
         "ansi-to-react": "^6.2.6",
         "better-sqlite3": "^12.9.0",

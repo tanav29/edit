@@ -5,6 +5,7 @@ import path from "path";
 import { join, relative } from "path";
 import { promisify } from "util";
 import { Elysia, t } from "elysia";
+import { BrowserManager } from "agent-browser";
 
 import {
     generateText,
@@ -421,6 +422,7 @@ function cleanEnv(): Record<string, string> {
 }
 
 const userSockets = new Set<any>();
+let browser: any = null;
 
 function broadcast(data: object) {
     const msg = JSON.stringify(data);
@@ -530,6 +532,119 @@ const api = new Elysia({ prefix: "/api" })
             if (pty) {
                 pty.kill();
                 ptys.delete(key);
+            }
+        },
+    })
+    .ws("/browser", {
+        // enable streaming with ab stream enable
+        // disable streaming with ab stream disable
+        // on ws://127.0.0.1:45953
+        async open(ws) {
+            browser = new BrowserManager();
+            await browser.launch({ headless: true });
+            await browser.navigate("https://example.com");
+            await browser.startScreencast(
+                (frame: any) => {
+                    ws.send(frame);
+                },
+                {
+                    format: "jpeg", // or 'png'
+                    quality: 80, // 0-100, jpeg only
+                    maxWidth: 1280,
+                    maxHeight: 720,
+                    everyNthFrame: 1,
+                },
+            );
+        },
+        async close() {
+            await browser.stopScreencast();
+        },
+        async message(ws, message) {
+            const msg = JSON.parse(message);
+            switch (msg.action) {
+                case "navigate":
+                    await browser.navigate(msg.url);
+                    break;
+                case "click":
+                    await browser.injectMouseEvent({
+                        type: "mousePressed",
+                        x: msg.x,
+                        y: msg.y,
+                        button: msg.button || "left",
+                        clickCount: msg.clickCount || 1,
+                    });
+                    await browser.injectMouseEvent({
+                        type: "mouseReleased",
+                        x: msg.x,
+                        y: msg.y,
+                        button: msg.button || "left",
+                        clickCount: msg.clickCount || 1,
+                    });
+                    break;
+                case "mouseDown":
+                    await browser.injectMouseEvent({
+                        type: "mousePressed",
+                        x: msg.x,
+                        y: msg.y,
+                        button: msg.button || "left",
+                        clickCount: msg.clickCount || 1,
+                    });
+                    break;
+                case "mouseUp":
+                    await browser.injectMouseEvent({
+                        type: "mouseReleased",
+                        x: msg.x,
+                        y: msg.y,
+                        button: msg.button || "left",
+                        clickCount: msg.clickCount || 1,
+                    });
+                    break;
+                case "mouseMove":
+                    await browser.injectMouseEvent({
+                        type: "mouseMoved",
+                        x: msg.x,
+                        y: msg.y,
+                        button: msg.button || "none",
+                        clickCount: 0,
+                    });
+                    break;
+                case "keyDown":
+                    await browser.injectKeyboardEvent({
+                        type: "keyDown",
+                        key: msg.key,
+                        code: msg.code || msg.key,
+                    });
+                    break;
+                case "keyUp":
+                    await browser.injectKeyboardEvent({
+                        type: "keyUp",
+                        key: msg.key,
+                        code: msg.code || msg.key,
+                    });
+                    break;
+                case "keyPress":
+                    await browser.injectKeyboardEvent({
+                        type: "keyDown",
+                        key: msg.key,
+                        code: msg.code || msg.key,
+                    });
+                    await browser.injectKeyboardEvent({
+                        type: "keyUp",
+                        key: msg.key,
+                        code: msg.code || msg.key,
+                    });
+                    break;
+                case "scroll":
+                    await browser.injectMouseEvent({
+                        type: "mouseWheel",
+                        x: msg.x || 0,
+                        y: msg.y || 0,
+                        deltaX: msg.deltaX || 0,
+                        deltaY: msg.deltaY || 0,
+                        button: "none",
+                        clickCount: 0,
+                    });
+                    break;
             }
         },
     })
