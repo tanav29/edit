@@ -5,7 +5,7 @@ import path from "path";
 import { join, relative } from "path";
 import { promisify } from "util";
 import { Elysia, t } from "elysia";
-import { BrowserManager } from "agent-browser";
+import { BrowserManager } from "./agent-browser";
 
 import {
     generateText,
@@ -422,7 +422,7 @@ function cleanEnv(): Record<string, string> {
 }
 
 const userSockets = new Set<any>();
-let browser: any = null;
+let browser: BrowserManager = null as unknown as BrowserManager;
 
 function broadcast(data: object) {
     const msg = JSON.stringify(data);
@@ -560,10 +560,25 @@ const api = new Elysia({ prefix: "/api" })
             await browser.stopScreencast();
         },
         async message(ws, message) {
-            const msg = JSON.parse(message);
+            let msg: any;
+            try {
+                msg = JSON.parse(message);
+            } catch {
+                ws.send(JSON.stringify({ error: "invalid JSON" }));
+                return;
+            }
             switch (msg.action) {
                 case "navigate":
                     await browser.navigate(msg.url);
+                    break;
+                case "back":
+                    await browser.back();
+                    break;
+                case "forward":
+                    await browser.forward();
+                    break;
+                case "reload":
+                    await browser.reload();
                     break;
                 case "click":
                     await browser.injectMouseEvent({

@@ -10,7 +10,7 @@ import {
 import { ArrowLeft, ArrowRight, Globe, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const WS_URL = "ws://127.0.0.1:44863";
+const WS_URL = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/api/browser`;
 
 export default function BrowserView() {
     const [urlInput, setUrlInput] = useState("");
@@ -25,6 +25,7 @@ export default function BrowserView() {
         socket.binaryType = "arraybuffer";
         socket.onopen = () => setConnected(true);
         socket.onclose = () => setConnected(false);
+        socket.onerror = () => setConnected(false);
         socket.onmessage = (event) => {
             if (event.data instanceof ArrayBuffer) {
                 const bytes = new Uint8Array(event.data);
@@ -93,16 +94,15 @@ export default function BrowserView() {
     }
 
     function goBack() {
-        send({ action: "navigate", url: "about:blank" });
-        sendKey("Alt", "ArrowLeft");
+        send({ action: "back" });
     }
 
     function goForward() {
-        sendKey("Alt", "ArrowRight");
+        send({ action: "forward" });
     }
 
     function refresh() {
-        sendKey("F5", "F5");
+        send({ action: "reload" });
     }
 
     function handleImageClick(e: React.MouseEvent<HTMLImageElement>) {
