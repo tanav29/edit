@@ -1,35 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import {
-    ChevronDown,
-    Files,
-    Folder,
-    Globe,
-    PanelLeftClose,
-    PanelLeftOpen,
-    PanelRightClose,
-    Plus,
-    Shell,
-    Terminal,
-    Trash2,
-} from "lucide-react";
+import { useState } from "react";
+import { Files, Globe, PanelRightClose } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useRightSide } from "@/store/store";
 import FileTree from "./file-tree";
+import BrowserView from "./browser-view";
 
-export type ChatSessionSummary = {
-    id: string;
-    workspacePath: string;
-    title: string | null;
-    createdAt: number;
-    updatedAt: number;
-};
+type Tab = "files" | "browser";
 
 export default function RightSidebar({ workspace }: any) {
     const [side, toggleSide] = useRightSide();
+    const [tab, setTab] = useState<Tab>("files");
 
     return (
         <>
@@ -44,32 +28,17 @@ export default function RightSidebar({ workspace }: any) {
                 <div className="flex items-center justify-between border-b px-3 py-2 shrink-0">
                     <div className="gap-2 flex">
                         <Button
-                            variant="outline"
+                            variant={tab === "files" ? "default" : "outline"}
                             size="sm"
-                            // onClick={() =>
-                            // setIsFileBarOpen((prev) => !prev)
-                            // }
-                        >
-                            <Terminal />
-                            Terminal
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            // onClick={() =>
-                            // setIsFileBarOpen((prev) => !prev)
-                            // }
+                            onClick={() => setTab("files")}
                         >
                             <Files />
                             Files
                         </Button>
-
                         <Button
-                            variant="outline"
+                            variant={tab === "browser" ? "default" : "outline"}
                             size="sm"
-                            // onClick={() =>
-                            // setIsFileBarOpen((prev) => !prev)
-                            // }
+                            onClick={() => setTab("browser")}
                         >
                             <Globe />
                             Browser
@@ -80,14 +49,18 @@ export default function RightSidebar({ workspace }: any) {
                         variant="outline"
                         size="icon-sm"
                         onClick={toggleSide}
-                        aria-label="Close sessions sidebar"
+                        aria-label="Close right sidebar"
                     >
                         <PanelRightClose />
                     </Button>
                 </div>
 
                 <div className="w-full h-full">
-                    <FileTree rootPath={workspace} />
+                    {tab === "files" ? (
+                        <FileTree rootPath={workspace} />
+                    ) : (
+                        <BrowserView />
+                    )}
                 </div>
             </aside>
         </>
