@@ -26,6 +26,7 @@ import {
 import { db } from "@/db";
 import { chats } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { spawn } from "bun-pty";
 
 const execAsync = promisify(exec);
 
@@ -432,6 +433,8 @@ function broadcast(data: object) {
     }
 }
 
+let term: any | null = null;
+
 const api = new Elysia({ prefix: "/api" })
     .get("/health", async () => {
         return { ok: true };
@@ -455,86 +458,58 @@ const api = new Elysia({ prefix: "/api" })
     })
     .ws("/terminal", {
         async open(ws) {
-            (ws as any).__pty = null;
+            console.log("opening ws");
+            // let term: any | null = null;
+            const shell = process.env.SHELL || "/bin/zsh";
+
+            try {
+                term = spawn(shell, ["-l"], {
+                    name: "xterm-256color",
+                    cols: 80, // TODO: get from client
+                    rows: 24,
+                    cwd: process.env.HOME || "/",
+                    env: cleanEnv(),
+                });
+                term.onData((data: any) => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(data);
+                    }
+                });
+
+                term.onExit(() => {
+                    if (ws.readyState === WebSocket.OPEN) ws.close();
+                });
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                console.error(`Failed to spawn PTY: ${msg}`);
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(
+                        `\r\n\x1b[31mFailed to spawn shell: ${msg}\x1b[0m\r\n`,
+                    );
+                    ws.close();
+                }
+                return;
+            }
         },
         async message(ws, message) {
-            const msg = message as string | Buffer;
-            const input = typeof msg === "string" ? msg : msg.toString("utf-8");
-
+            const input = message;
+            console.log("user sends", message);
             if (input.startsWith("\x1b[RESIZE:")) {
                 const match = input.match(/\x1b\[RESIZE:(\d+);(\d+)\]/);
                 if (match) {
                     const cols = parseInt(match[1], 10);
                     const rows = parseInt(match[2], 10);
-                    let proc = (ws as any).__pty;
 
-                    if (!proc) {
-                        try {
-                            const shell = process.env.SHELL || "/bin/bash";
-                            const env = cleanEnv();
-                            env.TERM = "xterm-256color";
-
-                            proc = Bun.spawn([shell, "-li"], {
-                                terminal: {
-                                    cols,
-                                    rows,
-                                    data(_terminal, data) {
-                                        if (ws.readyState === WebSocket.OPEN) {
-                                            ws.send(
-                                                new TextDecoder().decode(data),
-                                            );
-                                        }
-                                    },
-                                },
-                                cwd: process.env.HOME || process.cwd(),
-                                env,
-                            });
-
-                            proc.terminal?.write("stty -echo\n");
-
-                            proc.exited.then((exitCode: number) => {
-                                console.error(`PTY exited: code=${exitCode}`);
-                                if (ws.readyState === WebSocket.OPEN) {
-                                    ws.send(
-                                        `\r\n[process exited] (code: ${exitCode})\r\n`,
-                                    );
-                                    ws.close();
-                                }
-                            });
-
-                            (ws as any).__pty = proc;
-                        } catch (err) {
-                            const errorMsg =
-                                err instanceof Error
-                                    ? err.message
-                                    : String(err);
-                            console.error(`Failed to spawn PTY: ${errorMsg}`);
-                            if (ws.readyState === WebSocket.OPEN) {
-                                ws.send(
-                                    `\r\nFailed to spawn shell: ${errorMsg}\r\n`,
-                                );
-                                ws.close();
-                            }
-                        }
-                    } else {
-                        proc.terminal?.resize(cols, rows);
-                    }
+                    term.resize(cols, rows);
+                    return;
                 }
-                return;
             }
 
-            const proc = (ws as any).__pty;
-            if (proc) proc.terminal?.write(input);
+            if (term) term.write(input);
         },
         async close(ws) {
-            const proc = (ws as any).__pty;
-            if (proc) {
-                try {
-                    proc.kill();
-                } catch {
-                    // process already exited
-                }
-            }
+            console.log("closing ws");
+            term.kill();
         },
     })
     .post(
@@ -617,7 +592,7 @@ const api = new Elysia({ prefix: "/api" })
                 command: t.String(),
             }),
         },
-    )
+    ) // TODO: remvoe this
     .get(
         "/files",
         async ({ query, set }) => {

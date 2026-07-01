@@ -31,7 +31,7 @@ const useTerminalStore = create<{
     side: boolean;
     toggleSide: () => void;
 }>((set) => ({
-    side: false,
+    side: true,
     toggleSide: () => set((state) => ({ side: !state.side })),
 }));
 

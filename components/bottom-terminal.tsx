@@ -1,98 +1,59 @@
-import { Terminal, useTerminal } from "@wterm/react";
-import "@wterm/react/css";
 import { useTerminal as useTerminalStore } from "@/store/store";
-import { useCallback, useEffect, useRef } from "react";
+import { Terminal, useTerminal } from "@wterm/react";
+import { useCallback, useRef } from "react";
+import type { WTerm } from "@wterm/dom";
 import { cn } from "@/lib/utils";
-
-const TERMINAL_HEIGHT = 200;
+import "@wterm/react/css";
 
 export default function BottomTerminal() {
-    const { ref, write, focus: focusTerminal } = useTerminal();
+    const { ref, write } = useTerminal();
     const [term] = useTerminalStore();
     const wsRef = useRef<WebSocket | null>(null);
-    const readyRef = useRef(false);
 
-    const sendResize = useCallback((cols: number, rows: number) => {
-        const ws = wsRef.current;
-        if (ws?.readyState === WebSocket.OPEN) {
-            ws.send(`\x1b[RESIZE:${cols};${rows}]`);
-        }
-    }, []);
+    const handleReady = useCallback(
+        (wt: WTerm) => {
+            const ws = new WebSocket("ws://localhost:5173/api/terminal");
+            wsRef.current = ws;
 
-    useEffect(() => {
-        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        const ws = new WebSocket(
-            `${protocol}//${window.location.host}/api/terminal`,
-        );
-        wsRef.current = ws;
+            ws.onopen = () => {
+                ws.send(`\x1b[RESIZE:${wt.cols};${wt.rows}]`);
+            };
 
-        ws.onopen = () => {
-            if (readyRef.current && ref.current?.instance) {
-                ws.send(
-                    `\x1b[RESIZE:${ref.current.instance.cols};${ref.current.instance.rows}]`,
-                );
-            }
-            focusTerminal();
-        };
+            ws.onmessage = (event: MessageEvent) => {
+                write(event.data as string);
+            };
 
-        ws.onmessage = (event) => {
-            write(event.data);
-        };
-
-        ws.onclose = () => {
-            readyRef.current = false;
-        };
-
-        ws.onerror = () => {};
-
-        return () => {
-            ws.close();
-            wsRef.current = null;
-        };
-    }, [write, focusTerminal, ref]);
-
-    const handleData = useCallback(
-        (data: string) => {
-            if (data === "\r") {
-                write("\r\n");
-            } else {
-                write(data);
-            }
-            const ws = wsRef.current;
-            if (ws?.readyState === WebSocket.OPEN) {
-                ws.send(data);
-            }
+            ws.onclose = () => {
+                write("\r\n\x1b[90m[session ended]\x1b[0m\r\n");
+                wsRef.current = null;
+            };
         },
         [write],
     );
 
-    const handleReady = useCallback(
-        (wt: { cols: number; rows: number }) => {
-            readyRef.current = true;
-            sendResize(wt.cols, wt.rows);
-            focusTerminal();
-        },
-        [sendResize, focusTerminal],
-    );
+    const handleData = useCallback((data: string) => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(data);
+        }
+    }, []);
 
-    const handleResize = useCallback(
-        (cols: number, rows: number) => sendResize(cols, rows),
-        [sendResize],
-    );
-
-    const handleError = useCallback(() => {}, []);
+    const handleResize = useCallback((cols: number, rows: number) => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(`\x1b[RESIZE:${cols};${rows}]`);
+        }
+    }, []);
 
     return (
         <aside
             className={cn(
                 "flex w-full shrink-0 flex-col border-t bg-card/30",
                 term
-                    ? "h-64 translate-x-0 opacity-100"
+                    ? "h-108 translate-x-0 opacity-100"
                     : "h-0 -translate-x-3 opacity-0 overflow-hidden border-r-0 pointer-events-none",
             )}
         >
             <Terminal
-                theme="defaul"
+                theme="monokai"
                 ref={ref}
                 autoResize
                 cursorBlink
@@ -100,7 +61,9 @@ export default function BottomTerminal() {
                 onReady={handleReady}
                 onResize={handleResize}
                 onData={handleData}
-                onError={handleError}
+                cols={80}
+                rows={24}
+                style={{ borderRadius: 0, boxShadow: "none", padding: 0 }}
             />
         </aside>
     );
