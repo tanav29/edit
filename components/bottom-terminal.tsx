@@ -1,7 +1,4 @@
-import {
-    useTerminalStore,
-    type TerminalTab,
-} from "@/store/store";
+import { useTerminalStore } from "@/store/store";
 import { Terminal, useTerminal } from "@wterm/react";
 import { useCallback, useEffect, useRef } from "react";
 import type { WTerm } from "@wterm/dom";
@@ -13,78 +10,6 @@ function wsUrl(path: string): string {
     if (typeof window === "undefined") return path;
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
     return `${proto}//${window.location.host}${path}`;
-}
-
-function TerminalInstance({
-    terminalTab,
-    root,
-    session,
-}: {
-    terminalTab: TerminalTab;
-    root: string;
-    session: string;
-}) {
-    const { ref, write } = useTerminal();
-    const wsRef = useRef<WebSocket | null>(null);
-
-    const handleReady = useCallback(
-        (wt: WTerm) => {
-            const ws = new WebSocket(
-                wsUrl(
-                    `/api/terminal?root=${encodeURIComponent(root)}&session=${encodeURIComponent(session)}&terminal=${encodeURIComponent(terminalTab.id)}`,
-                ),
-            );
-            wsRef.current = ws;
-
-            ws.onopen = () => {
-                ws.send(`\x1b[RESIZE:${wt.cols};${wt.rows}]`);
-            };
-
-            ws.onmessage = (event: MessageEvent) => {
-                write(event.data as string);
-            };
-
-            ws.onclose = () => {
-                write("\r\n\x1b[90m[session ended]\x1b[0m\r\n");
-                wsRef.current = null;
-            };
-        },
-        [write, root, session, terminalTab.id],
-    );
-
-    useEffect(() => {
-        return () => {
-            wsRef.current?.close();
-            wsRef.current = null;
-        };
-    }, []);
-
-    const handleData = useCallback((data: string) => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(data);
-        }
-    }, []);
-
-    const handleResize = useCallback((cols: number, rows: number) => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(`\x1b[RESIZE:${cols};${rows}]`);
-        }
-    }, []);
-
-    return (
-        <Terminal
-            ref={ref}
-            autoResize
-            cursorBlink
-            rows={24}
-            cols={80}
-            className="h-full"
-            onReady={handleReady}
-            onResize={handleResize}
-            onData={handleData}
-            style={{ borderRadius: 0, boxShadow: "none", padding: 0 }}
-        />
-    );
 }
 
 export default function BottomTerminal({
@@ -101,6 +26,124 @@ export default function BottomTerminal({
     const removeTerminal = useTerminalStore((s) => s.removeTerminal);
     const setActiveTerminal = useTerminalStore((s) => s.setActiveTerminal);
 
+    const { ref, write } = useTerminal();
+    const writeRef = useRef(write);
+    writeRef.current = write;
+
+    const activeTabRef = useRef(activeTerminalId);
+    activeTabRef.current = activeTerminalId;
+
+    const wsRefs = useRef<Map<string, WebSocket>>(new Map());
+    const buffersRef = useRef<Map<string, string>>(new Map());
+    const wtRef = useRef<WTerm | null>(null);
+
+    function connectTab(tabId: string) {
+        if (!root || !id) return;
+        const existing = wsRefs.current.get(tabId);
+        if (
+            existing &&
+            (existing.readyState === WebSocket.OPEN ||
+                existing.readyState === WebSocket.CONNECTING)
+        ) {
+            return;
+        }
+
+        const ws = new WebSocket(
+            wsUrl(
+                `/api/terminal?root=${encodeURIComponent(root)}&session=${encodeURIComponent(id)}&terminal=${encodeURIComponent(tabId)}`,
+            ),
+        );
+
+        ws.onopen = () => {
+            const wt = wtRef.current;
+            if (wt) {
+                ws.send(`\x1b[RESIZE:${wt.cols};${wt.rows}]`);
+            }
+        };
+
+        ws.onmessage = (event: MessageEvent) => {
+            const data = event.data as string;
+            const buf = buffersRef.current.get(tabId) ?? "";
+            buffersRef.current.set(tabId, buf + data);
+            if (tabId === activeTabRef.current) {
+                writeRef.current(data);
+            }
+        };
+
+        ws.onclose = () => {
+            wsRefs.current.delete(tabId);
+            if (tabId === activeTabRef.current) {
+                writeRef.current("\r\n\x1b[90m[session ended]\x1b[0m\r\n");
+            }
+        };
+
+        wsRefs.current.set(tabId, ws);
+    }
+
+    function disconnectTab(tabId: string) {
+        const ws = wsRefs.current.get(tabId);
+        if (ws) {
+            ws.close();
+            wsRefs.current.delete(tabId);
+        }
+        buffersRef.current.delete(tabId);
+    }
+
+    const handleReady = useCallback(
+        (wt: WTerm) => {
+            wtRef.current = wt;
+
+            for (const tab of terminals) {
+                connectTab(tab.id);
+            }
+
+            const buffer = buffersRef.current.get(activeTerminalId ?? "");
+            if (buffer) {
+                writeRef.current(buffer);
+            }
+        },
+        // Intentionally stable - only recreate when root/id changes
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [root, id],
+    );
+
+    const handleData = useCallback((data: string) => {
+        const tabId = activeTabRef.current;
+        if (!tabId) return;
+        const ws = wsRefs.current.get(tabId);
+        if (ws?.readyState === WebSocket.OPEN) {
+            ws.send(data);
+        }
+    }, []);
+
+    const handleResize = useCallback((cols: number, rows: number) => {
+        const tabId = activeTabRef.current;
+        if (!tabId) return;
+        const ws = wsRefs.current.get(tabId);
+        if (ws?.readyState === WebSocket.OPEN) {
+            ws.send(`\x1b[RESIZE:${cols};${rows}]`);
+        }
+    }, []);
+
+    // Connect new tabs when they appear (e.g., user clicks +)
+    useEffect(() => {
+        if (!root || !id) return;
+        for (const tab of terminals) {
+            connectTab(tab.id);
+        }
+    }, [terminals, root]);
+
+    // Cleanup all connections on unmount or when workspace root changes
+    useEffect(() => {
+        return () => {
+            for (const [tabId, ws] of wsRefs.current.entries()) {
+                ws.close();
+            }
+            wsRefs.current.clear();
+            buffersRef.current.clear();
+        };
+    }, [root]);
+
     if (!root || !id) return null;
 
     return (
@@ -108,7 +151,7 @@ export default function BottomTerminal({
             className={cn(
                 "flex w-full shrink-0 flex-col border-t bg-card/30",
                 visible && terminals.length > 0
-                    ? "h-64 translate-x-0 opacity-100"
+                    ? "h-72 translate-x-0 opacity-100"
                     : "h-0 -translate-x-3 opacity-0 overflow-hidden border-r-0 pointer-events-none",
             )}
         >
@@ -131,11 +174,13 @@ export default function BottomTerminal({
                             tabIndex={0}
                             onClick={(e) => {
                                 e.stopPropagation();
+                                disconnectTab(tab.id);
                                 removeTerminal(tab.id);
                             }}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter" || e.key === " ") {
                                     e.stopPropagation();
+                                    disconnectTab(tab.id);
                                     removeTerminal(tab.id);
                                 }
                             }}
@@ -155,23 +200,19 @@ export default function BottomTerminal({
                 </button>
             </div>
             <div className="flex-1 min-h-0">
-                {terminals.map((tab) => (
-                    <div
-                        key={tab.id}
-                        className={cn(
-                            "h-full",
-                            tab.id === activeTerminalId
-                                ? "block"
-                                : "hidden",
-                        )}
-                    >
-                        <TerminalInstance
-                            terminalTab={tab}
-                            root={root}
-                            session={id}
-                        />
-                    </div>
-                ))}
+                <Terminal
+                    key={activeTerminalId ?? "none"}
+                    ref={ref}
+                    autoResize
+                    cursorBlink
+                    rows={24}
+                    cols={80}
+                    className="h-full"
+                    onReady={handleReady}
+                    onResize={handleResize}
+                    onData={handleData}
+                    style={{ borderRadius: 0, boxShadow: "none", padding: 0 }}
+                />
             </div>
         </aside>
     );

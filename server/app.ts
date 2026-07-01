@@ -464,7 +464,7 @@ const api = new Elysia({ prefix: "/api" })
         }),
         async open(ws) {
             const { root, session, terminal } = ws.data.query;
-            const key = `${session}:${terminal}`;
+            const key = `${root}:${terminal}`;
 
             if (!ptys.has(key)) {
                 try {
