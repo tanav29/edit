@@ -96,29 +96,32 @@ export default function MessageUI({
         let toolBuffer: React.ReactNode[] = [];
         let lastWasTool = false;
 
-        const flushTools = (flushKey: string) => {
+        const flushTools = () => {
             if (toolBuffer.length === 0) return;
-            if (toolBuffer.length === 1) {
-                result.push(toolBuffer[0]);
-            } else {
-                result.push(
-                    <div key={flushKey} className="flex flex-col">
+            result.push(
+                <details className="flex flex-col text-sm text-muted-foreground/90 select-none outline-none font-mono">
+                    <summary className="gap-2 flex">
+                        {toolBuffer.length}{" "}
+                        {toolBuffer.length > 1 ? "tools" : "tool"} called
+                    </summary>
+                    <div className="flex flex-col py-3 px-2">
                         {toolBuffer}
-                    </div>,
-                );
-            }
+                    </div>
+                </details>,
+            );
             toolBuffer = [];
         };
 
         parts.forEach((part, partIndex) => {
             const key = part.toolCallId ?? `part-${partIndex}`;
             const isTool = part.type.startsWith("tool-");
+            const isEdit = part.type === "tool-edit";
             let rendered: React.ReactNode = null;
 
             switch (part.type) {
                 case "text":
                     rendered = (
-                        <div key={key} className="text-sm my-5">
+                        <div key={key} className="text-sm my-3">
                             <Streamdown
                                 plugins={{
                                     code: code,
@@ -206,21 +209,22 @@ export default function MessageUI({
                     break;
             }
 
-            if (isTool) {
+            if (isTool && !isEdit) {
                 toolBuffer.push(rendered);
                 lastWasTool = true;
             } else {
                 if (lastWasTool) {
-                    flushTools(`tool-group-${result.length}`);
+                    flushTools();
                     lastWasTool = false;
                 }
                 if (rendered != null) result.push(rendered);
             }
         });
 
-        flushTools(`tool-group-${result.length}`);
+        flushTools();
         return result;
     }, [parts, addToolApprovalResponseAction]);
+
     return <>{renderedParts}</>;
 }
 
@@ -242,11 +246,6 @@ function ToolPart({
     const url = getInputString(part.input, "url");
     const urls = getInputStringList(part.input, "urls");
     const directoryPath = getInputString(part.input, "path") ?? ".";
-
-    const toolOutput = useMemo(
-        () => <ToolOutput toolName={toolName} output={part.output} />,
-        [toolName, part.output],
-    );
 
     if (part.state === "approval-requested") {
         return (
@@ -315,148 +314,68 @@ function ToolPart({
         );
     }
 
-    if (toolName === "edit") return null;
-
-    return (
-        <details>
-            <summary className="flex items-center gap-2 py-0 text-md text-muted-foreground/90 select-none outline-none">
-                <Hammer className="size-4 shrink-0 text-muted-foreground/90" />
-                {toolName === "read" && (
-                    <span className="text-muted-foreground/90 flex items-center gap-2">
-                        Read {filePath}
-                    </span>
-                )}
-                {toolName === "ls" && (
-                    <span className="text-muted-foreground/90 flex items-center gap-2">
-                        Listed {directoryPath}
-                    </span>
-                )}
-                {toolName === "glob" && (
-                    <span className="text-muted-foreground/90 flex items-center gap-2">
-                        Glob for {patterns?.length ?? 0} pattern
-                        {(patterns?.length ?? 0) === 1 ? "" : "s"}
-                    </span>
-                )}
-                {toolName === "bash" && (
-                    <span className="text-muted-foreground/90 flex items-center gap-2 truncate text-ellipsis">
-                        Ran {compactCommand}
-                    </span>
-                )}
-                {toolName === "write" && (
-                    <span className="text-muted-foreground/90 flex items-center gap-2">
-                        {filePath}
-                    </span>
-                )}
-                {toolName === "grep" && (
-                    <span className="text-muted-foreground/90 flex items-center gap-2">
-                        Grep {pattern}
-                    </span>
-                )}
-                {toolName === "web" && (
-                    <span className="text-muted-foreground/90 flex items-center gap-1.5">
-                        Searched the web
-                        {(queries ?? (query ? [query] : [])).map((item, i) => (
-                            <span key={i}>{item}</span>
-                        ))}
-                    </span>
-                )}
-                {toolName === "scrape" && (
-                    <span className="text-muted-foreground/90 flex items-center gap-2">
-                        Scraped
-                        <span className="flex flex-wrap gap-1 items-center">
-                            {(urls ?? (url ? [url] : [])).map((item, i) => {
-                                try {
-                                    const urlObj = new URL(item.trim());
-                                    return (
-                                        <span key={i}>{urlObj.hostname}</span>
-                                    );
-                                } catch {
-                                    return <span key={i}>{item}</span>;
-                                }
-                            })}
-                        </span>
-                    </span>
-                )}
-            </summary>
-            <div className="">{toolOutput}</div>
-        </details>
-    );
-}
-
-const ToolOutput = React.memo(function ToolOutput({
-    toolName,
-    output,
-}: {
-    toolName: string;
-    output: unknown;
-}) {
-    if (!output) return null;
-
-    const data = output as Record<string, unknown>;
-
-    if (toolName === "bash") {
-        const stdout = typeof data.stdout === "string" ? data.stdout : "";
-        const stderr = typeof data.stderr === "string" ? data.stderr : "";
-        const hasExitCode = typeof data.exitCode === "number";
-        const hasOutput = stdout.length > 0 || stderr.length > 0;
-        const statusText = hasExitCode
-            ? data.exitCode === 0
-                ? "Success"
-                : `Exit ${String(data.exitCode)}`
-            : "Ready";
-        const mergedOutput = [
-            stdout.trimEnd(),
-            stderr.trimEnd() ? stderr.trimEnd() : "",
-        ]
-            .filter(Boolean)
-            .join("\n");
-
-        if (!hasOutput && !hasExitCode) {
-            return null;
-        }
-
+    if (toolName === "edit") {
+        const editFilePath = getInputString(part.input, "filePath");
         return (
-            <Terminal
-                autoScroll={false}
-                isStreaming={false}
-                onClear={() => {}}
-                output={mergedOutput || "(no output)"}
-                className="mt-2"
-            >
-                <TerminalHeader>
-                    <TerminalTitle>{String(data.path)}</TerminalTitle>
-                    <div className="flex items-center gap-1">
-                        <TerminalStatus
-                            label={statusText}
-                            failed={hasExitCode && data.exitCode !== 0}
-                        />
-                        <TerminalActions>
-                            <TerminalCopyButton
-                                onCopyAction={() => {
-                                    if (typeof navigator === "undefined")
-                                        return;
-                                    void navigator.clipboard.writeText(
-                                        mergedOutput || "",
-                                    );
-                                }}
-                            />
-                        </TerminalActions>
-                    </div>
-                </TerminalHeader>
-                <TerminalContent />
-            </Terminal>
+            <div className="flex items-center gap-2 py-1 text-sm text-muted-foreground/90 select-none outline-none font-mono">
+                <FilePenLine className="size-4 shrink-0 text-muted-foreground/90" />
+                <span>Edit {editFilePath}</span>
+            </div>
         );
     }
 
-    // if (toolName === "grep") return null;
-
-    if (toolName === "read") return null;
-
-    if (toolName === "edit_file") return null;
-
     return (
-        <pre className="tool-card rounded-lg p-3.5 max-h-48 text-xs overflow-y-auto wrap-break-word">
-            {JSON.stringify(output, null, 2)}
-        </pre>
+        <div className="flex items-center gap-2 py-0 text-sm text-muted-foreground/90 select-none outline-none font-mono">
+            <Hammer className="size-4 shrink-0 text-muted-foreground/90" />
+            {toolName === "read" && (
+                <span className="text-muted-foreground/90 flex items-center gap-2">
+                    Read {filePath}
+                </span>
+            )}
+            {toolName === "ls" && (
+                <span className="text-muted-foreground/90 flex items-center gap-2">
+                    Listed {directoryPath}
+                </span>
+            )}
+            {toolName === "glob" && (
+                <span className="text-muted-foreground/90 flex items-center gap-2">
+                    Glob for {patterns?.length ?? 0} pattern
+                    {(patterns?.length ?? 0) === 1 ? "" : "s"}
+                </span>
+            )}
+            {toolName === "bash" && (
+                <span className="text-muted-foreground/90 flex items-center gap-2 truncate text-ellipsis">
+                    Ran {compactCommand}
+                </span>
+            )}
+            {toolName === "grep" && (
+                <span className="text-muted-foreground/90 flex items-center gap-2">
+                    Grep {pattern}
+                </span>
+            )}
+            {toolName === "web" && (
+                <span className="text-muted-foreground/90 flex items-center gap-1.5">
+                    Searched the web
+                    {(queries ?? (query ? [query] : [])).map((item, i) => (
+                        <span key={i}>{item}</span>
+                    ))}
+                </span>
+            )}
+            {toolName === "scrape" && (
+                <span className="text-muted-foreground/90 flex items-center gap-2">
+                    Scraped
+                    <span className="flex flex-wrap gap-1 items-center">
+                        {(urls ?? (url ? [url] : [])).map((item, i) => {
+                            try {
+                                const urlObj = new URL(item.trim());
+                                return <span key={i}>{urlObj.hostname}</span>;
+                            } catch {
+                                return <span key={i}>{item}</span>;
+                            }
+                        })}
+                    </span>
+                </span>
+            )}
+        </div>
     );
-});
+}

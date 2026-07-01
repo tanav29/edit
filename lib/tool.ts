@@ -747,6 +747,7 @@ export function createTools(workspacePath: string) {
                         replacements: occurrencesFound,
                     };
                 } catch (error) {
+                    console.log(error);
                     return { error: errorMessage(error) };
                 }
             },
@@ -807,14 +808,12 @@ export function createTools(workspacePath: string) {
 
         bash: tool({
             description:
-                "Execute a shell command in the selected workspace. Use this for validation, diagnostics, builds, tests, and project workflows after or around code changes. Do not use this to edit files; use edit_file for every file modification.",
+                "Execute a shell command in the respective cwd. Use this for validation, diagnostics, builds, tests, and project workflows after or around code changes. Do not use this to edit files.",
             inputSchema: zodSchema(
                 z.object({
                     command: z
                         .string()
-                        .describe(
-                            "The shell command to execute inside the workspace",
-                        ),
+                        .describe("The shell command to execute."),
                     timeout: z
                         .number()
                         .optional()

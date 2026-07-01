@@ -1,10 +1,17 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import {
+    Suspense,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FileTree, useFileTree } from "@pierre/trees/react";
+import { FileTree as TreeFileTree, useFileTree } from "@pierre/trees/react";
 import { preparePresortedFileTreeInput } from "@pierre/trees";
-import { cn } from "@/lib/utils";
+import FileViewer from "@/components/file-viewer";
 
 type GitStatus =
     | "added"
@@ -85,49 +92,49 @@ function toRelativeWorkspacePath(fullPath: string, rootPath: string) {
     return normalizedFullPath;
 }
 
-export default function FileTreeBar({
-    rootPath,
-    isOpen,
-    selectedFile,
-    onFileSelect,
-}: FileTreeBarProps) {
-    useEffect(() => {
-        if (!selectedFile) return;
+export default function FileTree({ rootPath }: any) {
+    const [selectedFile, setSelectedFile] = useState("");
+    const [fileVersion, setFileVersion] = useState(0);
 
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-                onFileSelect(undefined);
-            }
-        };
-
-        window.addEventListener("keydown", onKeyDown);
-        return () => window.removeEventListener("keydown", onKeyDown);
-    }, [onFileSelect, selectedFile]);
+    const handleFileSelect = useCallback((path: string | undefined) => {
+        if (path) {
+            setSelectedFile(path);
+            setFileVersion((v) => v + 1);
+        }
+    }, []);
 
     return (
-        <aside
-            className={cn(
-                "shrink-0 min-h-0 z-50 flex-col border-l bg-background",
-                isOpen
-                    ? "flex w-64 translate-x-0 opacity-100"
-                    : "pointer-events-none w-0 flex translate-x-3 opacity-0 overflow-hidden border-l-0",
+        <section className="flex min-h-0 w-full flex-col bg-background h-full">
+            {rootPath ? (
+                <div className="flex min-h-0 flex-1 h-full">
+                    {selectedFile ? (
+                        <Suspense fallback={<div>Loading...</div>}>
+                            <FileViewer
+                                key={`${selectedFile}:${fileVersion}`}
+                                filePath={selectedFile}
+                                className="border-l"
+                            />
+                        </Suspense>
+                    ) : (
+                        <div className="flex min-w-0 flex-1 items-center justify-center p-4 text-sm text-muted-foreground">
+                            Select a file to preview
+                        </div>
+                    )}
+                    <Suspense>
+                        <WorkspaceFileTree
+                            key={rootPath}
+                            rootPath={rootPath}
+                            selectedFile={selectedFile}
+                            onFileSelect={handleFileSelect}
+                        />
+                    </Suspense>
+                </div>
+            ) : (
+                <div className="p-3 text-xs text-muted-foreground">
+                    Select or create a chat to browse files
+                </div>
             )}
-        >
-            <div className="flex min-h-0 flex-1 overflow-hidden">
-                {rootPath ? (
-                    <WorkspaceFileTree
-                        key={rootPath}
-                        rootPath={rootPath}
-                        selectedFile={selectedFile}
-                        onFileSelect={onFileSelect}
-                    />
-                ) : (
-                    <div className="p-3 text-xs text-muted-foreground">
-                        Select or create a chat to browse files
-                    </div>
-                )}
-            </div>
-        </aside>
+        </section>
     );
 }
 
@@ -202,8 +209,6 @@ function WorkspaceFileTree({
         <WorkspaceFileTreeContent
             key={`${data.rootPath}:${data.paths.join("\n")}`}
             rootPath={rootPath}
-            rootName={data.rootName}
-            workspaceDisplayPath={data.rootPath}
             paths={data.paths}
             gitStatus={data.gitStatus}
             selectedFile={selectedFile}
@@ -214,16 +219,12 @@ function WorkspaceFileTree({
 
 function WorkspaceFileTreeContent({
     rootPath,
-    rootName,
-    workspaceDisplayPath,
     paths,
     gitStatus,
     selectedFile,
     onFileSelect,
 }: {
     rootPath: string;
-    rootName: string;
-    workspaceDisplayPath: string;
     paths: string[];
     gitStatus: GitStatusEntry[];
     selectedFile?: string;
@@ -241,33 +242,43 @@ function WorkspaceFileTreeContent({
         [paths],
     );
 
-    const { model } = useFileTree({
-        preparedInput,
-        initialExpansion: 1,
-        initialSelectedPaths,
-        density: "compact",
-        gitStatus,
-        unsafeCSS:
-            "* { font-family: var(--font-geist-mono), monospace !important; }",
-        onSelectionChange: (selectedPaths) => {
+    const onFileSelectRef = useRef(onFileSelect);
+    onFileSelectRef.current = onFileSelect;
+
+    const handleSelectionChange = useCallback(
+        (selectedPaths: readonly string[]) => {
             const selectedPath = selectedPaths[0];
             if (!selectedPath || selectedPath.endsWith("/")) {
                 return;
             }
 
-            onFileSelect(joinWorkspacePath(rootPath, selectedPath));
+            onFileSelectRef.current(joinWorkspacePath(rootPath, selectedPath));
         },
+        [rootPath],
+    );
+
+    const { model } = useFileTree({
+        preparedInput,
+        initialExpansion: 1,
+        initialSelectedPaths,
+        density: "compact",
+
+        gitStatus,
+        unsafeCSS:
+            "* { font-family: var(--font-geist-mono), monospace !important; }",
+        onSelectionChange: handleSelectionChange,
     });
 
     return (
-        <div className="flex min-h-0 flex-1 overflow-hidden">
-            <FileTree
+        <div className="min-h-0 w-56 overflow-auto">
+            <TreeFileTree
                 model={model}
                 className="h-full w-full"
                 style={
                     {
                         height: "100%",
                         width: "100%",
+                        padding: 0,
                         "--trees-border-color-override": "transparent",
                         "--trees-selected-bg-override":
                             "color-mix(in oklab, var(--accent) 85%, transparent)",

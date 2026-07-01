@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-router";
 
 import { ChatRouteComponent } from "./routes/chat";
+import { TerminalRouteComponent } from "./routes/terminal";
 import { rootRoute } from "./routes/root";
 
 const indexRoute = createRoute({
@@ -16,7 +17,13 @@ const indexRoute = createRoute({
   component: ChatRouteComponent,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute]);
+const terminalRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/terminal",
+  component: TerminalRouteComponent,
+});
+
+const routeTree = rootRoute.addChildren([indexRoute, terminalRoute]);
 
 export const router = createRouter({
   routeTree,
