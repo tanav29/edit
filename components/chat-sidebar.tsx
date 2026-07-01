@@ -250,7 +250,7 @@ export default function ChatSidebar() {
 
                                         <div
                                             className={cn(
-                                                "grid transition-all border-l ml-0 pl-1",
+                                                "grid transition-all border-l ml-0",
                                                 isCollapsed
                                                     ? "grid-rows-[0fr] opacity-0"
                                                     : "grid-rows-[1fr] opacity-100",
@@ -260,7 +260,7 @@ export default function ChatSidebar() {
                                             aria-hidden={isCollapsed}
                                         >
                                             <div className="min-h-0 overflow-hidden">
-                                                <div className="space-y-1">
+                                                <div>
                                                     {group.chats.map((chat) => {
                                                         const isActive =
                                                             chat.id ===
@@ -270,7 +270,7 @@ export default function ChatSidebar() {
                                                             <div
                                                                 key={chat.id}
                                                                 className={cn(
-                                                                    "flex truncate rounded-xl px-3 py-1.5 text-left text-sm group relative",
+                                                                    "flex truncate rounded-r-xl px-3 py-1.5 text-left text-sm group relative",
                                                                     isActive
                                                                         ? "border-primary/30 bg-primary/10"
                                                                         : "border-transparent hover:border-border hover:bg-accent",
@@ -313,7 +313,7 @@ export default function ChatSidebar() {
                                                                             chat,
                                                                         )
                                                                     }
-                                                                    className="opacity-0 translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 data-[state=open]:opacity-100 absolute delay-50 right-0 top-0 bottom-0 px-3 cursor-pointer transition duration-100 ease-in-out"
+                                                                    className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 absolute delay-50 right-0 top-0 bottom-0 px-3 cursor-pointer transition duration-100 ease-in-out"
                                                                 >
                                                                     <Trash2 className="size-3 text-muted-foreground" />
                                                                 </button>

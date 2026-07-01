@@ -104,9 +104,7 @@ export default function MessageUI({
                         {toolBuffer.length}{" "}
                         {toolBuffer.length > 1 ? "tools" : "tool"} called
                     </summary>
-                    <div className="flex flex-col py-3 px-2">
-                        {toolBuffer}
-                    </div>
+                    <div className="flex flex-col py-3 px-2">{toolBuffer}</div>
                 </details>,
             );
             toolBuffer = [];
@@ -188,6 +186,7 @@ export default function MessageUI({
                                     }
                                     options={{
                                         overflow: "wrap",
+                                        theme: "aurora-x",
                                         diffStyle: "unified",
                                         unsafeCSS:
                                             "* { font-family: var(--font-geist-mono), monospace !important; }",
