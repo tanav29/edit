@@ -433,7 +433,7 @@ function broadcast(data: object) {
     }
 }
 
-let term: any | null = null;
+const ptys = new Map<string, any>();
 
 const api = new Elysia({ prefix: "/api" })
     .get("/health", async () => {
@@ -447,7 +447,7 @@ const api = new Elysia({ prefix: "/api" })
             userSockets.delete(ws);
         },
         async message(ws, message) {
-            console.log(`ws message: ${message}`);
+            // console.log(`ws message: ${message}`);
             switch (message) {
                 case "session":
                     const sessions = await listSessions();
@@ -457,59 +457,80 @@ const api = new Elysia({ prefix: "/api" })
         },
     })
     .ws("/terminal", {
+        query: t.Object({
+            root: t.String(),
+            session: t.String(),
+            terminal: t.String(),
+        }),
         async open(ws) {
-            console.log("opening ws");
-            // let term: any | null = null;
-            const shell = process.env.SHELL || "/bin/zsh";
+            const { root, session, terminal } = ws.data.query;
+            const key = `${session}:${terminal}`;
 
-            try {
-                term = spawn(shell, ["-l"], {
-                    name: "xterm-256color",
-                    cols: 80, // TODO: get from client
-                    rows: 24,
-                    cwd: process.env.HOME || "/",
-                    env: cleanEnv(),
-                });
-                term.onData((data: any) => {
-                    if (ws.readyState === WebSocket.OPEN) {
-                        ws.send(data);
-                    }
-                });
-
-                term.onExit(() => {
-                    if (ws.readyState === WebSocket.OPEN) ws.close();
-                });
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
-                console.error(`Failed to spawn PTY: ${msg}`);
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(
-                        `\r\n\x1b[31mFailed to spawn shell: ${msg}\x1b[0m\r\n`,
+            if (!ptys.has(key)) {
+                try {
+                    const term = spawn(
+                        process.env.SHELL || "/bin/zsh",
+                        ["-l"],
+                        {
+                            name: "xterm-256color",
+                            cols: 80,
+                            rows: 24,
+                            cwd: root || "/",
+                            env: cleanEnv(),
+                        },
                     );
-                    ws.close();
+                    term.onData((data: any) => {
+                        if (ws.readyState === WebSocket.OPEN) {
+                            ws.send(data);
+                        }
+                    });
+                    term.onExit(() => {
+                        if (ws.readyState === WebSocket.OPEN) ws.close();
+                    });
+
+                    ptys.set(key, term);
+                } catch (err) {
+                    const msg =
+                        err instanceof Error ? err.message : String(err);
+                    console.error(`Failed to spawn PTY: ${msg}`);
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(
+                            `\r\n\x1b[31mFailed to spawn shell: ${msg}\x1b[0m\r\n`,
+                        );
+                        ws.close();
+                    }
+                    return;
                 }
-                return;
             }
         },
         async message(ws, message) {
-            const input = message;
-            console.log("user sends", message);
-            if (input.startsWith("\x1b[RESIZE:")) {
-                const match = input.match(/\x1b\[RESIZE:(\d+);(\d+)\]/);
+            const { root, session, terminal } = ws.data.query;
+            const key = `${session}:${terminal}`;
+            const msg = message as string;
+            if (msg.startsWith("\x1b[RESIZE:")) {
+                const match = msg.match(/\x1b\[RESIZE:(\d+);(\d+)\]/);
                 if (match) {
                     const cols = parseInt(match[1], 10);
                     const rows = parseInt(match[2], 10);
 
-                    term.resize(cols, rows);
+                    const pty = ptys.get(key);
+                    if (pty) pty.resize(cols, rows);
                     return;
                 }
             }
 
-            if (term) term.write(input);
+            const pty = ptys.get(key);
+            if (pty) pty.write(msg);
         },
         async close(ws) {
-            console.log("closing ws");
-            term.kill();
+            const { root, session, terminal } = ws.data.query;
+            const key = `${session}:${terminal}`;
+
+            const pty = ptys.get(key);
+            if (pty) {
+                pty.kill();
+                ptys.delete(key);
+            }
         },
     })
     .post(

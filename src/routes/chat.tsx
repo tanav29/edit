@@ -385,6 +385,7 @@ function LoadedSessionChat({
             currentSessionTitle={currentSessionTitle}
             isActive={isActive}
             workspace={workspace}
+            session={session}
         >
             <div
                 ref={scrollRef}
@@ -430,6 +431,7 @@ type ChatLayoutProps = {
     currentSessionTitle: string;
     isActive: boolean;
     workspace: string | null;
+    session?: string;
 };
 
 function ChatLayout({
@@ -437,6 +439,7 @@ function ChatLayout({
     currentSessionTitle,
     isActive,
     workspace,
+    session,
 }: ChatLayoutProps) {
     const [side, toggleSide] = useSide();
     const [rside, rtoggleSide] = useRightSide();
@@ -516,7 +519,7 @@ function ChatLayout({
                         </div>
                     </section>
                 </div>
-                <BottomTerminal />
+                <BottomTerminal root={workspace} id={session} />
             </main>
 
             <RightSidebar workspace={workspace} />
