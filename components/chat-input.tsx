@@ -67,7 +67,7 @@ function getRelativeFilePath(fullPath: string, workspacePath: string) {
 
 function getMentionContext(value: string, cursorIndex: number) {
     const beforeCursor = value.slice(0, cursorIndex);
-    const match = beforeCursor.match(/(^|[\s([{\"'`])@([^\s@]*)$/);
+    const match = beforeCursor.match(/(^|[\s([{"'`])@([^\s@]*)$/);
 
     if (!match || match.index == null) {
         return null;

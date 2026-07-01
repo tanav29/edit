@@ -10,6 +10,7 @@ import {
     Loader2,
     PanelRightClose,
     PanelRightOpen,
+    Terminal,
 } from "lucide-react";
 import { memo, useEffect, useReducer, useRef } from "react";
 
@@ -27,10 +28,11 @@ import {
 import { useSessionParam } from "@/lib/session-param";
 import { getTitleFromMessages, parseMessages } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { useRightSide, useSide } from "@/store/store";
+import { useRightSide, useSide, useTerminal } from "@/store/store";
 import BranchSelector from "@/components/branch-selector";
 import { useWebSocket, wsUrl } from "@/hooks/use-socket";
 import RightSidebar from "@/components/right-sidebar";
+import BottomTerminal from "@/components/bottom-terminal";
 
 const MemoMessageUI = memo(MessageUI);
 
@@ -438,6 +440,7 @@ function ChatLayout({
 }: ChatLayoutProps) {
     const [side, toggleSide] = useSide();
     const [rside, rtoggleSide] = useRightSide();
+    const [term, toggleTerm] = useTerminal();
 
     return (
         <div className="relative flex h-screen overflow-hidden bg-background text-foreground">
@@ -479,6 +482,13 @@ function ChatLayout({
                                     workspacePath={workspace ?? ""}
                                     isBusy={isActive}
                                 />
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => toggleTerm()}
+                                >
+                                    <Terminal /> Terminal
+                                </Button>
                                 {!rside && (
                                     <Tooltip>
                                         <TooltipTrigger asChild>
@@ -506,6 +516,7 @@ function ChatLayout({
                         </div>
                     </section>
                 </div>
+                <BottomTerminal />
             </main>
 
             <RightSidebar workspace={workspace} />
