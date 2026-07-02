@@ -76,40 +76,9 @@ The AI can chain multiple tool calls in sequence (up to 100 steps) to complete c
 - Sessions are grouped by workspace path for easy navigation
 - Create, switch, and delete sessions from the sidebar
 
-## Demo
-
-<!-- Add screenshots or a GIF here -->
-
-> **Tip:** Spin it up locally with `bun run dev` and point it at any project directory to see it in action.
-
 ## Architecture
 
-### How the AI Works
-
-```
-User Message
-    │
-    ▼
-POST /api/chat (Elysia)
-    │
-    ├─ Store user message in SQLite
-    ├─ Build tool definitions (ls, glob, read, edit, grep, bash, scrape)
-    ├─ Build system prompt with workspace context
-    │
-    ▼
-streamText() via Vercel AI SDK + Ollama
-    │
-    ├─ AI reasons about the task
-    ├─ Calls tools (file ops, search, shell)
-    │   └─ bash tool requires UI approval via needsApproval
-    ├─ Streaming response sent to frontend
-    │
-    ▼
-Frontend renders (useChat from @ai-sdk/react)
-    ├─ Text via Streamdown (rich markdown + code + math + mermaid)
-    ├─ Tool calls as collapsible cards
-    └─ Diffs via @pierre/diffs
-```
+<img width="1306" height="651" alt="image" src="https://github.com/user-attachments/assets/7e38acbd-8623-4ee5-945c-ddc429e307e6" />
 
 ## Roadmap
 
