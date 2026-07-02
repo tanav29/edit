@@ -17,7 +17,7 @@ export function useSide(): [boolean, () => void] {
 }
 
 const useRightSideStore = create<SideStore>((set) => ({
-    side: false,
+    side: true,
     toggleSide: () => set((state) => ({ side: !state.side })),
 }));
 

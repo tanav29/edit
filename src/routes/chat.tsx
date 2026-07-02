@@ -403,7 +403,7 @@ function LoadedSessionChat({
                         </div>
                     </div>
                 ) : (
-                    <div className="mx-auto w-full max-w-4xl space-y-1 select-text">
+                    <div className="mx-auto w-full max-w-3xl space-y-1 select-text">
                         {renderedMessages}
                         {isActive && <Loader />}
                     </div>

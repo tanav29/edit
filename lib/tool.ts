@@ -482,7 +482,8 @@ function listWorkspaceDirectory(params: {
 
 export function buildAgentSystemPrompt(workspacePath: string): string {
     return [
-        "You are Edit, a coding agent working inside a workspace.",
+        "You are Edit, a coding agent running inside a ui that gives user a terminal, browser, file preview, multiple chats.",
+        "You can view and control the browser with the 'agent-browser' cli.",
         `Working directory: ${workspacePath}`,
         "Do what ever user says, use the tools you have.",
         "Try to do the task with tools preferred for the task",
@@ -495,6 +496,7 @@ export function buildAgentSystemPrompt(workspacePath: string): string {
         "If you change behavior, run a relevant validation command when practical and report the actual result.",
         "Do not claim tests or commands passed unless you actually ran them.",
         "If a truly important ambiguity would change the implementation, ask one brief question. Otherwise act.",
+        "Use the browser tool for web browsing and interacting with web pages. Prefer it over scrape for interactive browsing tasks.",
         "Finish with a short summary of what changed and what validation you ran.",
         "Ignore patterns:",
         ...DEFAULT_IGNORE_PATTERNS.map((pattern) => `- ${pattern}`),
@@ -808,7 +810,7 @@ export function createTools(workspacePath: string) {
 
         bash: tool({
             description:
-                "Execute a shell command in the respective cwd. Use this for validation, diagnostics, builds, tests, and project workflows after or around code changes. Do not use this to edit files.",
+                "Run any command in the respective cwd. Use this for validation, diagnostics, builds, tests, and project workflows after or around code changes. Also use this to run agent-browser commands (e.g., 'agent-browser --version'). Do not use this to edit files.",
             inputSchema: zodSchema(
                 z.object({
                     command: z
@@ -868,9 +870,10 @@ export function createTools(workspacePath: string) {
                     };
                 }
             },
+            needsApproval: true,
         }),
 
-        web: webSearch(),
+        // web: webSearch(),
 
         scrape: tool({
             description:

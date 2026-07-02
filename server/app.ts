@@ -5,6 +5,7 @@ import path from "path";
 import { join, relative } from "path";
 import { promisify } from "util";
 import { Elysia, t } from "elysia";
+import { BrowserManager } from "./agent-browser";
 
 import {
     generateText,
