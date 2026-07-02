@@ -28,6 +28,7 @@ import { db } from "@/db";
 import { chats } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { spawn } from "bun-pty";
+import type { IDisposable, IExitEvent, IPty } from "bun-pty";
 
 const execAsync = promisify(exec);
 
@@ -434,7 +435,40 @@ function broadcast(data: object) {
     }
 }
 
-const ptys = new Map<string, any>();
+type TerminalClient = {
+    ws: any;
+};
+
+type TerminalSession = {
+    key: string;
+    pty: IPty;
+    clients: Set<TerminalClient>;
+    dataDisposable: IDisposable;
+    exitDisposable: IDisposable;
+    buffer: string;
+    exited: boolean;
+    lastSize: { cols: number; rows: number };
+    disposing: boolean;
+};
+
+type ShellCandidate = {
+    file: string;
+    args: string[];
+};
+
+type TerminalClientMessage =
+    | { type: "input"; data: string }
+    | { type: "resize"; cols: number; rows: number }
+    | { type: "close" };
+
+type TerminalServerMessage =
+    | { type: "output"; data: string }
+    | { type: "exit"; exitCode: number; signal?: string | number }
+    | { type: "error"; message: string };
+
+const terminalSessions = new Map<string, TerminalSession>();
+const terminalClients = new WeakMap<any, TerminalClient>();
+const MAX_TERMINAL_BUFFER_CHARS = 200_000;
 const browserManager = new BrowserManager();
 const browserUpstreams = new WeakMap<any, WebSocket>();
 
