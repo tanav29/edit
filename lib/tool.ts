@@ -481,9 +481,15 @@ function listWorkspaceDirectory(params: {
 }
 
 export function buildAgentSystemPrompt(workspacePath: string): string {
+    const browserSession = process.env.AGENT_BROWSER_SESSION?.trim() || "edit-shared";
+    const browserStreamPort =
+        process.env.AGENT_BROWSER_STREAM_PORT?.trim() || "56901";
+
     return [
         "You are Edit, a coding agent running inside a ui that gives user a terminal, browser, file preview, multiple chats.",
-        "You can view and control the browser with the 'agent-browser' cli.",
+        "You can view and control the browser with the project-local 'bunx agent-browser' cli.",
+        `Use the shared browser session with: bunx agent-browser --session ${browserSession}.`,
+        `The shared browser stream port is ${browserStreamPort}; do not start a separate browser session unless explicitly requested.`,
         `Working directory: ${workspacePath}`,
         "Do what ever user says, use the tools you have.",
         "Try to do the task with tools preferred for the task",
@@ -833,6 +839,15 @@ export function createTools(workspacePath: string) {
                         shell: true,
                         timeout: timeout || 60000,
                         maxBuffer: 10 * 1024 * 1024,
+                        env: {
+                            ...process.env,
+                            AGENT_BROWSER_SESSION:
+                                process.env.AGENT_BROWSER_SESSION ||
+                                "edit-shared",
+                            AGENT_BROWSER_STREAM_PORT:
+                                process.env.AGENT_BROWSER_STREAM_PORT ||
+                                "56901",
+                        },
                     });
 
                     const truncated =

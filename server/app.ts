@@ -435,10 +435,165 @@ function broadcast(data: object) {
 }
 
 const ptys = new Map<string, any>();
+const browserManager = new BrowserManager();
+const browserUpstreams = new WeakMap<any, WebSocket>();
+
+function isBrowserInputMessage(message: unknown): boolean {
+    if (typeof message !== "object" || message === null) {
+        return false;
+    }
+
+    const typeValue = (message as { type?: unknown }).type;
+    return (
+        typeValue === "input_mouse" ||
+        typeValue === "input_keyboard" ||
+        typeValue === "input_touch"
+    );
+}
+
+function serializeBrowserMessage(message: unknown): string | null {
+    if (typeof message === "string") {
+        try {
+            const parsed = JSON.parse(message);
+            return isBrowserInputMessage(parsed) ? message : null;
+        } catch {
+            return null;
+        }
+    }
+
+    return isBrowserInputMessage(message) ? JSON.stringify(message) : null;
+}
 
 const api = new Elysia({ prefix: "/api" })
     .get("/health", async () => {
         return { ok: true };
+    })
+    .get("/browser/status", async ({ set }) => {
+        try {
+            return await browserManager.getStatus();
+        } catch (error) {
+            set.status = 500;
+            return {
+                error:
+                    error instanceof Error
+                        ? error.message
+                        : "Browser status failed",
+            };
+        }
+    })
+    .post(
+        "/browser/open",
+        async ({ body, set }) => {
+            try {
+                return await browserManager.open(body.url);
+            } catch (error) {
+                set.status = 500;
+                return {
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Failed to open browser",
+                };
+            }
+        },
+        {
+            body: t.Object({
+                url: t.String(),
+            }),
+        },
+    )
+    .post(
+        "/browser/command",
+        async ({ body, set }) => {
+            try {
+                return await browserManager.command(body.command);
+            } catch (error) {
+                set.status = 500;
+                return {
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Browser command failed",
+                };
+            }
+        },
+        {
+            body: t.Object({
+                command: t.Union([
+                    t.Literal("back"),
+                    t.Literal("forward"),
+                    t.Literal("reload"),
+                ]),
+            }),
+        },
+    )
+    .ws("/browser/ws", {
+        async open(ws) {
+            try {
+                const upstream = await browserManager.connectStream();
+                browserUpstreams.set(ws, upstream);
+
+                upstream.addEventListener("message", (event) => {
+                    try {
+                        ws.send(event.data);
+                    } catch {
+                        upstream.close();
+                    }
+                });
+                upstream.addEventListener("close", () => {
+                    browserUpstreams.delete(ws);
+                    try {
+                        ws.close();
+                    } catch {
+                        // already closed
+                    }
+                });
+                upstream.addEventListener("error", () => {
+                    try {
+                        ws.send(
+                            JSON.stringify({
+                                type: "status",
+                                connected: false,
+                                screencasting: false,
+                                error: "Browser stream is unavailable",
+                            }),
+                        );
+                    } catch {
+                        // downstream unavailable
+                    }
+                    upstream.close();
+                });
+            } catch (error) {
+                ws.send(
+                    JSON.stringify({
+                        type: "status",
+                        connected: false,
+                        screencasting: false,
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : "Browser stream is unavailable",
+                    }),
+                );
+                ws.close();
+            }
+        },
+        message(ws, message) {
+            const serialized = serializeBrowserMessage(message);
+            if (!serialized) {
+                return;
+            }
+
+            const upstream = browserUpstreams.get(ws);
+            if (upstream?.readyState === WebSocket.OPEN) {
+                upstream.send(serialized);
+            }
+        },
+        close(ws) {
+            const upstream = browserUpstreams.get(ws);
+            browserUpstreams.delete(ws);
+            upstream?.close();
+        },
     })
     .ws("/ws", {
         open(ws) {
