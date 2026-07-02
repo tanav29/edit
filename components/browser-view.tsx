@@ -10,32 +10,30 @@ import {
 import { ArrowLeft, ArrowRight, Globe, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const WS_URL = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/api/browser`;
-
 export default function BrowserView() {
     const [urlInput, setUrlInput] = useState("");
     const [frame, setFrame] = useState<string | null>(null);
     const [connected, setConnected] = useState(false);
     const [viewport] = useState({ width: 1280, height: 720 });
     const ws = useRef<WebSocket | null>(null);
+    // const actionWS = useRef<WebSocket | null>(null);
     const imgRef = useRef<HTMLImageElement>(null);
 
     useEffect(() => {
-        const socket = new WebSocket(WS_URL);
-        socket.binaryType = "arraybuffer";
+        const socket = new WebSocket("ws://127.0.0.1:56901");
+
         socket.onopen = () => setConnected(true);
         socket.onclose = () => setConnected(false);
         socket.onerror = () => setConnected(false);
         socket.onmessage = (event) => {
-            if (event.data instanceof ArrayBuffer) {
-                const bytes = new Uint8Array(event.data);
-                let binary = "";
-                for (let i = 0; i < bytes.length; i++) {
-                    binary += String.fromCharCode(bytes[i]);
-                }
-                setFrame(`data:image/jpeg;base64,${btoa(binary)}`);
+            const msg = JSON.parse(event.data);
+            switch (msg.type) {
+                case "frame":
+                    setFrame(`data:image/jpeg;base64,${msg.data}`);
+                    break;
             }
         };
+
         ws.current = socket;
         return () => socket.close();
     }, []);
@@ -46,7 +44,22 @@ export default function BrowserView() {
 
     const sendClick = useCallback(
         (x: number, y: number) => {
-            send({ action: "click", x, y });
+            send({
+                type: "input_mouse",
+                eventType: "mousePressed",
+                x,
+                y,
+                button: "left",
+                clickCount: 1,
+            });
+            send({
+                type: "input_mouse",
+                eventType: "mouseReleased",
+                x,
+                y,
+                button: "left",
+                clickCount: 1,
+            });
         },
         [send],
     );
@@ -66,16 +79,6 @@ export default function BrowserView() {
             }
         },
         [send],
-    );
-
-    const typeAndEnter = useCallback(
-        (text: string) => {
-            sendKey("Control", "ControlLeft");
-            sendKey("l", "KeyL");
-            sendText(text);
-            sendKey("Enter", "Enter");
-        },
-        [sendKey, sendText],
     );
 
     function navigate(to: string) {
@@ -164,21 +167,59 @@ export default function BrowserView() {
                     </div>
                 </form>
             </div>
-            <div className="flex flex-1 items-start justify-center overflow-auto bg-white">
+            <div className="flex flex-1 items-start justify-center overflow-auto bg-background h-full">
                 {!connected && (
                     <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
                         Connecting...
                     </div>
                 )}
-                {frame && (
-                    <img
-                        ref={imgRef}
-                        src={frame}
-                        alt="Browser viewport"
-                        className="cursor-crosshair shrink-0"
-                        onClick={handleImageClick}
-                    />
-                )}
+                <img
+                    ref={imgRef}
+                    src={frame || ""}
+                    alt="Browser viewport"
+                    className="select-none border h-full"
+                    draggable={false}
+                    tabIndex={1}
+                    onClick={handleImageClick}
+                    onMouseMove={(e) => {
+                        send({
+                            type: "input_move",
+                            eventType: "mouseMoved",
+                            x: e.clientX,
+                            y: e.clientY,
+                        });
+                    }}
+                    onWheel={(e) => {
+                        send({
+                            type: "input_mouse",
+                            eventType: "mouseWheel",
+                            x: e.clientX,
+                            y: e.clientY,
+                            deltaX: e.deltaX,
+                            deltaY: e.deltaY,
+                        });
+                    }}
+                    onKeyDown={(e) => {
+                        e.preventDefault();
+                        console.log(e);
+                        send({
+                            type: "input_keyboard",
+                            eventType: "keyDown",
+                            key: e.key,
+                            code: e.code,
+                        });
+                    }}
+                    onKeyUp={(e) => {
+                        e.preventDefault();
+
+                        send({
+                            type: "input_keyboard",
+                            eventType: "keyUp",
+                            key: e.key,
+                            code: e.code,
+                        });
+                    }}
+                />
             </div>
         </div>
     );

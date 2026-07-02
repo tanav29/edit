@@ -482,7 +482,8 @@ function listWorkspaceDirectory(params: {
 
 export function buildAgentSystemPrompt(workspacePath: string): string {
     return [
-        "You are Edit, a coding agent working inside a workspace.",
+        "You are Edit, a coding agent running inside a ui that gives user a terminal, browser, file preview, multiple chats.",
+        "You can view and control the browser with the 'agent-browser' cli.",
         `Working directory: ${workspacePath}`,
         "Do what ever user says, use the tools you have.",
         "Try to do the task with tools preferred for the task",
@@ -809,7 +810,7 @@ export function createTools(workspacePath: string) {
 
         bash: tool({
             description:
-                "Execute a shell command in the respective cwd. Use this for validation, diagnostics, builds, tests, and project workflows after or around code changes. Also use this to run agent-browser commands (e.g., 'agent-browser --version'). Do not use this to edit files.",
+                "Run any command in the respective cwd. Use this for validation, diagnostics, builds, tests, and project workflows after or around code changes. Also use this to run agent-browser commands (e.g., 'agent-browser --version'). Do not use this to edit files.",
             inputSchema: zodSchema(
                 z.object({
                     command: z
@@ -869,9 +870,10 @@ export function createTools(workspacePath: string) {
                     };
                 }
             },
+            needsApproval: true,
         }),
 
-        web: webSearch(),
+        // web: webSearch(),
 
         scrape: tool({
             description:
